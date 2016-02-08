@@ -1,8 +1,13 @@
 build
 build_bsim
 .*.sw?
-.bit
+*.bit
 obj
+
+*.jou
+*.log
+
+fsm_encoding.os
 
 pcie_7x_0
 aurora_8b10b_fmc1/

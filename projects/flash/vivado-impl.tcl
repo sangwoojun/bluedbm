@@ -4,7 +4,7 @@ set_param general.maxThreads 8
 #
 # STEP#0: define output directory area.
 #
-set pciedir ../../../pcie/
+set pciedir ../../../bluespecpcie/
 set flashdir ../../../flash/
 
 set outputDir ./hw

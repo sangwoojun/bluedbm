@@ -1,0 +1,762 @@
+=== Generated schedule for mkAuroraGearbox ===
+
+Method schedule
+---------------
+Method: send
+Ready signal: sendQ.RDY_enq
+Conflict-free: recv, auroraRecv, auroraSend, curSendBudget
+Conflicts: send
+ 
+Method: recv
+Ready signal: (! (recvQ_rRdPtr_rsCounter == recvQ_rWrPtr_rdCounter)) &&
+	      recvQ_wDataOut.whas
+Conflict-free: send, auroraRecv, auroraSend, curSendBudget
+Conflicts: recv
+ 
+Method: auroraRecv
+Ready signal: auroraInQ.i_notFull
+Conflict-free: send, recv, auroraSend, curSendBudget
+Conflicts: auroraRecv
+ 
+Method: auroraSend
+Ready signal: auroraOutQ.i_notEmpty
+Conflict-free: send, recv, auroraRecv, curSendBudget
+Conflicts: auroraSend
+ 
+Method: curSendBudget
+Ready signal: True
+Conflict-free: send, recv, auroraRecv, auroraSend, curSendBudget
+ 
+Rule schedule
+-------------
+Rule: recvQ_rWrPtr_wdCounterCrossing_clock_domain_crossing
+Predicate: True
+Blocking rules: (none)
+ 
+Rule: recvQ_rWrPtr_synchronizer
+Predicate: True
+Blocking rules: (none)
+ 
+Rule: recvQ_rWrPtr_do_increment
+Predicate: recvQ_rWrPtr_pwIncrement.whas && (! recvQ_rWrPtr_pwDecrement.whas)
+Blocking rules: (none)
+ 
+Rule: recvQ_rWrPtr_do_decrement
+Predicate: (! recvQ_rWrPtr_pwIncrement.whas) && recvQ_rWrPtr_pwDecrement.whas
+Blocking rules: (none)
+ 
+Rule: recvQ_rRdPtr_wdCounterCrossing_clock_domain_crossing
+Predicate: True
+Blocking rules: (none)
+ 
+Rule: recvQ_rRdPtr_synchronizer
+Predicate: True
+Blocking rules: (none)
+ 
+Rule: recvQ_rRdPtr_do_increment
+Predicate: recvQ_rRdPtr_pwIncrement.whas && (! recvQ_rRdPtr_pwDecrement.whas)
+Blocking rules: (none)
+ 
+Rule: recvQ_rRdPtr_do_decrement
+Predicate: (! recvQ_rRdPtr_pwIncrement.whas) && recvQ_rRdPtr_pwDecrement.whas
+Blocking rules: (none)
+ 
+Rule: recvQ_portA
+Predicate: True
+Blocking rules: (none)
+ 
+Rule: recvQ_portB
+Predicate: True
+Blocking rules: (none)
+ 
+Rule: recvQ_portB_read_data
+Predicate: True
+Blocking rules: (none)
+ 
+Rule: emitFlowControlPacket
+Predicate: flowControlQ.i_notFull &&
+	   (((maxInFlightUp - maxInFlightDown) + (curInQUp - curInQDown) +
+	     16'd64) <
+	    16'd128)
+Blocking rules: (none)
+ 
+Rule: sendPacketPart
+Predicate: flowControlQ.notEmpty
+	   ? flowControlQ.i_notEmpty && auroraOutQ.i_notFull
+	   : (((curSendBudgetUp - curSendBudgetDown) == 16'd0) ||
+	      (auroraOutQ.i_notFull &&
+	       (packetSendBuffer[126] || (sendQ.RDY_deq && sendQ.RDY_first))))
+Blocking rules: (none)
+ 
+Rule: recvPacketPart
+Predicate: auroraInQ.i_notEmpty &&
+	   (auroraInQ.first[126] ||
+	    (! packetRecvBuffer[120]) ||
+	    (! auroraInQ.first[127]) || recvBufferQ.i_notFull)
+Blocking rules: (none)
+ 
+Rule: flushReadBuffer
+Predicate: (! (recvQ_rWrPtr_rsCounter ==
+	       {({recvQ_rRdPtr_rdCounter[8], recvQ_rRdPtr_rdCounter[8] ^
+					     recvQ_rRdPtr_rdCounter[7], recvQ_rRdPtr_rdCounter[8] ^
+									recvQ_rRdPtr_rdCounter[7] ^
+									recvQ_rRdPtr_rdCounter[6], recvQ_rRdPtr_rdCounter[8] ^
+												   recvQ_rRdPtr_rdCounter[7] ^
+												   recvQ_rRdPtr_rdCounter[6] ^
+												   recvQ_rRdPtr_rdCounter[5], recvQ_rRdPtr_rdCounter[8] ^
+															      recvQ_rRdPtr_rdCounter[7] ^
+															      recvQ_rRdPtr_rdCounter[6] ^
+															      recvQ_rRdPtr_rdCounter[5] ^
+															      recvQ_rRdPtr_rdCounter[4], recvQ_rRdPtr_rdCounter[8] ^
+																			 recvQ_rRdPtr_rdCounter[7] ^
+																			 recvQ_rRdPtr_rdCounter[6] ^
+																			 recvQ_rRdPtr_rdCounter[5] ^
+																			 recvQ_rRdPtr_rdCounter[4] ^
+																			 recvQ_rRdPtr_rdCounter[3], recvQ_rRdPtr_rdCounter[8] ^
+																						    recvQ_rRdPtr_rdCounter[7] ^
+																						    recvQ_rRdPtr_rdCounter[6] ^
+																						    recvQ_rRdPtr_rdCounter[5] ^
+																						    recvQ_rRdPtr_rdCounter[4] ^
+																						    recvQ_rRdPtr_rdCounter[3] ^
+																						    recvQ_rRdPtr_rdCounter[2], recvQ_rRdPtr_rdCounter[8] ^
+																									       recvQ_rRdPtr_rdCounter[7] ^
+																									       recvQ_rRdPtr_rdCounter[6] ^
+																									       recvQ_rRdPtr_rdCounter[5] ^
+																									       recvQ_rRdPtr_rdCounter[4] ^
+																									       recvQ_rRdPtr_rdCounter[3] ^
+																									       recvQ_rRdPtr_rdCounter[2] ^
+																									       recvQ_rRdPtr_rdCounter[1], recvQ_rRdPtr_rdCounter[8] ^
+																													  recvQ_rRdPtr_rdCounter[7] ^
+																													  recvQ_rRdPtr_rdCounter[6] ^
+																													  recvQ_rRdPtr_rdCounter[5] ^
+																													  recvQ_rRdPtr_rdCounter[4] ^
+																													  recvQ_rRdPtr_rdCounter[3] ^
+																													  recvQ_rRdPtr_rdCounter[2] ^
+																													  recvQ_rRdPtr_rdCounter[1] ^
+																													  recvQ_rRdPtr_rdCounter[0]} +
+		 9'd128)[8], ({recvQ_rRdPtr_rdCounter[8], recvQ_rRdPtr_rdCounter[8] ^
+							  recvQ_rRdPtr_rdCounter[7], recvQ_rRdPtr_rdCounter[8] ^
+										     recvQ_rRdPtr_rdCounter[7] ^
+										     recvQ_rRdPtr_rdCounter[6], recvQ_rRdPtr_rdCounter[8] ^
+														recvQ_rRdPtr_rdCounter[7] ^
+														recvQ_rRdPtr_rdCounter[6] ^
+														recvQ_rRdPtr_rdCounter[5], recvQ_rRdPtr_rdCounter[8] ^
+																	   recvQ_rRdPtr_rdCounter[7] ^
+																	   recvQ_rRdPtr_rdCounter[6] ^
+																	   recvQ_rRdPtr_rdCounter[5] ^
+																	   recvQ_rRdPtr_rdCounter[4], recvQ_rRdPtr_rdCounter[8] ^
+																				      recvQ_rRdPtr_rdCounter[7] ^
+																				      recvQ_rRdPtr_rdCounter[6] ^
+																				      recvQ_rRdPtr_rdCounter[5] ^
+																				      recvQ_rRdPtr_rdCounter[4] ^
+																				      recvQ_rRdPtr_rdCounter[3], recvQ_rRdPtr_rdCounter[8] ^
+																								 recvQ_rRdPtr_rdCounter[7] ^
+																								 recvQ_rRdPtr_rdCounter[6] ^
+																								 recvQ_rRdPtr_rdCounter[5] ^
+																								 recvQ_rRdPtr_rdCounter[4] ^
+																								 recvQ_rRdPtr_rdCounter[3] ^
+																								 recvQ_rRdPtr_rdCounter[2], recvQ_rRdPtr_rdCounter[8] ^
+																											    recvQ_rRdPtr_rdCounter[7] ^
+																											    recvQ_rRdPtr_rdCounter[6] ^
+																											    recvQ_rRdPtr_rdCounter[5] ^
+																											    recvQ_rRdPtr_rdCounter[4] ^
+																											    recvQ_rRdPtr_rdCounter[3] ^
+																											    recvQ_rRdPtr_rdCounter[2] ^
+																											    recvQ_rRdPtr_rdCounter[1], recvQ_rRdPtr_rdCounter__h9451(...)[8] ^
+																														       recvQ_rRdPtr_rdCounter__h9451(...)[7] ^
+																														       recvQ_rRdPtr_rdCounter[6] ^
+																														       recvQ_rRdPtr_rdCounter[5] ^
+																														       recvQ_rRdPtr_rdCounter[4] ^
+																														       recvQ_rRdPtr_rdCounter[3] ^
+																														       recvQ_rRdPtr_rdCounter[2] ^
+																														       recvQ_rRdPtr_rdCounter[1] ^
+																														       recvQ_rRdPtr_rdCounter[0]} +
+			      9'd128)[8] ^
+			     ({recvQ_rRdPtr_rdCounter[8], recvQ_rRdPtr_rdCounter[8] ^
+							  recvQ_rRdPtr_rdCounter[7], recvQ_rRdPtr_rdCounter[8] ^
+										     recvQ_rRdPtr_rdCounter[7] ^
+										     recvQ_rRdPtr_rdCounter[6], recvQ_rRdPtr_rdCounter[8] ^
+														recvQ_rRdPtr_rdCounter[7] ^
+														recvQ_rRdPtr_rdCounter[6] ^
+														recvQ_rRdPtr_rdCounter[5], recvQ_rRdPtr_rdCounter[8] ^
+																	   recvQ_rRdPtr_rdCounter[7] ^
+																	   recvQ_rRdPtr_rdCounter[6] ^
+																	   recvQ_rRdPtr_rdCounter[5] ^
+																	   recvQ_rRdPtr_rdCounter[4], recvQ_rRdPtr_rdCounter[8] ^
+																				      recvQ_rRdPtr_rdCounter[7] ^
+																				      recvQ_rRdPtr_rdCounter[6] ^
+																				      recvQ_rRdPtr_rdCounter[5] ^
+																				      recvQ_rRdPtr_rdCounter[4] ^
+																				      recvQ_rRdPtr_rdCounter[3], recvQ_rRdPtr_rdCounter[8] ^
+																								 recvQ_rRdPtr_rdCounter[7] ^
+																								 recvQ_rRdPtr_rdCounter[6] ^
+																								 recvQ_rRdPtr_rdCounter[5] ^
+																								 recvQ_rRdPtr_rdCounter[4] ^
+																								 recvQ_rRdPtr_rdCounter[3] ^
+																								 recvQ_rRdPtr_rdCounter[2], recvQ_rRdPtr_rdCounter[8] ^
+																											    recvQ_rRdPtr_rdCounter[7] ^
+																											    recvQ_rRdPtr_rdCounter[6] ^
+																											    recvQ_rRdPtr_rdCounter[5] ^
+																											    recvQ_rRdPtr_rdCounter[4] ^
+																											    recvQ_rRdPtr_rdCounter[3] ^
+																											    recvQ_rRdPtr_rdCounter[2] ^
+																											    recvQ_rRdPtr_rdCounter[1], recvQ_rRdPtr_rdCounter__h9451(...)[8] ^
+																														       recvQ_rRdPtr_rdCounter__h9451(...)[7] ^
+																														       recvQ_rRdPtr_rdCounter[6] ^
+																														       recvQ_rRdPtr_rdCounter[5] ^
+																														       recvQ_rRdPtr_rdCounter[4] ^
+																														       recvQ_rRdPtr_rdCounter[3] ^
+																														       recvQ_rRdPtr_rdCounter[2] ^
+																														       recvQ_rRdPtr_rdCounter[1] ^
+																														       recvQ_rRdPtr_rdCounter[0]} +
+			      9'd128)[7], ({recvQ_rRdPtr_rdCounter[8], recvQ_rRdPtr_rdCounter[8] ^
+								       recvQ_rRdPtr_rdCounter[7], recvQ_rRdPtr_rdCounter[8] ^
+												  recvQ_rRdPtr_rdCounter[7] ^
+												  recvQ_rRdPtr_rdCounter[6], recvQ_rRdPtr_rdCounter[8] ^
+															     recvQ_rRdPtr_rdCounter[7] ^
+															     recvQ_rRdPtr_rdCounter[6] ^
+															     recvQ_rRdPtr_rdCounter[5], recvQ_rRdPtr_rdCounter[8] ^
+																			recvQ_rRdPtr_rdCounter[7] ^
+																			recvQ_rRdPtr_rdCounter[6] ^
+																			recvQ_rRdPtr_rdCounter[5] ^
+																			recvQ_rRdPtr_rdCounter[4], recvQ_rRdPtr_rdCounter[8] ^
+																						   recvQ_rRdPtr_rdCounter[7] ^
+																						   recvQ_rRdPtr_rdCounter[6] ^
+																						   recvQ_rRdPtr_rdCounter[5] ^
+																						   recvQ_rRdPtr_rdCounter[4] ^
+																						   recvQ_rRdPtr_rdCounter[3], recvQ_rRdPtr_rdCounter[8] ^
+																									      recvQ_rRdPtr_rdCounter[7] ^
+																									      recvQ_rRdPtr_rdCounter[6] ^
+																									      recvQ_rRdPtr_rdCounter[5] ^
+																									      recvQ_rRdPtr_rdCounter[4] ^
+																									      recvQ_rRdPtr_rdCounter[3] ^
+																									      recvQ_rRdPtr_rdCounter[2], recvQ_rRdPtr_rdCounter[8] ^
+																													 recvQ_rRdPtr_rdCounter[7] ^
+																													 recvQ_rRdPtr_rdCounter[6] ^
+																													 recvQ_rRdPtr_rdCounter[5] ^
+																													 recvQ_rRdPtr_rdCounter[4] ^
+																													 recvQ_rRdPtr_rdCounter[3] ^
+																													 recvQ_rRdPtr_rdCounter[2] ^
+																													 recvQ_rRdPtr_rdCounter[1], recvQ_rRdPtr_rdCounter__h9451(...)[8] ^
+																																    recvQ_rRdPtr_rdCounter__h9451(...)[7] ^
+																																    recvQ_rRdPtr_rdCounter[6] ^
+																																    recvQ_rRdPtr_rdCounter[5] ^
+																																    recvQ_rRdPtr_rdCounter[4] ^
+																																    recvQ_rRdPtr_rdCounter[3] ^
+																																    recvQ_rRdPtr_rdCounter[2] ^
+																																    recvQ_rRdPtr_rdCounter[1] ^
+																																    recvQ_rRdPtr_rdCounter[0]} +
+					   9'd128)[7] ^
+					  ({recvQ_rRdPtr_rdCounter[8], recvQ_rRdPtr_rdCounter[8] ^
+								       recvQ_rRdPtr_rdCounter[7], recvQ_rRdPtr_rdCounter[8] ^
+												  recvQ_rRdPtr_rdCounter[7] ^
+												  recvQ_rRdPtr_rdCounter[6], recvQ_rRdPtr_rdCounter[8] ^
+															     recvQ_rRdPtr_rdCounter[7] ^
+															     recvQ_rRdPtr_rdCounter[6] ^
+															     recvQ_rRdPtr_rdCounter[5], recvQ_rRdPtr_rdCounter[8] ^
+																			recvQ_rRdPtr_rdCounter[7] ^
+																			recvQ_rRdPtr_rdCounter[6] ^
+																			recvQ_rRdPtr_rdCounter[5] ^
+																			recvQ_rRdPtr_rdCounter[4], recvQ_rRdPtr_rdCounter[8] ^
+																						   recvQ_rRdPtr_rdCounter[7] ^
+																						   recvQ_rRdPtr_rdCounter[6] ^
+																						   recvQ_rRdPtr_rdCounter[5] ^
+																						   recvQ_rRdPtr_rdCounter[4] ^
+																						   recvQ_rRdPtr_rdCounter[3], recvQ_rRdPtr_rdCounter[8] ^
+																									      recvQ_rRdPtr_rdCounter[7] ^
+																									      recvQ_rRdPtr_rdCounter[6] ^
+																									      recvQ_rRdPtr_rdCounter[5] ^
+																									      recvQ_rRdPtr_rdCounter[4] ^
+																									      recvQ_rRdPtr_rdCounter[3] ^
+																									      recvQ_rRdPtr_rdCounter[2], recvQ_rRdPtr_rdCounter[8] ^
+																													 recvQ_rRdPtr_rdCounter[7] ^
+																													 recvQ_rRdPtr_rdCounter[6] ^
+																													 recvQ_rRdPtr_rdCounter[5] ^
+																													 recvQ_rRdPtr_rdCounter[4] ^
+																													 recvQ_rRdPtr_rdCounter[3] ^
+																													 recvQ_rRdPtr_rdCounter[2] ^
+																													 recvQ_rRdPtr_rdCounter[1], recvQ_rRdPtr_rdCounter__h9451(...)[8] ^
+																																    recvQ_rRdPtr_rdCounter__h9451(...)[7] ^
+																																    recvQ_rRdPtr_rdCounter[6] ^
+																																    recvQ_rRdPtr_rdCounter[5] ^
+																																    recvQ_rRdPtr_rdCounter[4] ^
+																																    recvQ_rRdPtr_rdCounter[3] ^
+																																    recvQ_rRdPtr_rdCounter[2] ^
+																																    recvQ_rRdPtr_rdCounter[1] ^
+																																    recvQ_rRdPtr_rdCounter[0]} +
+					   9'd128)[6], ({recvQ_rRdPtr_rdCounter[8], recvQ_rRdPtr_rdCounter[8] ^
+										    recvQ_rRdPtr_rdCounter[7], recvQ_rRdPtr_rdCounter[8] ^
+													       recvQ_rRdPtr_rdCounter[7] ^
+													       recvQ_rRdPtr_rdCounter[6], recvQ_rRdPtr_rdCounter[8] ^
+																	  recvQ_rRdPtr_rdCounter[7] ^
+																	  recvQ_rRdPtr_rdCounter[6] ^
+																	  recvQ_rRdPtr_rdCounter[5], recvQ_rRdPtr_rdCounter[8] ^
+																				     recvQ_rRdPtr_rdCounter[7] ^
+																				     recvQ_rRdPtr_rdCounter[6] ^
+																				     recvQ_rRdPtr_rdCounter[5] ^
+																				     recvQ_rRdPtr_rdCounter[4], recvQ_rRdPtr_rdCounter[8] ^
+																								recvQ_rRdPtr_rdCounter[7] ^
+																								recvQ_rRdPtr_rdCounter[6] ^
+																								recvQ_rRdPtr_rdCounter[5] ^
+																								recvQ_rRdPtr_rdCounter[4] ^
+																								recvQ_rRdPtr_rdCounter[3], recvQ_rRdPtr_rdCounter[8] ^
+																											   recvQ_rRdPtr_rdCounter[7] ^
+																											   recvQ_rRdPtr_rdCounter[6] ^
+																											   recvQ_rRdPtr_rdCounter[5] ^
+																											   recvQ_rRdPtr_rdCounter[4] ^
+																											   recvQ_rRdPtr_rdCounter[3] ^
+																											   recvQ_rRdPtr_rdCounter[2], recvQ_rRdPtr_rdCounter[8] ^
+																														      recvQ_rRdPtr_rdCounter[7] ^
+																														      recvQ_rRdPtr_rdCounter[6] ^
+																														      recvQ_rRdPtr_rdCounter[5] ^
+																														      recvQ_rRdPtr_rdCounter[4] ^
+																														      recvQ_rRdPtr_rdCounter[3] ^
+																														      recvQ_rRdPtr_rdCounter[2] ^
+																														      recvQ_rRdPtr_rdCounter[1], recvQ_rRdPtr_rdCounter[8] ^
+																																		 recvQ_rRdPtr_rdCounter[7] ^
+																																		 recvQ_rRdPtr_rdCounter[6] ^
+																																		 recvQ_rRdPtr_rdCounter[5] ^
+																																		 recvQ_rRdPtr_rdCounter[4] ^
+																																		 recvQ_rRdPtr_rdCounter[3] ^
+																																		 recvQ_rRdPtr_rdCounter[2] ^
+																																		 recvQ_rRdPtr_rdCounter[1] ^
+																																		 recvQ_rRdPtr_rdCounter[0]} +
+							9'd128)[6] ^
+						       ({recvQ_rRdPtr_rdCounter[8], recvQ_rRdPtr_rdCounter[8] ^
+										    recvQ_rRdPtr_rdCounter[7], recvQ_rRdPtr_rdCounter[8] ^
+													       recvQ_rRdPtr_rdCounter[7] ^
+													       recvQ_rRdPtr_rdCounter[6], recvQ_rRdPtr_rdCounter[8] ^
+																	  recvQ_rRdPtr_rdCounter[7] ^
+																	  recvQ_rRdPtr_rdCounter[6] ^
+																	  recvQ_rRdPtr_rdCounter[5], recvQ_rRdPtr_rdCounter[8] ^
+																				     recvQ_rRdPtr_rdCounter[7] ^
+																				     recvQ_rRdPtr_rdCounter[6] ^
+																				     recvQ_rRdPtr_rdCounter[5] ^
+																				     recvQ_rRdPtr_rdCounter[4], recvQ_rRdPtr_rdCounter[8] ^
+																								recvQ_rRdPtr_rdCounter[7] ^
+																								recvQ_rRdPtr_rdCounter[6] ^
+																								recvQ_rRdPtr_rdCounter[5] ^
+																								recvQ_rRdPtr_rdCounter[4] ^
+																								recvQ_rRdPtr_rdCounter[3], recvQ_rRdPtr_rdCounter[8] ^
+																											   recvQ_rRdPtr_rdCounter[7] ^
+																											   recvQ_rRdPtr_rdCounter[6] ^
+																											   recvQ_rRdPtr_rdCounter[5] ^
+																											   recvQ_rRdPtr_rdCounter[4] ^
+																											   recvQ_rRdPtr_rdCounter[3] ^
+																											   recvQ_rRdPtr_rdCounter[2], recvQ_rRdPtr_rdCounter[8] ^
+																														      recvQ_rRdPtr_rdCounter[7] ^
+																														      recvQ_rRdPtr_rdCounter[6] ^
+																														      recvQ_rRdPtr_rdCounter[5] ^
+																														      recvQ_rRdPtr_rdCounter[4] ^
+																														      recvQ_rRdPtr_rdCounter[3] ^
+																														      recvQ_rRdPtr_rdCounter[2] ^
+																														      recvQ_rRdPtr_rdCounter[1], recvQ_rRdPtr_rdCounter[8] ^
+																																		 recvQ_rRdPtr_rdCounter[7] ^
+																																		 recvQ_rRdPtr_rdCounter[6] ^
+																																		 recvQ_rRdPtr_rdCounter[5] ^
+																																		 recvQ_rRdPtr_rdCounter[4] ^
+																																		 recvQ_rRdPtr_rdCounter[3] ^
+																																		 recvQ_rRdPtr_rdCounter[2] ^
+																																		 recvQ_rRdPtr_rdCounter[1] ^
+																																		 recvQ_rRdPtr_rdCounter[0]} +
+							9'd128)[5], ({recvQ_rRdPtr_rdCounter[8], recvQ_rRdPtr_rdCounter[8] ^
+												 recvQ_rRdPtr_rdCounter[7], recvQ_rRdPtr_rdCounter[8] ^
+															    recvQ_rRdPtr_rdCounter[7] ^
+															    recvQ_rRdPtr_rdCounter[6], recvQ_rRdPtr_rdCounter[8] ^
+																		       recvQ_rRdPtr_rdCounter[7] ^
+																		       recvQ_rRdPtr_rdCounter[6] ^
+																		       recvQ_rRdPtr_rdCounter[5], recvQ_rRdPtr_rdCounter[8] ^
+																						  recvQ_rRdPtr_rdCounter[7] ^
+																						  recvQ_rRdPtr_rdCounter[6] ^
+																						  recvQ_rRdPtr_rdCounter[5] ^
+																						  recvQ_rRdPtr_rdCounter[4], recvQ_rRdPtr_rdCounter[8] ^
+																									     recvQ_rRdPtr_rdCounter[7] ^
+																									     recvQ_rRdPtr_rdCounter[6] ^
+																									     recvQ_rRdPtr_rdCounter[5] ^
+																									     recvQ_rRdPtr_rdCounter[4] ^
+																									     recvQ_rRdPtr_rdCounter[3], recvQ_rRdPtr_rdCounter[8] ^
+																													recvQ_rRdPtr_rdCounter[7] ^
+																													recvQ_rRdPtr_rdCounter[6] ^
+																													recvQ_rRdPtr_rdCounter[5] ^
+																													recvQ_rRdPtr_rdCounter[4] ^
+																													recvQ_rRdPtr_rdCounter[3] ^
+																													recvQ_rRdPtr_rdCounter[2], recvQ_rRdPtr_rdCounter[8] ^
+																																   recvQ_rRdPtr_rdCounter[7] ^
+																																   recvQ_rRdPtr_rdCounter[6] ^
+																																   recvQ_rRdPtr_rdCounter[5] ^
+																																   recvQ_rRdPtr_rdCounter[4] ^
+																																   recvQ_rRdPtr_rdCounter[3] ^
+																																   recvQ_rRdPtr_rdCounter[2] ^
+																																   recvQ_rRdPtr_rdCounter[1], recvQ_rRdPtr_rdCounter[8] ^
+																																			      recvQ_rRdPtr_rdCounter[7] ^
+																																			      recvQ_rRdPtr_rdCounter[6] ^
+																																			      recvQ_rRdPtr_rdCounter[5] ^
+																																			      recvQ_rRdPtr_rdCounter[4] ^
+																																			      recvQ_rRdPtr_rdCounter[3] ^
+																																			      recvQ_rRdPtr_rdCounter[2] ^
+																																			      recvQ_rRdPtr_rdCounter[1] ^
+																																			      recvQ_rRdPtr_rdCounter[0]} +
+								     9'd128)[5] ^
+								    ({recvQ_rRdPtr_rdCounter[8], recvQ_rRdPtr_rdCounter[8] ^
+												 recvQ_rRdPtr_rdCounter[7], recvQ_rRdPtr_rdCounter[8] ^
+															    recvQ_rRdPtr_rdCounter[7] ^
+															    recvQ_rRdPtr_rdCounter[6], recvQ_rRdPtr_rdCounter[8] ^
+																		       recvQ_rRdPtr_rdCounter[7] ^
+																		       recvQ_rRdPtr_rdCounter[6] ^
+																		       recvQ_rRdPtr_rdCounter[5], recvQ_rRdPtr_rdCounter[8] ^
+																						  recvQ_rRdPtr_rdCounter[7] ^
+																						  recvQ_rRdPtr_rdCounter[6] ^
+																						  recvQ_rRdPtr_rdCounter[5] ^
+																						  recvQ_rRdPtr_rdCounter[4], recvQ_rRdPtr_rdCounter[8] ^
+																									     recvQ_rRdPtr_rdCounter[7] ^
+																									     recvQ_rRdPtr_rdCounter[6] ^
+																									     recvQ_rRdPtr_rdCounter[5] ^
+																									     recvQ_rRdPtr_rdCounter[4] ^
+																									     recvQ_rRdPtr_rdCounter[3], recvQ_rRdPtr_rdCounter[8] ^
+																													recvQ_rRdPtr_rdCounter[7] ^
+																													recvQ_rRdPtr_rdCounter[6] ^
+																													recvQ_rRdPtr_rdCounter[5] ^
+																													recvQ_rRdPtr_rdCounter[4] ^
+																													recvQ_rRdPtr_rdCounter[3] ^
+																													recvQ_rRdPtr_rdCounter[2], recvQ_rRdPtr_rdCounter[8] ^
+																																   recvQ_rRdPtr_rdCounter[7] ^
+																																   recvQ_rRdPtr_rdCounter[6] ^
+																																   recvQ_rRdPtr_rdCounter[5] ^
+																																   recvQ_rRdPtr_rdCounter[4] ^
+																																   recvQ_rRdPtr_rdCounter[3] ^
+																																   recvQ_rRdPtr_rdCounter[2] ^
+																																   recvQ_rRdPtr_rdCounter[1], recvQ_rRdPtr_rdCounter[8] ^
+																																			      recvQ_rRdPtr_rdCounter[7] ^
+																																			      recvQ_rRdPtr_rdCounter[6] ^
+																																			      recvQ_rRdPtr_rdCounter[5] ^
+																																			      recvQ_rRdPtr_rdCounter[4] ^
+																																			      recvQ_rRdPtr_rdCounter[3] ^
+																																			      recvQ_rRdPtr_rdCounter[2] ^
+																																			      recvQ_rRdPtr_rdCounter[1] ^
+																																			      recvQ_rRdPtr_rdCounter[0]} +
+								     9'd128)[4], ({recvQ_rRdPtr_rdCounter[8], recvQ_rRdPtr_rdCounter[8] ^
+													      recvQ_rRdPtr_rdCounter[7], recvQ_rRdPtr_rdCounter[8] ^
+																	 recvQ_rRdPtr_rdCounter[7] ^
+																	 recvQ_rRdPtr_rdCounter[6], recvQ_rRdPtr_rdCounter[8] ^
+																				    recvQ_rRdPtr_rdCounter[7] ^
+																				    recvQ_rRdPtr_rdCounter[6] ^
+																				    recvQ_rRdPtr_rdCounter[5], recvQ_rRdPtr_rdCounter[8] ^
+																							       recvQ_rRdPtr_rdCounter[7] ^
+																							       recvQ_rRdPtr_rdCounter[6] ^
+																							       recvQ_rRdPtr_rdCounter[5] ^
+																							       recvQ_rRdPtr_rdCounter[4], recvQ_rRdPtr_rdCounter[8] ^
+																											  recvQ_rRdPtr_rdCounter[7] ^
+																											  recvQ_rRdPtr_rdCounter[6] ^
+																											  recvQ_rRdPtr_rdCounter[5] ^
+																											  recvQ_rRdPtr_rdCounter[4] ^
+																											  recvQ_rRdPtr_rdCounter[3], recvQ_rRdPtr_rdCounter[8] ^
+																														     recvQ_rRdPtr_rdCounter[7] ^
+																														     recvQ_rRdPtr_rdCounter[6] ^
+																														     recvQ_rRdPtr_rdCounter[5] ^
+																														     recvQ_rRdPtr_rdCounter[4] ^
+																														     recvQ_rRdPtr_rdCounter[3] ^
+																														     recvQ_rRdPtr_rdCounter[2], recvQ_rRdPtr_rdCounter[8] ^
+																																		recvQ_rRdPtr_rdCounter[7] ^
+																																		recvQ_rRdPtr_rdCounter[6] ^
+																																		recvQ_rRdPtr_rdCounter[5] ^
+																																		recvQ_rRdPtr_rdCounter[4] ^
+																																		recvQ_rRdPtr_rdCounter[3] ^
+																																		recvQ_rRdPtr_rdCounter[2] ^
+																																		recvQ_rRdPtr_rdCounter[1], recvQ_rRdPtr_rdCounter[8] ^
+																																					   recvQ_rRdPtr_rdCounter[7] ^
+																																					   recvQ_rRdPtr_rdCounter[6] ^
+																																					   recvQ_rRdPtr_rdCounter[5] ^
+																																					   recvQ_rRdPtr_rdCounter[4] ^
+																																					   recvQ_rRdPtr_rdCounter[3] ^
+																																					   recvQ_rRdPtr_rdCounter[2] ^
+																																					   recvQ_rRdPtr_rdCounter[1] ^
+																																					   recvQ_rRdPtr_rdCounter[0]} +
+										  9'd128)[4] ^
+										 ({recvQ_rRdPtr_rdCounter[8], recvQ_rRdPtr_rdCounter[8] ^
+													      recvQ_rRdPtr_rdCounter[7], recvQ_rRdPtr_rdCounter[8] ^
+																	 recvQ_rRdPtr_rdCounter[7] ^
+																	 recvQ_rRdPtr_rdCounter[6], recvQ_rRdPtr_rdCounter[8] ^
+																				    recvQ_rRdPtr_rdCounter[7] ^
+																				    recvQ_rRdPtr_rdCounter[6] ^
+																				    recvQ_rRdPtr_rdCounter[5], recvQ_rRdPtr_rdCounter[8] ^
+																							       recvQ_rRdPtr_rdCounter[7] ^
+																							       recvQ_rRdPtr_rdCounter[6] ^
+																							       recvQ_rRdPtr_rdCounter[5] ^
+																							       recvQ_rRdPtr_rdCounter[4], recvQ_rRdPtr_rdCounter[8] ^
+																											  recvQ_rRdPtr_rdCounter[7] ^
+																											  recvQ_rRdPtr_rdCounter[6] ^
+																											  recvQ_rRdPtr_rdCounter[5] ^
+																											  recvQ_rRdPtr_rdCounter[4] ^
+																											  recvQ_rRdPtr_rdCounter[3], recvQ_rRdPtr_rdCounter[8] ^
+																														     recvQ_rRdPtr_rdCounter[7] ^
+																														     recvQ_rRdPtr_rdCounter[6] ^
+																														     recvQ_rRdPtr_rdCounter[5] ^
+																														     recvQ_rRdPtr_rdCounter[4] ^
+																														     recvQ_rRdPtr_rdCounter[3] ^
+																														     recvQ_rRdPtr_rdCounter[2], recvQ_rRdPtr_rdCounter[8] ^
+																																		recvQ_rRdPtr_rdCounter[7] ^
+																																		recvQ_rRdPtr_rdCounter[6] ^
+																																		recvQ_rRdPtr_rdCounter[5] ^
+																																		recvQ_rRdPtr_rdCounter[4] ^
+																																		recvQ_rRdPtr_rdCounter[3] ^
+																																		recvQ_rRdPtr_rdCounter[2] ^
+																																		recvQ_rRdPtr_rdCounter[1], recvQ_rRdPtr_rdCounter[8] ^
+																																					   recvQ_rRdPtr_rdCounter[7] ^
+																																					   recvQ_rRdPtr_rdCounter[6] ^
+																																					   recvQ_rRdPtr_rdCounter[5] ^
+																																					   recvQ_rRdPtr_rdCounter[4] ^
+																																					   recvQ_rRdPtr_rdCounter[3] ^
+																																					   recvQ_rRdPtr_rdCounter[2] ^
+																																					   recvQ_rRdPtr_rdCounter[1] ^
+																																					   recvQ_rRdPtr_rdCounter[0]} +
+										  9'd128)[3], ({recvQ_rRdPtr_rdCounter[8], recvQ_rRdPtr_rdCounter[8] ^
+															   recvQ_rRdPtr_rdCounter[7], recvQ_rRdPtr_rdCounter[8] ^
+																		      recvQ_rRdPtr_rdCounter[7] ^
+																		      recvQ_rRdPtr_rdCounter[6], recvQ_rRdPtr_rdCounter[8] ^
+																						 recvQ_rRdPtr_rdCounter[7] ^
+																						 recvQ_rRdPtr_rdCounter[6] ^
+																						 recvQ_rRdPtr_rdCounter[5], recvQ_rRdPtr_rdCounter[8] ^
+																									    recvQ_rRdPtr_rdCounter[7] ^
+																									    recvQ_rRdPtr_rdCounter[6] ^
+																									    recvQ_rRdPtr_rdCounter[5] ^
+																									    recvQ_rRdPtr_rdCounter[4], recvQ_rRdPtr_rdCounter[8] ^
+																												       recvQ_rRdPtr_rdCounter[7] ^
+																												       recvQ_rRdPtr_rdCounter[6] ^
+																												       recvQ_rRdPtr_rdCounter[5] ^
+																												       recvQ_rRdPtr_rdCounter[4] ^
+																												       recvQ_rRdPtr_rdCounter[3], recvQ_rRdPtr_rdCounter[8] ^
+																																  recvQ_rRdPtr_rdCounter[7] ^
+																																  recvQ_rRdPtr_rdCounter[6] ^
+																																  recvQ_rRdPtr_rdCounter[5] ^
+																																  recvQ_rRdPtr_rdCounter[4] ^
+																																  recvQ_rRdPtr_rdCounter[3] ^
+																																  recvQ_rRdPtr_rdCounter[2], recvQ_rRdPtr_rdCounter[8] ^
+																																			     recvQ_rRdPtr_rdCounter[7] ^
+																																			     recvQ_rRdPtr_rdCounter[6] ^
+																																			     recvQ_rRdPtr_rdCounter[5] ^
+																																			     recvQ_rRdPtr_rdCounter[4] ^
+																																			     recvQ_rRdPtr_rdCounter[3] ^
+																																			     recvQ_rRdPtr_rdCounter[2] ^
+																																			     recvQ_rRdPtr_rdCounter[1], recvQ_rRdPtr_rdCounter[8] ^
+																																							recvQ_rRdPtr_rdCounter[7] ^
+																																							recvQ_rRdPtr_rdCounter[6] ^
+																																							recvQ_rRdPtr_rdCounter[5] ^
+																																							recvQ_rRdPtr_rdCounter[4] ^
+																																							recvQ_rRdPtr_rdCounter[3] ^
+																																							recvQ_rRdPtr_rdCounter[2] ^
+																																							recvQ_rRdPtr_rdCounter[1] ^
+																																							recvQ_rRdPtr_rdCounter[0]} +
+											       9'd128)[3] ^
+											      ({recvQ_rRdPtr_rdCounter[8], recvQ_rRdPtr_rdCounter[8] ^
+															   recvQ_rRdPtr_rdCounter[7], recvQ_rRdPtr_rdCounter[8] ^
+																		      recvQ_rRdPtr_rdCounter[7] ^
+																		      recvQ_rRdPtr_rdCounter[6], recvQ_rRdPtr_rdCounter[8] ^
+																						 recvQ_rRdPtr_rdCounter[7] ^
+																						 recvQ_rRdPtr_rdCounter[6] ^
+																						 recvQ_rRdPtr_rdCounter[5], recvQ_rRdPtr_rdCounter[8] ^
+																									    recvQ_rRdPtr_rdCounter[7] ^
+																									    recvQ_rRdPtr_rdCounter[6] ^
+																									    recvQ_rRdPtr_rdCounter[5] ^
+																									    recvQ_rRdPtr_rdCounter[4], recvQ_rRdPtr_rdCounter[8] ^
+																												       recvQ_rRdPtr_rdCounter[7] ^
+																												       recvQ_rRdPtr_rdCounter[6] ^
+																												       recvQ_rRdPtr_rdCounter[5] ^
+																												       recvQ_rRdPtr_rdCounter[4] ^
+																												       recvQ_rRdPtr_rdCounter[3], recvQ_rRdPtr_rdCounter[8] ^
+																																  recvQ_rRdPtr_rdCounter[7] ^
+																																  recvQ_rRdPtr_rdCounter[6] ^
+																																  recvQ_rRdPtr_rdCounter[5] ^
+																																  recvQ_rRdPtr_rdCounter[4] ^
+																																  recvQ_rRdPtr_rdCounter[3] ^
+																																  recvQ_rRdPtr_rdCounter[2], recvQ_rRdPtr_rdCounter[8] ^
+																																			     recvQ_rRdPtr_rdCounter[7] ^
+																																			     recvQ_rRdPtr_rdCounter[6] ^
+																																			     recvQ_rRdPtr_rdCounter[5] ^
+																																			     recvQ_rRdPtr_rdCounter[4] ^
+																																			     recvQ_rRdPtr_rdCounter[3] ^
+																																			     recvQ_rRdPtr_rdCounter[2] ^
+																																			     recvQ_rRdPtr_rdCounter[1], recvQ_rRdPtr_rdCounter[8] ^
+																																							recvQ_rRdPtr_rdCounter[7] ^
+																																							recvQ_rRdPtr_rdCounter[6] ^
+																																							recvQ_rRdPtr_rdCounter[5] ^
+																																							recvQ_rRdPtr_rdCounter[4] ^
+																																							recvQ_rRdPtr_rdCounter[3] ^
+																																							recvQ_rRdPtr_rdCounter[2] ^
+																																							recvQ_rRdPtr_rdCounter[1] ^
+																																							recvQ_rRdPtr_rdCounter[0]} +
+											       9'd128)[2], ({recvQ_rRdPtr_rdCounter[8], recvQ_rRdPtr_rdCounter[8] ^
+																	recvQ_rRdPtr_rdCounter[7], recvQ_rRdPtr_rdCounter[8] ^
+																				   recvQ_rRdPtr_rdCounter[7] ^
+																				   recvQ_rRdPtr_rdCounter[6], recvQ_rRdPtr_rdCounter[8] ^
+																							      recvQ_rRdPtr_rdCounter[7] ^
+																							      recvQ_rRdPtr_rdCounter[6] ^
+																							      recvQ_rRdPtr_rdCounter[5], recvQ_rRdPtr_rdCounter[8] ^
+																											 recvQ_rRdPtr_rdCounter[7] ^
+																											 recvQ_rRdPtr_rdCounter[6] ^
+																											 recvQ_rRdPtr_rdCounter[5] ^
+																											 recvQ_rRdPtr_rdCounter[4], recvQ_rRdPtr_rdCounter[8] ^
+																														    recvQ_rRdPtr_rdCounter[7] ^
+																														    recvQ_rRdPtr_rdCounter[6] ^
+																														    recvQ_rRdPtr_rdCounter[5] ^
+																														    recvQ_rRdPtr_rdCounter[4] ^
+																														    recvQ_rRdPtr_rdCounter[3], recvQ_rRdPtr_rdCounter[8] ^
+																																	       recvQ_rRdPtr_rdCounter[7] ^
+																																	       recvQ_rRdPtr_rdCounter[6] ^
+																																	       recvQ_rRdPtr_rdCounter[5] ^
+																																	       recvQ_rRdPtr_rdCounter[4] ^
+																																	       recvQ_rRdPtr_rdCounter[3] ^
+																																	       recvQ_rRdPtr_rdCounter[2], recvQ_rRdPtr_rdCounter[8] ^
+																																					  recvQ_rRdPtr_rdCounter[7] ^
+																																					  recvQ_rRdPtr_rdCounter[6] ^
+																																					  recvQ_rRdPtr_rdCounter[5] ^
+																																					  recvQ_rRdPtr_rdCounter[4] ^
+																																					  recvQ_rRdPtr_rdCounter[3] ^
+																																					  recvQ_rRdPtr_rdCounter[2] ^
+																																					  recvQ_rRdPtr_rdCounter[1], recvQ_rRdPtr_rdCounter[8] ^
+																																								     recvQ_rRdPtr_rdCounter[7] ^
+																																								     recvQ_rRdPtr_rdCounter[6] ^
+																																								     recvQ_rRdPtr_rdCounter[5] ^
+																																								     recvQ_rRdPtr_rdCounter[4] ^
+																																								     recvQ_rRdPtr_rdCounter[3] ^
+																																								     recvQ_rRdPtr_rdCounter[2] ^
+																																								     recvQ_rRdPtr_rdCounter[1] ^
+																																								     recvQ_rRdPtr_rdCounter[0]} +
+													    9'd128)[2] ^
+													   ({recvQ_rRdPtr_rdCounter[8], recvQ_rRdPtr_rdCounter[8] ^
+																	recvQ_rRdPtr_rdCounter[7], recvQ_rRdPtr_rdCounter[8] ^
+																				   recvQ_rRdPtr_rdCounter[7] ^
+																				   recvQ_rRdPtr_rdCounter[6], recvQ_rRdPtr_rdCounter[8] ^
+																							      recvQ_rRdPtr_rdCounter[7] ^
+																							      recvQ_rRdPtr_rdCounter[6] ^
+																							      recvQ_rRdPtr_rdCounter[5], recvQ_rRdPtr_rdCounter[8] ^
+																											 recvQ_rRdPtr_rdCounter[7] ^
+																											 recvQ_rRdPtr_rdCounter[6] ^
+																											 recvQ_rRdPtr_rdCounter[5] ^
+																											 recvQ_rRdPtr_rdCounter[4], recvQ_rRdPtr_rdCounter[8] ^
+																														    recvQ_rRdPtr_rdCounter[7] ^
+																														    recvQ_rRdPtr_rdCounter[6] ^
+																														    recvQ_rRdPtr_rdCounter[5] ^
+																														    recvQ_rRdPtr_rdCounter[4] ^
+																														    recvQ_rRdPtr_rdCounter[3], recvQ_rRdPtr_rdCounter[8] ^
+																																	       recvQ_rRdPtr_rdCounter[7] ^
+																																	       recvQ_rRdPtr_rdCounter[6] ^
+																																	       recvQ_rRdPtr_rdCounter[5] ^
+																																	       recvQ_rRdPtr_rdCounter[4] ^
+																																	       recvQ_rRdPtr_rdCounter[3] ^
+																																	       recvQ_rRdPtr_rdCounter[2], recvQ_rRdPtr_rdCounter[8] ^
+																																					  recvQ_rRdPtr_rdCounter[7] ^
+																																					  recvQ_rRdPtr_rdCounter[6] ^
+																																					  recvQ_rRdPtr_rdCounter[5] ^
+																																					  recvQ_rRdPtr_rdCounter[4] ^
+																																					  recvQ_rRdPtr_rdCounter[3] ^
+																																					  recvQ_rRdPtr_rdCounter[2] ^
+																																					  recvQ_rRdPtr_rdCounter[1], recvQ_rRdPtr_rdCounter[8] ^
+																																								     recvQ_rRdPtr_rdCounter[7] ^
+																																								     recvQ_rRdPtr_rdCounter[6] ^
+																																								     recvQ_rRdPtr_rdCounter[5] ^
+																																								     recvQ_rRdPtr_rdCounter[4] ^
+																																								     recvQ_rRdPtr_rdCounter[3] ^
+																																								     recvQ_rRdPtr_rdCounter[2] ^
+																																								     recvQ_rRdPtr_rdCounter[1] ^
+																																								     recvQ_rRdPtr_rdCounter[0]} +
+													    9'd128)[1], ({recvQ_rRdPtr_rdCounter[8], recvQ_rRdPtr_rdCounter[8] ^
+																		     recvQ_rRdPtr_rdCounter[7], recvQ_rRdPtr_rdCounter[8] ^
+																						recvQ_rRdPtr_rdCounter[7] ^
+																						recvQ_rRdPtr_rdCounter[6], recvQ_rRdPtr_rdCounter[8] ^
+																									   recvQ_rRdPtr_rdCounter[7] ^
+																									   recvQ_rRdPtr_rdCounter[6] ^
+																									   recvQ_rRdPtr_rdCounter[5], recvQ_rRdPtr_rdCounter[8] ^
+																												      recvQ_rRdPtr_rdCounter[7] ^
+																												      recvQ_rRdPtr_rdCounter[6] ^
+																												      recvQ_rRdPtr_rdCounter[5] ^
+																												      recvQ_rRdPtr_rdCounter[4], recvQ_rRdPtr_rdCounter[8] ^
+																																 recvQ_rRdPtr_rdCounter[7] ^
+																																 recvQ_rRdPtr_rdCounter[6] ^
+																																 recvQ_rRdPtr_rdCounter[5] ^
+																																 recvQ_rRdPtr_rdCounter[4] ^
+																																 recvQ_rRdPtr_rdCounter[3], recvQ_rRdPtr_rdCounter[8] ^
+																																			    recvQ_rRdPtr_rdCounter[7] ^
+																																			    recvQ_rRdPtr_rdCounter[6] ^
+																																			    recvQ_rRdPtr_rdCounter[5] ^
+																																			    recvQ_rRdPtr_rdCounter[4] ^
+																																			    recvQ_rRdPtr_rdCounter[3] ^
+																																			    recvQ_rRdPtr_rdCounter[2], recvQ_rRdPtr_rdCounter[8] ^
+																																						       recvQ_rRdPtr_rdCounter[7] ^
+																																						       recvQ_rRdPtr_rdCounter[6] ^
+																																						       recvQ_rRdPtr_rdCounter[5] ^
+																																						       recvQ_rRdPtr_rdCounter[4] ^
+																																						       recvQ_rRdPtr_rdCounter[3] ^
+																																						       recvQ_rRdPtr_rdCounter[2] ^
+																																						       recvQ_rRdPtr_rdCounter[1], recvQ_rRdPtr_rdCounter[8] ^
+																																										  recvQ_rRdPtr_rdCounter[7] ^
+																																										  recvQ_rRdPtr_rdCounter[6] ^
+																																										  recvQ_rRdPtr_rdCounter[5] ^
+																																										  recvQ_rRdPtr_rdCounter[4] ^
+																																										  recvQ_rRdPtr_rdCounter[3] ^
+																																										  recvQ_rRdPtr_rdCounter[2] ^
+																																										  recvQ_rRdPtr_rdCounter[1] ^
+																																										  recvQ_rRdPtr_rdCounter[0]} +
+															 9'd128)[1] ^
+															({recvQ_rRdPtr_rdCounter[8], recvQ_rRdPtr_rdCounter[8] ^
+																		     recvQ_rRdPtr_rdCounter[7], recvQ_rRdPtr_rdCounter[8] ^
+																						recvQ_rRdPtr_rdCounter[7] ^
+																						recvQ_rRdPtr_rdCounter[6], recvQ_rRdPtr_rdCounter[8] ^
+																									   recvQ_rRdPtr_rdCounter[7] ^
+																									   recvQ_rRdPtr_rdCounter[6] ^
+																									   recvQ_rRdPtr_rdCounter[5], recvQ_rRdPtr_rdCounter[8] ^
+																												      recvQ_rRdPtr_rdCounter[7] ^
+																												      recvQ_rRdPtr_rdCounter[6] ^
+																												      recvQ_rRdPtr_rdCounter[5] ^
+																												      recvQ_rRdPtr_rdCounter[4], recvQ_rRdPtr_rdCounter[8] ^
+																																 recvQ_rRdPtr_rdCounter[7] ^
+																																 recvQ_rRdPtr_rdCounter[6] ^
+																																 recvQ_rRdPtr_rdCounter[5] ^
+																																 recvQ_rRdPtr_rdCounter[4] ^
+																																 recvQ_rRdPtr_rdCounter[3], recvQ_rRdPtr_rdCounter[8] ^
+																																			    recvQ_rRdPtr_rdCounter[7] ^
+																																			    recvQ_rRdPtr_rdCounter[6] ^
+																																			    recvQ_rRdPtr_rdCounter[5] ^
+																																			    recvQ_rRdPtr_rdCounter[4] ^
+																																			    recvQ_rRdPtr_rdCounter[3] ^
+																																			    recvQ_rRdPtr_rdCounter[2], recvQ_rRdPtr_rdCounter[8] ^
+																																						       recvQ_rRdPtr_rdCounter[7] ^
+																																						       recvQ_rRdPtr_rdCounter[6] ^
+																																						       recvQ_rRdPtr_rdCounter[5] ^
+																																						       recvQ_rRdPtr_rdCounter[4] ^
+																																						       recvQ_rRdPtr_rdCounter[3] ^
+																																						       recvQ_rRdPtr_rdCounter[2] ^
+																																						       recvQ_rRdPtr_rdCounter[1], recvQ_rRdPtr_rdCounter[8] ^
+																																										  recvQ_rRdPtr_rdCounter[7] ^
+																																										  recvQ_rRdPtr_rdCounter[6] ^
+																																										  recvQ_rRdPtr_rdCounter[5] ^
+																																										  recvQ_rRdPtr_rdCounter[4] ^
+																																										  recvQ_rRdPtr_rdCounter[3] ^
+																																										  recvQ_rRdPtr_rdCounter[2] ^
+																																										  recvQ_rRdPtr_rdCounter[1] ^
+																																										  recvQ_rRdPtr_rdCounter[0]} +
+															 9'd128)[0]})) &&
+	   recvBufferQ.i_notEmpty
+Blocking rules: (none)
+ 
+Logical execution order: send,
+			 auroraRecv,
+			 auroraSend,
+			 curSendBudget,
+			 sendPacketPart,
+			 emitFlowControlPacket,
+			 recvPacketPart,
+			 flushReadBuffer,
+			 recvQ_portA,
+			 recvQ_portB_read_data,
+			 recv,
+			 recvQ_portB,
+			 recvQ_rWrPtr_synchronizer,
+			 recvQ_rWrPtr_wdCounterCrossing_clock_domain_crossing,
+			 recvQ_rWrPtr_do_increment,
+			 recvQ_rWrPtr_do_decrement,
+			 recvQ_rRdPtr_synchronizer,
+			 recvQ_rRdPtr_wdCounterCrossing_clock_domain_crossing,
+			 recvQ_rRdPtr_do_increment,
+			 recvQ_rRdPtr_do_decrement
+
+===============================================

@@ -1,0 +1,559 @@
+=== Generated schedule for mkProjectTop_bsim ===
+
+Rule schedule
+-------------
+Rule: pcieCtrl_receiveDmaRead
+Predicate: ((pcieCtrl_dmaReadBufferOff < 8'd3) ||
+	    pcieCtrl_dmaReadWordQ.i_notFull) &&
+	   (! (pcieCtrl_dmaReadWordCount == 10'd0))
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_receiveIO
+Predicate: pcieCtrl_ioWriteQ.i_notFull && pcieCtrl_ioReadReqQ.i_notFull
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_relayIOReadResp
+Predicate: pcieCtrl_ioReadReqReturnQ.i_notEmpty &&
+	   pcieCtrl_ioReadReqDataQ.i_notEmpty
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_getWriteReq
+Predicate: pcieCtrl_ioWriteQ.i_notEmpty &&
+	   ((! (pcieCtrl_ioWriteQ.first[51:32] < 20'd16)) ||
+	    (! (pcieCtrl_ioWriteQ.first[35:34] == 2'd0)) ||
+	    hwmain_dma_ioRecvQ.RDY_enq)
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_wm00_merge
+Predicate: hwmain_dma_wm00_prio
+	   ? hwmain_dma_wm00_inQ2.notEmpty
+	     ? hwmain_dma_wm00_outQ.i_notFull &&
+	       hwmain_dma_wm00_inQ2.i_notEmpty
+	     : ((! hwmain_dma_wm00_inQ1.notEmpty) ||
+		(hwmain_dma_wm00_inQ1.i_notEmpty &&
+		 hwmain_dma_wm00_outQ.i_notFull))
+	   : (hwmain_dma_wm00_inQ1.notEmpty
+	      ? hwmain_dma_wm00_inQ1.i_notEmpty &&
+		hwmain_dma_wm00_outQ.i_notFull
+	      : ((! hwmain_dma_wm00_inQ2.notEmpty) ||
+		 (hwmain_dma_wm00_outQ.i_notFull &&
+		  hwmain_dma_wm00_inQ2.i_notEmpty)))
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_wm10_merge
+Predicate: hwmain_dma_wm10_prio
+	   ? hwmain_dma_wm10_inQ2.notEmpty
+	     ? hwmain_dma_wm10_outQ.i_notFull &&
+	       hwmain_dma_wm10_inQ2.i_notEmpty
+	     : ((! hwmain_dma_wm10_inQ1.notEmpty) ||
+		(hwmain_dma_wm10_inQ1.i_notEmpty &&
+		 hwmain_dma_wm10_outQ.i_notFull))
+	   : (hwmain_dma_wm10_inQ1.notEmpty
+	      ? hwmain_dma_wm10_inQ1.i_notEmpty &&
+		hwmain_dma_wm10_outQ.i_notFull
+	      : ((! hwmain_dma_wm10_inQ2.notEmpty) ||
+		 (hwmain_dma_wm10_outQ.i_notFull &&
+		  hwmain_dma_wm10_inQ2.i_notEmpty)))
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_wm20_merge
+Predicate: hwmain_dma_wm20_prio
+	   ? hwmain_dma_wm20_inQ2.notEmpty
+	     ? hwmain_dma_wm20_outQ.i_notFull &&
+	       hwmain_dma_wm20_inQ2.i_notEmpty
+	     : ((! hwmain_dma_wm20_inQ1.notEmpty) ||
+		(hwmain_dma_wm20_inQ1.i_notEmpty &&
+		 hwmain_dma_wm20_outQ.i_notFull))
+	   : (hwmain_dma_wm20_inQ1.notEmpty
+	      ? hwmain_dma_wm20_inQ1.i_notEmpty &&
+		hwmain_dma_wm20_outQ.i_notFull
+	      : ((! hwmain_dma_wm20_inQ2.notEmpty) ||
+		 (hwmain_dma_wm20_outQ.i_notFull &&
+		  hwmain_dma_wm20_inQ2.i_notEmpty)))
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_wm21_merge
+Predicate: hwmain_dma_wm21_prio
+	   ? hwmain_dma_wm21_inQ2.notEmpty
+	     ? hwmain_dma_wm21_outQ.i_notFull &&
+	       hwmain_dma_wm21_inQ2.i_notEmpty
+	     : ((! hwmain_dma_wm21_inQ1.notEmpty) ||
+		(hwmain_dma_wm21_inQ1.i_notEmpty &&
+		 hwmain_dma_wm21_outQ.i_notFull))
+	   : (hwmain_dma_wm21_inQ1.notEmpty
+	      ? hwmain_dma_wm21_inQ1.i_notEmpty &&
+		hwmain_dma_wm21_outQ.i_notFull
+	      : ((! hwmain_dma_wm21_inQ2.notEmpty) ||
+		 (hwmain_dma_wm21_outQ.i_notFull &&
+		  hwmain_dma_wm21_inQ2.i_notEmpty)))
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_merge10
+Predicate: hwmain_dma_wm20_outQ.i_notEmpty && hwmain_dma_wm10_inQ1.i_notFull
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_merge11
+Predicate: hwmain_dma_wm21_outQ.i_notEmpty && hwmain_dma_wm10_inQ2.i_notFull
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_merge0
+Predicate: hwmain_dma_wm10_outQ.i_notEmpty && hwmain_dma_wm00_inQ1.i_notFull
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_relayDmaWriteQ
+Predicate: hwmain_dma_dmaWriteQv_0.RDY_enq &&
+	   hwmain_dma_dmaWritecQv_0.i_notEmpty
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_relaydmawrqsync
+Predicate: hwmain_dma_sfifodma_0.RDY_enq && hwmain_dma_reqQv_0.i_notEmpty &&
+	   (! ((hwmain_dma_dmaWriteIn_0 - hwmain_dma_dmaWriteOut_0) <=
+	       hwmain_dma_reqQv_0.first[17:8]))
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_relaydmawrq
+Predicate: hwmain_dma_sfifodma_0.RDY_deq &&
+	   hwmain_dma_sfifodma_0.RDY_first && hwmain_dma_wm20_inQ1.i_notFull
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_relayDmaWriteQ_1
+Predicate: hwmain_dma_dmaWriteQv_1.RDY_enq &&
+	   hwmain_dma_dmaWritecQv_1.i_notEmpty
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_relaydmawrqsync_1
+Predicate: hwmain_dma_sfifodma_1.RDY_enq && hwmain_dma_reqQv_1.i_notEmpty &&
+	   (! ((hwmain_dma_dmaWriteIn_1 - hwmain_dma_dmaWriteOut_1) <=
+	       hwmain_dma_reqQv_1.first[17:8]))
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_relaydmawrq_1
+Predicate: hwmain_dma_sfifodma_1.RDY_deq &&
+	   hwmain_dma_sfifodma_1.RDY_first && hwmain_dma_wm20_inQ2.i_notFull
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_relayDmaWriteQ_2
+Predicate: hwmain_dma_dmaWriteQv_2.RDY_enq &&
+	   hwmain_dma_dmaWritecQv_2.i_notEmpty
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_relaydmawrqsync_2
+Predicate: hwmain_dma_sfifodma_2.RDY_enq && hwmain_dma_reqQv_2.i_notEmpty &&
+	   (! ((hwmain_dma_dmaWriteIn_2 - hwmain_dma_dmaWriteOut_2) <=
+	       hwmain_dma_reqQv_2.first[17:8]))
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_relaydmawrq_2
+Predicate: hwmain_dma_sfifodma_2.RDY_deq &&
+	   hwmain_dma_sfifodma_2.RDY_first && hwmain_dma_wm21_inQ1.i_notFull
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_relayDmaWriteQ_3
+Predicate: hwmain_dma_dmaWriteQv_3.RDY_enq &&
+	   hwmain_dma_dmaWritecQv_3.i_notEmpty
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_relaydmawrqsync_3
+Predicate: hwmain_dma_sfifodma_3.RDY_enq && hwmain_dma_reqQv_3.i_notEmpty &&
+	   (! ((hwmain_dma_dmaWriteIn_3 - hwmain_dma_dmaWriteOut_3) <=
+	       hwmain_dma_reqQv_3.first[17:8]))
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_relaydmawrq_3
+Predicate: hwmain_dma_sfifodma_3.RDY_deq &&
+	   hwmain_dma_sfifodma_3.RDY_first && hwmain_dma_wm21_inQ2.i_notFull
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_issuedmaWrite
+Predicate: (pcieCtrl_dmaWriteWordCount == 10'd0) &&
+	   hwmain_dma_wm00_outQ.i_notEmpty &&
+	   (hwmain_dma_dmaWriteCnt == 10'd0)
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_senddmaWriteData
+Predicate: (! (pcieCtrl_dmaWriteWordCount == 10'd0)) &&
+	   ((hwmain_dma_dmaWriteSrc == 8'd255)
+	    ? hwmain_dma_enqDmaWriteQ.i_notEmpty &&
+	      ((! (hwmain_dma_dmaWriteCnt == 10'd1)) || bdpiInterruptReady())
+	    : (case hwmain_dma_dmaWriteSrc of
+	       8'd0 -> hwmain_dma_dmaWriteQv_0.RDY_first
+	       8'd1 -> hwmain_dma_dmaWriteQv_1.RDY_first
+	       8'd2 -> hwmain_dma_dmaWriteQv_2.RDY_first
+	       8'd3 -> hwmain_dma_dmaWriteQv_3.RDY_first
+	       _ -> 1'd1 &&
+	       case hwmain_dma_dmaWriteSrc of
+	       8'd0 -> hwmain_dma_dmaWriteQv_0.RDY_deq
+	       8'd1 -> hwmain_dma_dmaWriteQv_1.RDY_deq
+	       8'd2 -> hwmain_dma_dmaWriteQv_2.RDY_deq
+	       8'd3 -> hwmain_dma_dmaWriteQv_3.RDY_deq
+	       _ -> 1'd1)) &&
+	   (! (hwmain_dma_dmaWriteCnt == 10'd0))
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_relayEnqPacket
+Predicate: hwmain_dma_enqQ.RDY_enq && hwmain_dma_enqcQ.i_notEmpty
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_startEnqPacket
+Predicate: hwmain_dma_enqQ.RDY_deq &&
+	   hwmain_dma_enqQ.RDY_first &&
+	   hwmain_dma_enqDataQ.i_notFull &&
+	   hwmain_dma_wm00_inQ2.i_notFull &&
+	   hwmain_dma_enqDmaWriteQ.i_notFull &&
+	   (! hwmain_dma_enqState) &&
+	   ((hwmain_dma_enqIdx - hwmain_dma_enqReceivedIdx) < 32'd128)
+Blocking rules: (none)
+ 
+Rule: hwmain_dma_sendEnqPacket
+Predicate: hwmain_dma_enqDmaWriteQ.i_notFull &&
+	   hwmain_dma_enqDataQ.i_notEmpty &&
+	   hwmain_dma_enqState
+Blocking rules: (none)
+ 
+Rule: hwmain_getFlashCmd
+Predicate: hwmain_dma_ioRecvQ.RDY_deq &&
+	   hwmain_dma_ioRecvQ.RDY_first &&
+	   ((hwmain_dma_ioRecvQ.first[127:96] == 32'd0)
+	    ? flashCtrl.RDY_user_sendCmd &&
+	      ((! (hwmain_flashCmdCount[2:0] == 3'd7)) ||
+	       hwmain_dma_enqcQ.i_notFull)
+	    : ((! (hwmain_dma_ioRecvQ.first[127:96] == 32'd1)) ||
+	       (! hwmain_flashWriteBuf[64]) ||
+	       (flashCtrl.RDY_user_writeWord &&
+		hwmain_writeTagsQ.i_notEmpty)))
+Blocking rules: (none)
+ 
+Rule: hwmain_handleFlashWriteReady
+Predicate: flashCtrl.RDY_user_writeDataReq &&
+	   hwmain_dma_enqcQ.i_notFull && hwmain_writeTagsQ.i_notFull
+Blocking rules: hwmain_getFlashCmd
+ 
+Rule: hwmain_flashAck
+Predicate: flashCtrl.RDY_user_ackStatus && hwmain_dma_enqcQ.i_notFull
+Blocking rules: hwmain_handleFlashWriteReady, hwmain_getFlashCmd
+ 
+Rule: hwmain_dmaEngineSelect_0_merge
+Predicate: hwmain_dmaEngineSelect_0_prio
+	   ? hwmain_dmaEngineSelect_0_inQ2.notEmpty
+	     ? hwmain_dmaEngineSelect_0_outQ.i_notFull &&
+	       hwmain_dmaEngineSelect_0_inQ2.i_notEmpty
+	     : ((! hwmain_dmaEngineSelect_0_inQ1.notEmpty) ||
+		(hwmain_dmaEngineSelect_0_inQ1.i_notEmpty &&
+		 hwmain_dmaEngineSelect_0_outQ.i_notFull))
+	   : (hwmain_dmaEngineSelect_0_inQ1.notEmpty
+	      ? hwmain_dmaEngineSelect_0_inQ1.i_notEmpty &&
+		hwmain_dmaEngineSelect_0_outQ.i_notFull
+	      : ((! hwmain_dmaEngineSelect_0_inQ2.notEmpty) ||
+		 (hwmain_dmaEngineSelect_0_outQ.i_notFull &&
+		  hwmain_dmaEngineSelect_0_inQ2.i_notEmpty)))
+Blocking rules: (none)
+ 
+Rule: hwmain_dmaEngineSelect_1_merge
+Predicate: hwmain_dmaEngineSelect_1_prio
+	   ? hwmain_dmaEngineSelect_1_inQ2.notEmpty
+	     ? hwmain_dmaEngineSelect_1_outQ.i_notFull &&
+	       hwmain_dmaEngineSelect_1_inQ2.i_notEmpty
+	     : ((! hwmain_dmaEngineSelect_1_inQ1.notEmpty) ||
+		(hwmain_dmaEngineSelect_1_inQ1.i_notEmpty &&
+		 hwmain_dmaEngineSelect_1_outQ.i_notFull))
+	   : (hwmain_dmaEngineSelect_1_inQ1.notEmpty
+	      ? hwmain_dmaEngineSelect_1_inQ1.i_notEmpty &&
+		hwmain_dmaEngineSelect_1_outQ.i_notFull
+	      : ((! hwmain_dmaEngineSelect_1_inQ2.notEmpty) ||
+		 (hwmain_dmaEngineSelect_1_outQ.i_notFull &&
+		  hwmain_dmaEngineSelect_1_inQ2.i_notEmpty)))
+Blocking rules: (none)
+ 
+Rule: hwmain_dmaEngineSelect_2_merge
+Predicate: hwmain_dmaEngineSelect_2_prio
+	   ? hwmain_dmaEngineSelect_2_inQ2.notEmpty
+	     ? hwmain_dmaEngineSelect_2_outQ.i_notFull &&
+	       hwmain_dmaEngineSelect_2_inQ2.i_notEmpty
+	     : ((! hwmain_dmaEngineSelect_2_inQ1.notEmpty) ||
+		(hwmain_dmaEngineSelect_2_inQ1.i_notEmpty &&
+		 hwmain_dmaEngineSelect_2_outQ.i_notFull))
+	   : (hwmain_dmaEngineSelect_2_inQ1.notEmpty
+	      ? hwmain_dmaEngineSelect_2_inQ1.i_notEmpty &&
+		hwmain_dmaEngineSelect_2_outQ.i_notFull
+	      : ((! hwmain_dmaEngineSelect_2_inQ2.notEmpty) ||
+		 (hwmain_dmaEngineSelect_2_outQ.i_notFull &&
+		  hwmain_dmaEngineSelect_2_inQ2.i_notEmpty)))
+Blocking rules: (none)
+ 
+Rule: hwmain_dmaEngineSelect_3_merge
+Predicate: hwmain_dmaEngineSelect_3_prio
+	   ? hwmain_dmaEngineSelect_3_inQ2.notEmpty
+	     ? hwmain_dmaEngineSelect_3_outQ.i_notFull &&
+	       hwmain_dmaEngineSelect_3_inQ2.i_notEmpty
+	     : ((! hwmain_dmaEngineSelect_3_inQ1.notEmpty) ||
+		(hwmain_dmaEngineSelect_3_inQ1.i_notEmpty &&
+		 hwmain_dmaEngineSelect_3_outQ.i_notFull))
+	   : (hwmain_dmaEngineSelect_3_inQ1.notEmpty
+	      ? hwmain_dmaEngineSelect_3_inQ1.i_notEmpty &&
+		hwmain_dmaEngineSelect_3_outQ.i_notFull
+	      : ((! hwmain_dmaEngineSelect_3_inQ2.notEmpty) ||
+		 (hwmain_dmaEngineSelect_3_outQ.i_notFull &&
+		  hwmain_dmaEngineSelect_3_inQ2.i_notEmpty)))
+Blocking rules: (none)
+ 
+Rule: hwmain_readDataFromFlash
+Predicate: flashCtrl.RDY_user_readWord && hwmain_flashReadQ.i_notFull
+Blocking rules: (none)
+ 
+Rule: hwmain_relayDMAWrite
+Predicate: hwmain_dmaWritetQ.i_notEmpty &&
+	   ((! ((PrimArrayDynSelect (PrimBuildArray hwmain_dmaWriteCnt_0
+						    hwmain_dmaWriteCnt_1
+						    hwmain_dmaWriteCnt_2
+						    hwmain_dmaWriteCnt_3
+						    hwmain_dmaWriteCnt_4
+						    hwmain_dmaWriteCnt_5
+						    hwmain_dmaWriteCnt_6
+						    hwmain_dmaWriteCnt_7)
+				    hwmain_dmaWritetQ.first[140:136]) <
+		16'd512)) ||
+	    (((! ((PrimArrayDynSelect (PrimBuildArray hwmain_dmaWriteCnt_0
+						      hwmain_dmaWriteCnt_1
+						      hwmain_dmaWriteCnt_2
+						      hwmain_dmaWriteCnt_3
+						      hwmain_dmaWriteCnt_4
+						      hwmain_dmaWriteCnt_5
+						      hwmain_dmaWriteCnt_6
+						      hwmain_dmaWriteCnt_7)
+				      hwmain_dmaWritetQ.first[140:136])[2:0] ==
+		  3'b111)) ||
+	      case {1'd0, hwmain_dmaWritetQ.first[140:137]} of
+	      5'd0 -> case hwmain_dmaWritetQ.first[136] of
+		      1'd0 -> hwmain_dmaEngineSelect_0_inQ1.i_notFull
+		      1'd1 -> hwmain_dmaEngineSelect_0_inQ2.i_notFull
+		      _ -> 1'd1
+	      5'd1 -> case hwmain_dmaWritetQ.first[136] of
+		      1'd0 -> hwmain_dmaEngineSelect_1_inQ1.i_notFull
+		      1'd1 -> hwmain_dmaEngineSelect_1_inQ2.i_notFull
+		      _ -> 1'd1
+	      5'd2 -> case hwmain_dmaWritetQ.first[136] of
+		      1'd0 -> hwmain_dmaEngineSelect_2_inQ1.i_notFull
+		      1'd1 -> hwmain_dmaEngineSelect_2_inQ2.i_notFull
+		      _ -> 1'd1
+	      5'd3 -> case hwmain_dmaWritetQ.first[136] of
+		      1'd0 -> hwmain_dmaEngineSelect_3_inQ1.i_notFull
+		      1'd1 -> hwmain_dmaEngineSelect_3_inQ2.i_notFull
+		      _ -> 1'd1
+	      _ -> 1'd1) &&
+	     case hwmain_dmaWritetQ.first[140:136] of
+	     5'd0 -> hwmain_dmaWriteQ_0.i_notFull
+	     5'd1 -> hwmain_dmaWriteQ_1.i_notFull
+	     5'd2 -> hwmain_dmaWriteQ_2.i_notFull
+	     5'd3 -> hwmain_dmaWriteQ_3.i_notFull
+	     5'd4 -> hwmain_dmaWriteQ_4.i_notFull
+	     5'd5 -> hwmain_dmaWriteQ_5.i_notFull
+	     5'd6 -> hwmain_dmaWriteQ_6.i_notFull
+	     5'd7 -> hwmain_dmaWriteQ_7.i_notFull
+	     _ -> 1'd1))
+Blocking rules: (none)
+ 
+Rule: hwmain_procDataFromFlash
+Predicate: hwmain_flashReadQ.i_notEmpty && hwmain_dmaWritetQ.i_notFull
+Blocking rules: (none)
+ 
+Rule: hwmain_m4dma_ma_0_merge
+Predicate: hwmain_m4dma_ma_0_prio
+	   ? hwmain_m4dma_ma_0_inQ2.notEmpty
+	     ? hwmain_m4dma_ma_0_outQ.i_notFull &&
+	       hwmain_m4dma_ma_0_inQ2.i_notEmpty
+	     : ((! hwmain_m4dma_ma_0_inQ1.notEmpty) ||
+		(hwmain_m4dma_ma_0_inQ1.i_notEmpty &&
+		 hwmain_m4dma_ma_0_outQ.i_notFull))
+	   : (hwmain_m4dma_ma_0_inQ1.notEmpty
+	      ? hwmain_m4dma_ma_0_inQ1.i_notEmpty &&
+		hwmain_m4dma_ma_0_outQ.i_notFull
+	      : ((! hwmain_m4dma_ma_0_inQ2.notEmpty) ||
+		 (hwmain_m4dma_ma_0_outQ.i_notFull &&
+		  hwmain_m4dma_ma_0_inQ2.i_notEmpty)))
+Blocking rules: (none)
+ 
+Rule: hwmain_m4dma_ma_1_merge
+Predicate: hwmain_m4dma_ma_1_prio
+	   ? hwmain_m4dma_ma_1_inQ2.notEmpty
+	     ? hwmain_m4dma_ma_1_outQ.i_notFull &&
+	       hwmain_m4dma_ma_1_inQ2.i_notEmpty
+	     : ((! hwmain_m4dma_ma_1_inQ1.notEmpty) ||
+		(hwmain_m4dma_ma_1_inQ1.i_notEmpty &&
+		 hwmain_m4dma_ma_1_outQ.i_notFull))
+	   : (hwmain_m4dma_ma_1_inQ1.notEmpty
+	      ? hwmain_m4dma_ma_1_inQ1.i_notEmpty &&
+		hwmain_m4dma_ma_1_outQ.i_notFull
+	      : ((! hwmain_m4dma_ma_1_inQ2.notEmpty) ||
+		 (hwmain_m4dma_ma_1_outQ.i_notFull &&
+		  hwmain_m4dma_ma_1_inQ2.i_notEmpty)))
+Blocking rules: (none)
+ 
+Rule: hwmain_m4dma_mb_merge
+Predicate: hwmain_m4dma_mb_prio
+	   ? hwmain_m4dma_mb_inQ2.notEmpty
+	     ? hwmain_m4dma_mb_outQ.i_notFull &&
+	       hwmain_m4dma_mb_inQ2.i_notEmpty
+	     : ((! hwmain_m4dma_mb_inQ1.notEmpty) ||
+		(hwmain_m4dma_mb_inQ1.i_notEmpty &&
+		 hwmain_m4dma_mb_outQ.i_notFull))
+	   : (hwmain_m4dma_mb_inQ1.notEmpty
+	      ? hwmain_m4dma_mb_inQ1.i_notEmpty &&
+		hwmain_m4dma_mb_outQ.i_notFull
+	      : ((! hwmain_m4dma_mb_inQ2.notEmpty) ||
+		 (hwmain_m4dma_mb_outQ.i_notFull &&
+		  hwmain_m4dma_mb_inQ2.i_notEmpty)))
+Blocking rules: (none)
+ 
+Rule: hwmain_m4dma_ma1
+Predicate: hwmain_m4dma_ma_0_outQ.i_notEmpty && hwmain_m4dma_mb_inQ1.i_notFull
+Blocking rules: (none)
+ 
+Rule: hwmain_m4dma_ma1_1
+Predicate: hwmain_m4dma_ma_1_outQ.i_notEmpty && hwmain_m4dma_mb_inQ2.i_notFull
+Blocking rules: (none)
+ 
+Rule: hwmain_sendReadDone
+Predicate: hwmain_dma_enqcQ.i_notFull && hwmain_m4dma_mb_outQ.i_notEmpty
+Blocking rules: hwmain_flashAck,
+		hwmain_handleFlashWriteReady,
+		hwmain_getFlashCmd
+ 
+Rule: hwmain_startdmawrite
+Predicate: hwmain_dmaEngineSelect_0_outQ.i_notEmpty &&
+	   hwmain_dma_reqQv_0.i_notFull &&
+	   ((((PrimArrayDynSelect (PrimBuildArray hwmain_dmaOffset_0_0
+						  hwmain_dmaOffset_0_1)
+				  hwmain_dmaEngineSelect_0_outQ.first[22:18]) +
+	      16'd128) <
+	     16'd8192) ||
+	    hwmain_m4dma_ma_0_inQ1.i_notFull) &&
+	   (hwmain_dmaEWriteCnt_0 == 5'd0)
+Blocking rules: (none)
+ 
+Rule: hwmain_sendDmaData
+Predicate: hwmain_dma_dmaWritecQv_0.i_notFull &&
+	   ((hwmain_dmaSrcBus_0 == 5'd0)
+	    ? hwmain_dmaWriteQ_0.i_notEmpty
+	    : hwmain_dmaWriteQ_1.i_notEmpty) &&
+	   (! (hwmain_dmaEWriteCnt_0 == 5'd0))
+Blocking rules: (none)
+ 
+Rule: hwmain_startdmawrite_1
+Predicate: hwmain_dmaEngineSelect_1_outQ.i_notEmpty &&
+	   hwmain_dma_reqQv_1.i_notFull &&
+	   ((((PrimArrayDynSelect (PrimBuildArray hwmain_dmaOffset_1_0
+						  hwmain_dmaOffset_1_1)
+				  hwmain_dmaEngineSelect_1_outQ.first[22:18]) +
+	      16'd128) <
+	     16'd8192) ||
+	    hwmain_m4dma_ma_0_inQ2.i_notFull) &&
+	   (hwmain_dmaEWriteCnt_1 == 5'd0)
+Blocking rules: (none)
+ 
+Rule: hwmain_sendDmaData_1
+Predicate: hwmain_dma_dmaWritecQv_1.i_notFull &&
+	   ((hwmain_dmaSrcBus_1 == 5'd0)
+	    ? hwmain_dmaWriteQ_2.i_notEmpty
+	    : hwmain_dmaWriteQ_3.i_notEmpty) &&
+	   (! (hwmain_dmaEWriteCnt_1 == 5'd0))
+Blocking rules: (none)
+ 
+Rule: hwmain_startdmawrite_2
+Predicate: hwmain_dmaEngineSelect_2_outQ.i_notEmpty &&
+	   hwmain_dma_reqQv_2.i_notFull &&
+	   ((((PrimArrayDynSelect (PrimBuildArray hwmain_dmaOffset_2_0
+						  hwmain_dmaOffset_2_1)
+				  hwmain_dmaEngineSelect_2_outQ.first[22:18]) +
+	      16'd128) <
+	     16'd8192) ||
+	    hwmain_m4dma_ma_1_inQ1.i_notFull) &&
+	   (hwmain_dmaEWriteCnt_2 == 5'd0)
+Blocking rules: (none)
+ 
+Rule: hwmain_sendDmaData_2
+Predicate: hwmain_dma_dmaWritecQv_2.i_notFull &&
+	   ((hwmain_dmaSrcBus_2 == 5'd0)
+	    ? hwmain_dmaWriteQ_4.i_notEmpty
+	    : hwmain_dmaWriteQ_5.i_notEmpty) &&
+	   (! (hwmain_dmaEWriteCnt_2 == 5'd0))
+Blocking rules: (none)
+ 
+Rule: hwmain_startdmawrite_3
+Predicate: hwmain_dmaEngineSelect_3_outQ.i_notEmpty &&
+	   hwmain_dma_reqQv_3.i_notFull &&
+	   ((((PrimArrayDynSelect (PrimBuildArray hwmain_dmaOffset_3_0
+						  hwmain_dmaOffset_3_1)
+				  hwmain_dmaEngineSelect_3_outQ.first[22:18]) +
+	      16'd128) <
+	     16'd8192) ||
+	    hwmain_m4dma_ma_1_inQ2.i_notFull) &&
+	   (hwmain_dmaEWriteCnt_3 == 5'd0)
+Blocking rules: (none)
+ 
+Rule: hwmain_sendDmaData_3
+Predicate: hwmain_dma_dmaWritecQv_3.i_notFull &&
+	   ((hwmain_dmaSrcBus_3 == 5'd0)
+	    ? hwmain_dmaWriteQ_6.i_notEmpty
+	    : hwmain_dmaWriteQ_7.i_notEmpty) &&
+	   (! (hwmain_dmaEWriteCnt_3 == 5'd0))
+Blocking rules: (none)
+ 
+Rule: flushAlwaysEn
+Predicate: True
+Blocking rules: (none)
+ 
+Logical execution order: flushAlwaysEn,
+			 pcieCtrl_receiveDmaRead,
+			 pcieCtrl_receiveIO,
+			 pcieCtrl_relayIOReadResp,
+			 hwmain_handleFlashWriteReady,
+			 hwmain_flashAck,
+			 hwmain_procDataFromFlash,
+			 hwmain_getFlashCmd,
+			 hwmain_readDataFromFlash,
+			 hwmain_sendReadDone,
+			 hwmain_dma_relayDmaWriteQ,
+			 hwmain_dma_relaydmawrqsync,
+			 hwmain_sendDmaData,
+			 hwmain_dma_relayDmaWriteQ_1,
+			 hwmain_dma_relaydmawrqsync_1,
+			 hwmain_sendDmaData_1,
+			 hwmain_dma_relayDmaWriteQ_2,
+			 hwmain_dma_relaydmawrqsync_2,
+			 hwmain_sendDmaData_2,
+			 hwmain_dma_relayDmaWriteQ_3,
+			 hwmain_dma_relaydmawrqsync_3,
+			 hwmain_sendDmaData_3,
+			 hwmain_dma_issuedmaWrite,
+			 hwmain_dma_senddmaWriteData,
+			 hwmain_dma_relayEnqPacket,
+			 hwmain_dma_sendEnqPacket,
+			 hwmain_dma_wm00_merge,
+			 hwmain_dma_merge0,
+			 hwmain_dma_startEnqPacket,
+			 hwmain_dma_getWriteReq,
+			 hwmain_dma_wm10_merge,
+			 hwmain_dma_merge10,
+			 hwmain_dma_merge11,
+			 hwmain_dma_wm20_merge,
+			 hwmain_dma_relaydmawrq,
+			 hwmain_dma_relaydmawrq_1,
+			 hwmain_dma_wm21_merge,
+			 hwmain_dma_relaydmawrq_2,
+			 hwmain_dma_relaydmawrq_3,
+			 hwmain_dmaEngineSelect_0_merge,
+			 hwmain_dmaEngineSelect_1_merge,
+			 hwmain_dmaEngineSelect_2_merge,
+			 hwmain_dmaEngineSelect_3_merge,
+			 hwmain_relayDMAWrite,
+			 hwmain_m4dma_ma_0_merge,
+			 hwmain_startdmawrite,
+			 hwmain_startdmawrite_1,
+			 hwmain_m4dma_ma_1_merge,
+			 hwmain_startdmawrite_2,
+			 hwmain_startdmawrite_3,
+			 hwmain_m4dma_mb_merge,
+			 hwmain_m4dma_ma1,
+			 hwmain_m4dma_ma1_1
+
+=================================================

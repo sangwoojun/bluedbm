@@ -1,0 +1,9 @@
+build
+build_bsim
+.*.sw?
+.bit
+obj
+
+pcie_7x_0
+aurora_8b10b_fmc1/
+.Xil

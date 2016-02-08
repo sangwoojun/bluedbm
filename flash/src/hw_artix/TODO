@@ -1,0 +1,78 @@
+
+/*** Pending Testing ***/
+- Building Virtex with fast write sends
+- Handle status returning E1 on block erases (failed)
+
+
+
+/*** To Do Features ***/
+- Fix ActionValue calls and method selection using indices (flashcontroller.user.writeWord, aurora)
+- Repackage data over Serial links
+- Increase usable page size for metadata 
+- ECC can't correct flag handling
+
+
+/*** Optimizations ***/
+- Optimization: Scheduler should not scheudle readback if no space is available in the read buffer (or decodeInQ)
+- Timing and FIFO size adjustments; ECC fifos sizes and timing too conservative
+- May need additional ECC decoders to max bandwidth
+- SB optimization: prioritize read command issuing
+- Adjust status polling freq
+- Sim test erases, r/w/e mixed 
+
+
+/*** DONE ***/
+- Artix only TopTB pipelined checker [bitstream generated in TB PROJECT]
+- Bug fix: read-related data fifos (KQ, TQin) full and blocking reads causing bad data to be read
+- SB resource reduction: get rid of BRAM FIFO on chipQs
+- Possible issue: decodeInQ is full if there are too many errors. This could occur after many sequential reads as the buffer slowly fills due to slow ECC.
+- [irrelevant] Opt: If write data has not been received for the particular chip, SB should move onto next chip
+- FIX LATENCY COUNTER (keep two 64bit counters, one for lat one for bytes read)
+- Compile for 8 buses - does regfile have enough ports? No. We can either replicate for each bus or try to use arrays directly. Replicated.
+- create separate block for chipscope ICON and ILA 
+- try reads on simultaneous buses jeez!!
+- Scoreboard: 
+	- [ok] ECC decoder in buffer resizing; 
+	- [ok] change POLL_STATUS to GET_STATUS and return status to sb
+	- [ok] request for write data from flashcotnroller before a write
+	- [meh] need to wait for FIFO empty before starting a read. Either wait for it or do something else and come back to it
+
+- [at 128] Increase number of tags
+- Scoreboard and multibus
+- [good] try RegFile for tag table
+- [ok?] increase cmdoutQ in sb
+- [ok?] increase per chip command fifo depth
+- [ok] create a fixed test input, use vin as "go" signal. Erase, write, then readback
+- fix CE not deselected after issuing read cmd
+- modify tb for testing parallel accesses
+- ECC integration and blocking
+- WE#-1(NAND_CLKS) and WE#-2 are connected to the same wire (bad choice!). OK in sync mode, but in async mode, must be careful that we only assert a single CE# for two buses
+- Short reset used in the  model right now
+- Full support for async read/writes. Do this as a test case first
+- Use typedefs for command vector sizes (or arrays)
+- Separate CE#
+- DQS pull up down resistors or Gating
+- Use fix delay adjustments instead. Sync Delay adjustment to clk0 domain (there are timing errors otherwise). 
+- ISERDES frame alignment and valid data cycle capture (solved using read timing calibration procedure)
+- initial values of CEN, WPN etc. is incorrect for a bit after power up need to set INIT parameter in FDRE reg
+- ECC detection bug. cant_correct flag is not being asserted
+- ECC Encoder
+- Test out chipscope signals
+- Separate NAND_CLK and WE#! (tied all together)
+- DQ reversing because of pin swap of front/back packages
+- Remap CE#'s *PINS* to half buses
+- UCF verification: double check wen_nclk pins
+- Output drive strength, slew rate (FPGA and NAND)? <- doesn't seem to be a problem
+
+//Didn't need
+- Read calibration for each chip. For now calibrate a single chip and use that calib value for the entire bus [ok here?]
+- DQ-DQS skew calibration [ok here?]
+- Remove DQS simulation delay in post implementation sim
+- IDELAY tap currently fixed in parameter. Need to make adjustable [don't need?]
+- delay adjustment for DQ line [don't need?]
+
+/*** Testing ***/
+- [OK] All buses
+- [OK] High toggle rate data
+- [OK] Write/readback to just first page of each block. 
+- [OK] vio

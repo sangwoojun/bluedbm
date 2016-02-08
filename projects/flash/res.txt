@@ -1,0 +1,26 @@
+software shm_open /bdbm10932 returned 3 with errno 0
+bsim PCIe interface init done!
+Magic: c001d00d
+		Sending read cmd
+sent read req 0 0 0 0 0
+sent read req 1 1 0 0 0
+sent read req 2 2 0 0 0
+sent read req 3 3 0 0 0
+sent read req 4 4 0 0 0
+sent read req 5 5 0 0 0
+sent read req 6 6 0 0 0
+sent read req 7 7 0 0 0
+sent read req 8 0 1 0 0
+Flash state: 64 7 0
+sent read req 9 1 1 0 0
+Elapsed: 0.004677
+read done to tag 0 Latency 0.083452 total 1 inflight 9 
+read done to tag 4 Latency 0.083708 total 2 inflight 8 
+read done to tag 2 Latency 0.084643 total 3 inflight 7 
+read done to tag 1 Latency 0.085113 total 4 inflight 6 
+read done to tag 3 Latency 0.085238 total 5 inflight 5 
+read done to tag 5 Latency 0.086446 total 6 inflight 4 
+read done to tag 6 Latency 0.090253 total 7 inflight 3 
+read done to tag 7 Latency 0.097249 total 8 inflight 2 
+read done to tag 8 Latency 0.134942 total 9 inflight 1 
+read done to tag 9 Latency 0.135544 total 10 inflight 0 

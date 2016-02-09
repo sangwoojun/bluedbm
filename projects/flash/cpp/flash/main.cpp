@@ -10,16 +10,18 @@ extern double timespec_diff_sec( timespec start, timespec end );
 main() {
 	BdbmPcie* pcie = BdbmPcie::getInstance();
 	DMASplitter* dma = DMASplitter::getInstance();
+	FlashManager* flash = FlashManager::getInstance();
 
 	void* dmabuffer = pcie->dmaBuffer();
 	unsigned int* ubuf = (unsigned int*)dmabuffer;
 
 	unsigned int d = pcie->readWord(0);
 	printf( "Magic: %x\n", d );
+	printf( "All Init Done\n" );
+	fflush(stdout);
 
 	//dma->sendWord(0,0,0,2); // Test DMA // Test Flash Connectivity 
 
-	FlashManager* flash = FlashManager::getInstance();
 
 	uint32_t* pageBufferW = (uint32_t*)malloc(8192+32);
 	uint32_t* pageBufferR = (uint32_t*)malloc(8192+32);
@@ -34,8 +36,8 @@ main() {
 	flash->writePage(1,1,1,0, pageBufferW);
 
 */
-	sleep (1);
-	printf( "\t\tSending read cmd\n" );
+	printf( "\t\tSending read cmd\n" ); fflush(stdout);
+	sleep (2);
 	
 
 	timespec start, now;
@@ -52,7 +54,6 @@ main() {
 		page = page % 16;
 #endif
 		flash->readPage(bus,chip,block,page, pageBufferR);
-		if ( i &0xf == 0 ) usleep(100);
 	}
 	clock_gettime(CLOCK_REALTIME, & now);
 	printf( "Elapsed: %f\n", timespec_diff_sec(start, now) );

@@ -9,6 +9,12 @@ obj
 
 fsm_encoding.os
 
+bluespecpcie/
+
 pcie_7x_0
 aurora_8b10b_fmc1/
+
 .Xil
+
+*.sched
+res.txt

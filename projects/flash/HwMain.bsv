@@ -37,6 +37,9 @@ module mkHwMain#(PcieUserIfc pcie, FlashCtrlUser flash, FlashManagerIfc flashMan
 
 	DMASplitterIfc#(4) dma <- mkDMASplitter(pcie);
 
+	Merge2Ifc#(Bit#(128)) m0 <- mkMerge2;
+	Merge4Ifc#(Bit#(128)) m4flash <- mkMerge4;
+
 	FIFO#(FlashCmd) flashCmdQ <- mkFIFO;
 	Reg#(Bit#(16)) flashCmdCount <- mkReg(0);
 	Reg#(Bit#(16)) flashReadWords <- mkReg(0);
@@ -47,7 +50,7 @@ module mkHwMain#(PcieUserIfc pcie, FlashCtrlUser flash, FlashManagerIfc flashMan
 	FIFOF#(Bit#(32)) flashStatusQ <- mkFIFOF(clocked_by pcieclk, reset_by pcierst);
 	Reg#(Bit#(8)) flashStatusIn <- mkReg(0);
 	Reg#(Bit#(8)) flashStatusOut <- mkReg(0);
-	FIFO#(Bit#(8)) writeTagsQ <- mkSizedFIFO(16);
+	FIFO#(Bit#(8)) writeTagsQ <- mkSizedBRAMFIFO(128);
 
 	Reg#(Bit#(16)) flashWriteBytes <- mkReg(0);
 	Reg#(Maybe#(Bit#(64))) flashWriteBuf <- mkReg(tagged Invalid);
@@ -55,11 +58,27 @@ module mkHwMain#(PcieUserIfc pcie, FlashCtrlUser flash, FlashManagerIfc flashMan
 	Vector#(TagCount,Reg#(Bit#(5))) tagBusMap <- replicateM(mkReg(0));
 	Reg#(Bool) started <- mkReg(False);
 
+	rule senddmaenq;
+		m0.deq;
+		dma.enq(m0.first);
+	endrule
+	rule flushm4flash;
+		m4flash.deq;
+		m0.enq[0].enq(m4flash.first);
+	endrule
+
+	FIFO#(Bit#(128)) dmainQ <- mkFIFO;
 	rule getFlashCmd;
 		dma.deq;
 		started <= True;
-
 		Bit#(128) d = dma.first;
+		dmainQ.enq(d);
+	endrule
+	
+	rule procFlashCmd;
+		let d = dmainQ.first;
+		dmainQ.deq;
+
 		let conf = d[127:96];
 		if ( conf == 0 ) begin
 			let opcode = d[31:0];
@@ -83,15 +102,16 @@ module mkHwMain#(PcieUserIfc pcie, FlashCtrlUser flash, FlashManagerIfc flashMan
 				
 			//$display( "cmd recv %d", opcode );	
 			flashCmdCount <= flashCmdCount + 1;
-			if ( (flashCmdCount & 16'b111) == 16'b111 ) begin
+			if ( (flashCmdCount & 16'b111111) == 16'h0 ) begin
 				Tuple4#(Bit#(32), Bit#(32), Bit#(32), Bit#(32)) dbg = flashMan.getDebugCnts;
 				Bit#(8) gbs = truncate(tpl_1(dbg));
 				Bit#(8) gbr = truncate(tpl_2(dbg));
 				Bit#(8) as = truncate(tpl_3(dbg));
 				Bit#(8) ar = truncate(tpl_4(dbg));
-				dma.enq({zeroExtend(flash.channel_up),
+				//dma.enq({zeroExtend(flash.channel_up),
+				m4flash.enq[0].enq({zeroExtend(flash.channel_up),
 					gbs, gbr, as, ar,
-					flashMan.curSendBudgetAurora, flashReadWords, flashCmdCount, 32'hFFFFFFFF});
+					flashReadWords, flashCmdCount, 32'hFFFFFFFF});
 			end
 			flash.sendCmd(FlashCmd{
 				op:cur_flashop,
@@ -133,7 +153,8 @@ module mkHwMain#(PcieUserIfc pcie, FlashCtrlUser flash, FlashManagerIfc flashMan
 	rule handleFlashWriteReady;
 		TagT tag <- flash.writeDataReq;
 		Bit#(32) data = {8'h0, 8'h4, zeroExtend(tag)};
-		dma.enq({zeroExtend(data)}); // 32'h1 for testing purposes
+		//dma.enq({zeroExtend(data)}); // 32'h1 for testing purposes
+		m4flash.enq[1].enq({zeroExtend(data)}); // 32'h1 for testing purposes
 		flashStatusIn <= flashStatusIn + 1;
 		writeTagsQ.enq(zeroExtend(tag));
 	endrule
@@ -149,7 +170,8 @@ module mkHwMain#(PcieUserIfc pcie, FlashCtrlUser flash, FlashManagerIfc flashMan
 			ERASE_ERROR: data = {8'h00, 8'h3, zeroExtend(tag)};
 		endcase
 		//flashStatusQ.enq(data);
-		dma.enq(zeroExtend(data));
+		m4flash.enq[2].enq(zeroExtend(data));
+		//dma.enq(zeroExtend(data));
 		flashStatusIn <= flashStatusIn + 1;
 	endrule
 
@@ -214,7 +236,8 @@ module mkHwMain#(PcieUserIfc pcie, FlashCtrlUser flash, FlashManagerIfc flashMan
 		m4dma.deq;
 		Bit#(8) tag = m4dma.first;
 		Bit#(32) data = {8'h0, 8'h0, zeroExtend(tag)}; // read done
-		dma.enq({zeroExtend(data)}); 
+		//dma.enq({zeroExtend(data)}); 
+		m0.enq[1].enq(zeroExtend(data));
 		$display( "dma.enq from %d", tag );
 	endrule
 	for ( Integer i = 0; i < busCount/2; i = i + 1 ) begin

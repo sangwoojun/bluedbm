@@ -77,7 +77,9 @@ set_max_delay -from [get_clocks init_clk_i] -to [get_clocks auroraI_user_clk_i] 
 #set_max_delay -from [get_clocks auroraI_user_clk_i] -to [get_clocks clkgen_pll_CLKOUT0] -datapath_only 8.0
 
 set_false_path -from [get_clocks auroraI_user_clk_i] -to [get_clocks clkgen_pll_CLKOUT0_1]
+set_false_path -from [get_clocks auroraI_user_clk_i] -to [get_clocks clkgen_pll_CLKOUT0]
 set_false_path -from [get_clocks clkgen_pll_CLKOUT0_1] -to [get_clocks auroraI_user_clk_i]
+set_false_path -from [get_clocks clkgen_pll_CLKOUT0] -to [get_clocks auroraI_user_clk_i]
 
 
 set_false_path -from [get_cells -hier -filter {NAME =~ *auroraGearbox_sendQ/*/CLR}]
@@ -116,6 +118,22 @@ set_property LOC GTXE2_CHANNEL_X1Y23 [get_cells -hierarchical -regexp {.*aurora_
  set_property LOC E6 [get_ports { aurora_fmc1_rxp_i[0] }]
  set_property LOC E5 [get_ports { aurora_fmc1_rxn_i[0] }]
 
-set_false_path -from [get_cells -hierarchical -regexp {NAME=~*auroraGearbox_*Q_*dGDeqPtr*}] -to [get_cells -hierarchical -regexp {NAME=~ *auroraGearbox_*Q_*sSyncReg*}]
-set_false_path -from [get_cells -hierarchical -regexp {NAME=~*auroraGearbox_*Q_*sGEnqPtr*}] -to [get_cells -hierarchical -regexp {NAME=~ *auroraGearbox_*Q_*dSyncReg*}]
-set_false_path -from [get_cells -hierarchical -regexp {NAME=~*auroraGearbox_*Q_*fifoMem*}] -to [get_cells -hierarchical -regexp {NAME=~ *auroraGearbox_*Q_*dDoutReg*}]
+set_false_path -from [get_cells -hierarchical -regexp {NAME=~*auroraGearbox/*Q/*dGDeqPtr*}] -to [get_cells -hierarchical -regexp {NAME=~ *auroraGearbox/*Q/*sSyncReg*}]
+set_false_path -from [get_cells -hierarchical -regexp {NAME=~*auroraGearbox/*Q/*sGEnqPtr*}] -to [get_cells -hierarchical -regexp {NAME=~ *auroraGearbox/*Q/*dSyncReg*}]
+set_false_path -from [get_cells -hierarchical -regexp {NAME=~*auroraGearbox/*Q/*fifoMem*}] -to [get_cells -hierarchical -regexp {NAME=~ *auroraGearbox/*Q/*dDoutReg*}]
+
+set_false_path -from [get_pins -hierarchical -regexp {NAME=~*auroraGearbox/*Q/*dGDeqPtr*/*}] -to [get_pins -hierarchical -regexp {NAME=~ *auroraGearbox/*Q/*sSyncReg*/*}]
+set_false_path -from [get_pins -hierarchical -regexp {NAME=~*auroraGearbox/*Q/*sGEnqPtr*/*}] -to [get_pins -hierarchical -regexp {NAME=~ *auroraGearbox/*Q/*dSyncReg*/*}]
+set_false_path -from [get_pins -hierarchical -regexp {NAME=~*auroraGearbox/*Q/*fifoMem*/*}] -to [get_pins -hierarchical -regexp {NAME=~ *auroraGearbox/*Q/*dDoutReg*/*}]
+
+set_false_path -from [get_pins -of_objects [get_cells -hierarchical -filter {NAME=~*auroraGearbox/*Q/*fifoMem*}]] -to [get_pins -of_objects [get_cells -hierarchical -regexp {NAME=~ *auroraGearbox/*Q/*dDoutReg*}]]
+
+#set_false_path -from [get_cells -hier -filter {NAME=~*aurora_module_i/aurora_8b10b_fmc1_i/inst/core_reset_logic_i/SYSTEM_RESET_reg/*}]
+#set_false_path -from [get_cells -hier -regexp {NAME=~*aurora_module_i/aurora_8b10b_fmc1_i/inst/core_reset_logic_i/SYSTEM_RESET_reg/*}]
+#set_false_path -from [get_pins -hier -regexp {NAME=~*aurora_module_i/aurora_8b10b_fmc1_i/inst/core_reset_logic_i/SYSTEM_RESET_reg/*}]
+#set_false_path -from [get_pins -hier -regexp {NAME=~*aurora_module_i/aurora_8b10b_fmc1_i/inst/core_reset_logic_i/SYSTEM_RESET_reg/*}] -to [get_pins -hier -regexp {NAME=~ */auroraIntra/auroraRecCntCC/*/CLR}]
+
+set_false_path -to [get_pins -of_objects [get_cells -hierarchical -filter {NAME =~ *dD_OUT_reg*}] -filter {NAME =~ *CLR}]
+set_false_path -to [get_pins -of_objects [get_cells -hierarchical -filter {NAME =~ *dSyncReg*}] -filter {NAME =~ *CLR}]
+set_false_path -to [get_pins -of_objects [get_cells -hierarchical -filter {NAME =~ *dLastState*}] -filter {NAME =~ *CLR}]
+set_false_path -from [get_pins -hierarchical -filter {NAME=~ *CHANNEL_UP_reg/C}]

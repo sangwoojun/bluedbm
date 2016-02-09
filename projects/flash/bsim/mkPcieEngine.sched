@@ -3,7 +3,9 @@
 Method schedule
 ---------------
 Method: ctrl_user_dataReceive
-Ready signal: pcieCtrl_userWriteQ.i_notEmpty
+Ready signal: (! (pcieCtrl_userWriteQ_rRdPtr.read ==
+		  pcieCtrl_userWriteQ_rWrPtr.read)) &&
+	      pcieCtrl_userWriteQ_wDataOut.whas
 Conflict-free: ctrl_user_dataReq,
 	       ctrl_user_dataSend,
 	       ctrl_user_dmaWriteReq,
@@ -18,7 +20,9 @@ Conflict-free: ctrl_user_dataReq,
 Conflicts: ctrl_user_dataReceive
  
 Method: ctrl_user_dataReq
-Ready signal: pcieCtrl_userReadQ.i_notEmpty
+Ready signal: (! (pcieCtrl_userReadQ_rRdPtr.read ==
+		  pcieCtrl_userReadQ_rWrPtr.read)) &&
+	      pcieCtrl_userReadQ_wDataOut.whas
 Conflict-free: ctrl_user_dataReceive,
 	       ctrl_user_dataSend,
 	       ctrl_user_dmaWriteReq,
@@ -299,48 +303,218 @@ Predicate: pcie.RDY_user_receiveData &&
 	   pcie.RDY_user_receiveUser && pcieCtrl_tlpQ.i_notFull
 Blocking rules: (none)
  
+Rule: pcieCtrl_sendTLPm_ma_0_ma_0_merge
+Predicate: pcieCtrl_sendTLPm_ma_0_ma_0_prio
+	   ? pcieCtrl_sendTLPm_ma_0_ma_0_inQ2.notEmpty
+	     ? pcieCtrl_sendTLPm_ma_0_ma_0_outQ.i_notFull &&
+	       pcieCtrl_sendTLPm_ma_0_ma_0_inQ2.i_notEmpty
+	     : ((! pcieCtrl_sendTLPm_ma_0_ma_0_inQ1.notEmpty) ||
+		(pcieCtrl_sendTLPm_ma_0_ma_0_inQ1.i_notEmpty &&
+		 pcieCtrl_sendTLPm_ma_0_ma_0_outQ.i_notFull))
+	   : (pcieCtrl_sendTLPm_ma_0_ma_0_inQ1.notEmpty
+	      ? pcieCtrl_sendTLPm_ma_0_ma_0_inQ1.i_notEmpty &&
+		pcieCtrl_sendTLPm_ma_0_ma_0_outQ.i_notFull
+	      : ((! pcieCtrl_sendTLPm_ma_0_ma_0_inQ2.notEmpty) ||
+		 (pcieCtrl_sendTLPm_ma_0_ma_0_outQ.i_notFull &&
+		  pcieCtrl_sendTLPm_ma_0_ma_0_inQ2.i_notEmpty)))
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_sendTLPm_ma_0_ma_1_merge
+Predicate: pcieCtrl_sendTLPm_ma_0_ma_1_prio
+	   ? pcieCtrl_sendTLPm_ma_0_ma_1_inQ2.notEmpty
+	     ? pcieCtrl_sendTLPm_ma_0_ma_1_outQ.i_notFull &&
+	       pcieCtrl_sendTLPm_ma_0_ma_1_inQ2.i_notEmpty
+	     : ((! pcieCtrl_sendTLPm_ma_0_ma_1_inQ1.notEmpty) ||
+		(pcieCtrl_sendTLPm_ma_0_ma_1_inQ1.i_notEmpty &&
+		 pcieCtrl_sendTLPm_ma_0_ma_1_outQ.i_notFull))
+	   : (pcieCtrl_sendTLPm_ma_0_ma_1_inQ1.notEmpty
+	      ? pcieCtrl_sendTLPm_ma_0_ma_1_inQ1.i_notEmpty &&
+		pcieCtrl_sendTLPm_ma_0_ma_1_outQ.i_notFull
+	      : ((! pcieCtrl_sendTLPm_ma_0_ma_1_inQ2.notEmpty) ||
+		 (pcieCtrl_sendTLPm_ma_0_ma_1_outQ.i_notFull &&
+		  pcieCtrl_sendTLPm_ma_0_ma_1_inQ2.i_notEmpty)))
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_sendTLPm_ma_0_mb_merge
+Predicate: pcieCtrl_sendTLPm_ma_0_mb_prio
+	   ? pcieCtrl_sendTLPm_ma_0_mb_inQ2.notEmpty
+	     ? pcieCtrl_sendTLPm_ma_0_mb_outQ.i_notFull &&
+	       pcieCtrl_sendTLPm_ma_0_mb_inQ2.i_notEmpty
+	     : ((! pcieCtrl_sendTLPm_ma_0_mb_inQ1.notEmpty) ||
+		(pcieCtrl_sendTLPm_ma_0_mb_inQ1.i_notEmpty &&
+		 pcieCtrl_sendTLPm_ma_0_mb_outQ.i_notFull))
+	   : (pcieCtrl_sendTLPm_ma_0_mb_inQ1.notEmpty
+	      ? pcieCtrl_sendTLPm_ma_0_mb_inQ1.i_notEmpty &&
+		pcieCtrl_sendTLPm_ma_0_mb_outQ.i_notFull
+	      : ((! pcieCtrl_sendTLPm_ma_0_mb_inQ2.notEmpty) ||
+		 (pcieCtrl_sendTLPm_ma_0_mb_outQ.i_notFull &&
+		  pcieCtrl_sendTLPm_ma_0_mb_inQ2.i_notEmpty)))
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_sendTLPm_ma_0_ma1
+Predicate: pcieCtrl_sendTLPm_ma_0_ma_0_outQ.i_notEmpty &&
+	   pcieCtrl_sendTLPm_ma_0_mb_inQ1.i_notFull
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_sendTLPm_ma_0_ma1_1
+Predicate: pcieCtrl_sendTLPm_ma_0_ma_1_outQ.i_notEmpty &&
+	   pcieCtrl_sendTLPm_ma_0_mb_inQ2.i_notFull
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_sendTLPm_ma_1_ma_0_merge
+Predicate: pcieCtrl_sendTLPm_ma_1_ma_0_prio
+	   ? pcieCtrl_sendTLPm_ma_1_ma_0_inQ2.notEmpty
+	     ? pcieCtrl_sendTLPm_ma_1_ma_0_outQ.i_notFull &&
+	       pcieCtrl_sendTLPm_ma_1_ma_0_inQ2.i_notEmpty
+	     : ((! pcieCtrl_sendTLPm_ma_1_ma_0_inQ1.notEmpty) ||
+		(pcieCtrl_sendTLPm_ma_1_ma_0_inQ1.i_notEmpty &&
+		 pcieCtrl_sendTLPm_ma_1_ma_0_outQ.i_notFull))
+	   : (pcieCtrl_sendTLPm_ma_1_ma_0_inQ1.notEmpty
+	      ? pcieCtrl_sendTLPm_ma_1_ma_0_inQ1.i_notEmpty &&
+		pcieCtrl_sendTLPm_ma_1_ma_0_outQ.i_notFull
+	      : ((! pcieCtrl_sendTLPm_ma_1_ma_0_inQ2.notEmpty) ||
+		 (pcieCtrl_sendTLPm_ma_1_ma_0_outQ.i_notFull &&
+		  pcieCtrl_sendTLPm_ma_1_ma_0_inQ2.i_notEmpty)))
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_sendTLPm_ma_1_ma_1_merge
+Predicate: pcieCtrl_sendTLPm_ma_1_ma_1_prio
+	   ? pcieCtrl_sendTLPm_ma_1_ma_1_inQ2.notEmpty
+	     ? pcieCtrl_sendTLPm_ma_1_ma_1_outQ.i_notFull &&
+	       pcieCtrl_sendTLPm_ma_1_ma_1_inQ2.i_notEmpty
+	     : ((! pcieCtrl_sendTLPm_ma_1_ma_1_inQ1.notEmpty) ||
+		(pcieCtrl_sendTLPm_ma_1_ma_1_inQ1.i_notEmpty &&
+		 pcieCtrl_sendTLPm_ma_1_ma_1_outQ.i_notFull))
+	   : (pcieCtrl_sendTLPm_ma_1_ma_1_inQ1.notEmpty
+	      ? pcieCtrl_sendTLPm_ma_1_ma_1_inQ1.i_notEmpty &&
+		pcieCtrl_sendTLPm_ma_1_ma_1_outQ.i_notFull
+	      : ((! pcieCtrl_sendTLPm_ma_1_ma_1_inQ2.notEmpty) ||
+		 (pcieCtrl_sendTLPm_ma_1_ma_1_outQ.i_notFull &&
+		  pcieCtrl_sendTLPm_ma_1_ma_1_inQ2.i_notEmpty)))
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_sendTLPm_ma_1_mb_merge
+Predicate: pcieCtrl_sendTLPm_ma_1_mb_prio
+	   ? pcieCtrl_sendTLPm_ma_1_mb_inQ2.notEmpty
+	     ? pcieCtrl_sendTLPm_ma_1_mb_outQ.i_notFull &&
+	       pcieCtrl_sendTLPm_ma_1_mb_inQ2.i_notEmpty
+	     : ((! pcieCtrl_sendTLPm_ma_1_mb_inQ1.notEmpty) ||
+		(pcieCtrl_sendTLPm_ma_1_mb_inQ1.i_notEmpty &&
+		 pcieCtrl_sendTLPm_ma_1_mb_outQ.i_notFull))
+	   : (pcieCtrl_sendTLPm_ma_1_mb_inQ1.notEmpty
+	      ? pcieCtrl_sendTLPm_ma_1_mb_inQ1.i_notEmpty &&
+		pcieCtrl_sendTLPm_ma_1_mb_outQ.i_notFull
+	      : ((! pcieCtrl_sendTLPm_ma_1_mb_inQ2.notEmpty) ||
+		 (pcieCtrl_sendTLPm_ma_1_mb_outQ.i_notFull &&
+		  pcieCtrl_sendTLPm_ma_1_mb_inQ2.i_notEmpty)))
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_sendTLPm_ma_1_ma1
+Predicate: pcieCtrl_sendTLPm_ma_1_ma_0_outQ.i_notEmpty &&
+	   pcieCtrl_sendTLPm_ma_1_mb_inQ1.i_notFull
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_sendTLPm_ma_1_ma1_1
+Predicate: pcieCtrl_sendTLPm_ma_1_ma_1_outQ.i_notEmpty &&
+	   pcieCtrl_sendTLPm_ma_1_mb_inQ2.i_notFull
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_sendTLPm_mb_merge
+Predicate: pcieCtrl_sendTLPm_mb_prio
+	   ? pcieCtrl_sendTLPm_mb_inQ2.notEmpty
+	     ? pcieCtrl_sendTLPm_mb_outQ.i_notFull &&
+	       pcieCtrl_sendTLPm_mb_inQ2.i_notEmpty
+	     : ((! pcieCtrl_sendTLPm_mb_inQ1.notEmpty) ||
+		(pcieCtrl_sendTLPm_mb_inQ1.i_notEmpty &&
+		 pcieCtrl_sendTLPm_mb_outQ.i_notFull))
+	   : (pcieCtrl_sendTLPm_mb_inQ1.notEmpty
+	      ? pcieCtrl_sendTLPm_mb_inQ1.i_notEmpty &&
+		pcieCtrl_sendTLPm_mb_outQ.i_notFull
+	      : ((! pcieCtrl_sendTLPm_mb_inQ2.notEmpty) ||
+		 (pcieCtrl_sendTLPm_mb_outQ.i_notFull &&
+		  pcieCtrl_sendTLPm_mb_inQ2.i_notEmpty)))
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_sendTLPm_ma1
+Predicate: pcieCtrl_sendTLPm_ma_0_mb_outQ.i_notEmpty &&
+	   pcieCtrl_sendTLPm_mb_inQ1.i_notFull
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_sendTLPm_ma1_1
+Predicate: pcieCtrl_sendTLPm_ma_1_mb_outQ.i_notEmpty &&
+	   pcieCtrl_sendTLPm_mb_inQ2.i_notFull
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_userWriteQ_portA
+Predicate: True
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_userWriteQ_portB
+Predicate: True
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_userWriteQ_portB_read_data
+Predicate: True
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_userReadQ_portA
+Predicate: True
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_userReadQ_portB
+Predicate: True
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_userReadQ_portB_read_data
+Predicate: True
+Blocking rules: (none)
+ 
 Rule: pcieCtrl_procCompletionTLP
 Predicate: pcieCtrl_tlpQ.i_notEmpty && pcieCtrl_dmaReadWordQ.i_notFull &&
 	   (! (pcieCtrl_completionRecvLength == 10'd0))
 Blocking rules: (none)
  
-Rule: pcieCtrl_procTLP
+Rule: pcieCtrl_filterStatReadTLP
 Predicate: pcieCtrl_tlpQ.i_notEmpty &&
-	   (((pcieCtrl_tlpQ.first[30:24] == 7'b10) ||
-	     (pcieCtrl_tlpQ.first[30:24] == 7'b0))
-	    ? ((pcieCtrl_tlpQ.first[83:66] == 18'd0) ||
-	       (pcieCtrl_tlpQ.first[83:66] == 18'd1022) ||
-	       (pcieCtrl_tlpQ.first[83:66] == 18'd1023) ||
-	       (! ({pcieCtrl_tlpQ.first[83:66], 2'b0} < 20'd4096)) ||
-	       ((pcieCtrl_configBuffer_serverAdapterA_cnt .< 3'd3) &&
-		pcieCtrl_ioReadQ.i_notFull)) &&
-	      (((pcieCtrl_tlpQ.first[83:66] == 18'd0) ||
-		(pcieCtrl_tlpQ.first[83:66] == 18'd1022) ||
-		(pcieCtrl_tlpQ.first[83:66] == 18'd1023))
-	       ? pcieCtrl_sendTLPQ.i_notFull
-	       : (({pcieCtrl_tlpQ.first[83:66], 2'b0} < 20'd4096) ||
-		  pcieCtrl_userReadQ.i_notFull))
-	    : (((! (pcieCtrl_tlpQ.first[30:24] == 7'b1000010)) &&
-		(! (pcieCtrl_tlpQ.first[30:24] == 7'b1000000))) ||
-	       (((pcieCtrl_tlpQ.first[83:66] == 18'd0) ||
-		 (({pcieCtrl_tlpQ.first[83:66], 2'b0} < 20'd4096)
-		  ? pcieCtrl_configBuffer_serverAdapterA_cnt .< 3'd3
-		  : pcieCtrl_userWriteQ.i_notFull)) &&
-		((! (pcieCtrl_tlpQ.first[30:24] == 7'b1000010)) ||
-		 pcieCtrl_sendTLPQ.i_notFull)))) &&
-	   (pcieCtrl_dmaSendWords == 10'd0) &&
+	   (((! (pcieCtrl_tlpQ.first[30:24] == 7'b10)) &&
+	     (! (pcieCtrl_tlpQ.first[30:24] == 7'b0))) ||
+	    (((pcieCtrl_tlpQ.first[83:66] == 18'd0) ||
+	      (pcieCtrl_tlpQ.first[83:66] == 18'd1022) ||
+	      (pcieCtrl_tlpQ.first[83:66] == 18'd1023))
+	     ? pcieCtrl_sendTLPm_ma_0_ma_0_inQ1.i_notFull
+	     : pcieCtrl_tlp2Q.i_notFull)) &&
 	   (pcieCtrl_completionRecvLength == 10'd0)
-Blocking rules: ctrl_user_dataReq, ctrl_user_dataReceive
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_procTLP
+Predicate: pcieCtrl_tlp2Q.i_notEmpty &&
+	   (((pcieCtrl_tlp2Q.first[30:24] == 7'b10) ||
+	     (pcieCtrl_tlp2Q.first[30:24] == 7'b0))
+	    ? (({pcieCtrl_tlp2Q.first[83:66], 2'b0} < 20'd4096) ||
+	       (! ((pcieCtrl_userReadQ_rRdPtr.read + 9'd128) ==
+		   pcieCtrl_userReadQ_rWrPtr.read))) &&
+	      ((! ({pcieCtrl_tlp2Q.first[83:66], 2'b0} < 20'd4096)) ||
+	       ((pcieCtrl_configBuffer_serverAdapterA_cnt .< 3'd3) &&
+		pcieCtrl_ioReadQ.i_notFull))
+	    : (((! (pcieCtrl_tlp2Q.first[30:24] == 7'b1000010)) &&
+		(! (pcieCtrl_tlp2Q.first[30:24] == 7'b1000000))) ||
+	       (((pcieCtrl_tlp2Q.first[83:66] == 18'd0) ||
+		 (({pcieCtrl_tlp2Q.first[83:66], 2'b0} < 20'd4096)
+		  ? pcieCtrl_configBuffer_serverAdapterA_cnt .< 3'd3
+		  : (! ((pcieCtrl_userWriteQ_rRdPtr.read + 9'd128) ==
+			pcieCtrl_userWriteQ_rWrPtr.read)))) &&
+		((! (pcieCtrl_tlp2Q.first[30:24] == 7'b1000010)) ||
+		 pcieCtrl_sendTLPm_ma_0_ma_0_inQ2.i_notFull)))) &&
+	   (pcieCtrl_completionRecvLength == 10'd0)
+Blocking rules: (none)
  
 Rule: pcieCtrl_completeIORead
-Predicate: pcieCtrl_sendTLPQ.i_notFull &&
-	   pcieCtrl_ioReadQ.i_notEmpty &&
+Predicate: pcieCtrl_ioReadQ.i_notEmpty &&
 	   (pcieCtrl_configBuffer_serverAdapterA_outDataCore.notEmpty ||
 	    pcieCtrl_configBuffer_serverAdapterA_outData_enqData.whas) &&
-	   pcieCtrl_configBuffer_serverAdapterA_outData_outData.whas
-Blocking rules: pcieCtrl_generateDataTLP,
-		pcieCtrl_generateHeaderTLP,
-		pcieCtrl_procTLP
+	   pcieCtrl_configBuffer_serverAdapterA_outData_outData.whas &&
+	   pcieCtrl_sendTLPm_ma_0_ma_1_inQ1.i_notFull
+Blocking rules: (none)
  
 Rule: pcieCtrl_relayBufIdxRead
 Predicate: (pcieCtrl_configBuffer_serverAdapterB_outDataCore.notEmpty ||
@@ -364,13 +538,10 @@ Predicate: pcieCtrl_dmaPageReadReqQ.i_notFull &&
 Blocking rules: pcieCtrl_splitDmaWriteReq2
  
 Rule: pcieCtrl_generateDmaReadTLP
-Predicate: pcieCtrl_sendTLPQ.i_notFull &&
-	   pcieCtrl_dmaPageReadReqQ.i_notEmpty &&
-	   pcieCtrl_dmaReadBufAddrQ.i_notEmpty
-Blocking rules: pcieCtrl_completeIORead,
-		pcieCtrl_generateDataTLP,
-		pcieCtrl_generateHeaderTLP,
-		pcieCtrl_procTLP
+Predicate: pcieCtrl_dmaPageReadReqQ.i_notEmpty &&
+	   pcieCtrl_dmaReadBufAddrQ.i_notEmpty &&
+	   pcieCtrl_sendTLPm_ma_0_ma_1_inQ2.i_notFull
+Blocking rules: (none)
  
 Rule: pcieCtrl_splitDmaWriteReq
 Predicate: pcieCtrl_dmaWriteReqQ.i_notEmpty &&
@@ -385,19 +556,24 @@ Predicate: pcieCtrl_bufidxRequestedWriteQ.i_notFull &&
 Blocking rules: (none)
  
 Rule: pcieCtrl_generateHeaderTLP
-Predicate: pcieCtrl_sendTLPQ.i_notFull &&
-	   pcieCtrl_dmaWriteBufAddrQ.i_notEmpty &&
+Predicate: pcieCtrl_dmaWriteBufAddrQ.i_notEmpty &&
 	   pcieCtrl_dmaPageWriteReqQ.i_notEmpty &&
-	   pcieCtrl_dmaWriteWordQ.i_notEmpty &&
+	   pcieCtrl_dmaWriteWordQ.i_notEmpty && pcieCtrl_sendTLPQ.i_notFull &&
 	   (pcieCtrl_dataWordsRemain == 10'd0)
-Blocking rules: pcieCtrl_procTLP
+Blocking rules: (none)
  
 Rule: pcieCtrl_generateDataTLP
 Predicate: pcieCtrl_sendTLPQ.i_notFull &&
 	   ((pcieCtrl_dataWordsRemain <= 10'd1) ||
 	    pcieCtrl_dmaWriteWordQ.i_notEmpty) &&
 	   (! (pcieCtrl_dataWordsRemain == 10'd0))
-Blocking rules: pcieCtrl_procTLP
+Blocking rules: (none)
+ 
+Rule: pcieCtrl_relayTLPm
+Predicate: pcieCtrl_sendTLPQ.i_notFull &&
+	   pcieCtrl_sendTLPm_mb_outQ.i_notEmpty &&
+	   (pcieCtrl_dataWordsRemain == 10'd0)
+Blocking rules: pcieCtrl_generateHeaderTLP
  
 Rule: pcieCtrl_relayTLP
 Predicate: pcie.RDY_user_sendData &&
@@ -406,16 +582,11 @@ Predicate: pcie.RDY_user_sendData &&
 Blocking rules: (none)
  
 Rule: pcieCtrl_relayUserSendTLP
-Predicate: pcieCtrl_sendTLPQ.i_notFull && pcieCtrl_userSendTLPQ.i_notEmpty
-Blocking rules: pcieCtrl_generateDmaReadTLP,
-		pcieCtrl_completeIORead,
-		pcieCtrl_generateDataTLP,
-		pcieCtrl_generateHeaderTLP,
-		pcieCtrl_procTLP
+Predicate: pcieCtrl_userSendTLPQ.i_notEmpty &&
+	   pcieCtrl_sendTLPm_ma_1_ma_0_inQ2.i_notFull
+Blocking rules: (none)
  
-Logical execution order: ctrl_user_dataReceive,
-			 ctrl_user_dataReq,
-			 ctrl_user_dataSend,
+Logical execution order: ctrl_user_dataSend,
 			 ctrl_user_dmaWriteReq,
 			 ctrl_user_dmaWriteData,
 			 ctrl_user_dmaReadReq,
@@ -427,27 +598,18 @@ Logical execution order: ctrl_user_dataReceive,
 			 pins_txp_out,
 			 pcieCtrl_recvTLP,
 			 pcieCtrl_procCompletionTLP,
-			 pcieCtrl_procTLP,
 			 pcieCtrl_splitDmaReadReq,
 			 pcieCtrl_splitDmaWriteReq,
 			 pcieCtrl_splitDmaReadReq2,
 			 pcieCtrl_splitDmaWriteReq2,
 			 pcieCtrl_generateHeaderTLP,
 			 pcieCtrl_generateDataTLP,
+			 pcieCtrl_relayTLPm,
 			 pcieCtrl_relayTLP,
-			 pcieCtrl_configBuffer_serverAdapterA_stageReadResponseAlways,
 			 pcieCtrl_configBuffer_serverAdapterA_moveToOutFIFO,
 			 pcieCtrl_configBuffer_serverAdapterA_overRun,
 			 pcieCtrl_configBuffer_serverAdapterA_outData_setFirstCore,
 			 pcieCtrl_configBuffer_serverAdapterA_outData_setFirstEnq,
-			 pcieCtrl_completeIORead,
-			 pcieCtrl_generateDmaReadTLP,
-			 pcieCtrl_relayUserSendTLP,
-			 pcieCtrl_configBuffer_serverAdapterA_outData_enqOnly,
-			 pcieCtrl_configBuffer_serverAdapterA_outData_deqOnly,
-			 pcieCtrl_configBuffer_serverAdapterA_outData_enqAndDeq,
-			 pcieCtrl_configBuffer_serverAdapterA_cnt_finalAdd,
-			 pcieCtrl_configBuffer_serverAdapterA_s1__dreg_update,
 			 pcieCtrl_configBuffer_serverAdapterB_stageReadResponseAlways,
 			 pcieCtrl_configBuffer_serverAdapterB_moveToOutFIFO,
 			 pcieCtrl_configBuffer_serverAdapterB_overRun,
@@ -458,6 +620,38 @@ Logical execution order: ctrl_user_dataReceive,
 			 pcieCtrl_configBuffer_serverAdapterB_outData_deqOnly,
 			 pcieCtrl_configBuffer_serverAdapterB_outData_enqAndDeq,
 			 pcieCtrl_configBuffer_serverAdapterB_cnt_finalAdd,
-			 pcieCtrl_configBuffer_serverAdapterB_s1__dreg_update
+			 pcieCtrl_configBuffer_serverAdapterB_s1__dreg_update,
+			 pcieCtrl_sendTLPm_ma_0_ma_0_merge,
+			 pcieCtrl_filterStatReadTLP,
+			 pcieCtrl_sendTLPm_ma_0_ma_1_merge,
+			 pcieCtrl_completeIORead,
+			 pcieCtrl_generateDmaReadTLP,
+			 pcieCtrl_configBuffer_serverAdapterA_outData_enqOnly,
+			 pcieCtrl_configBuffer_serverAdapterA_outData_deqOnly,
+			 pcieCtrl_configBuffer_serverAdapterA_outData_enqAndDeq,
+			 pcieCtrl_sendTLPm_ma_0_mb_merge,
+			 pcieCtrl_sendTLPm_ma_0_ma1,
+			 pcieCtrl_sendTLPm_ma_0_ma1_1,
+			 pcieCtrl_sendTLPm_ma_1_ma_0_merge,
+			 pcieCtrl_relayUserSendTLP,
+			 pcieCtrl_sendTLPm_ma_1_ma_1_merge,
+			 pcieCtrl_sendTLPm_ma_1_mb_merge,
+			 pcieCtrl_sendTLPm_ma_1_ma1,
+			 pcieCtrl_sendTLPm_ma_1_ma1_1,
+			 pcieCtrl_sendTLPm_mb_merge,
+			 pcieCtrl_sendTLPm_ma1,
+			 pcieCtrl_sendTLPm_ma1_1,
+			 pcieCtrl_userWriteQ_portB_read_data,
+			 ctrl_user_dataReceive,
+			 pcieCtrl_userWriteQ_portB,
+			 pcieCtrl_userReadQ_portB_read_data,
+			 ctrl_user_dataReq,
+			 pcieCtrl_procTLP,
+			 pcieCtrl_configBuffer_serverAdapterA_stageReadResponseAlways,
+			 pcieCtrl_configBuffer_serverAdapterA_cnt_finalAdd,
+			 pcieCtrl_configBuffer_serverAdapterA_s1__dreg_update,
+			 pcieCtrl_userWriteQ_portA,
+			 pcieCtrl_userReadQ_portA,
+			 pcieCtrl_userReadQ_portB
 
 ============================================

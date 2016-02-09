@@ -19,7 +19,11 @@ Conflict-free: user_writeWord,
 	       debug_getDebugCnts_snd_fst,
 	       debug_getDebugCnts_snd_snd_fst,
 	       debug_getDebugCnts_snd_snd_snd,
-	       man_curSendBudgetAurora
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
 Conflicts: user_sendCmd
  
 Method: user_writeWord
@@ -39,7 +43,11 @@ Conflict-free: user_sendCmd,
 	       debug_getDebugCnts_snd_fst,
 	       debug_getDebugCnts_snd_snd_fst,
 	       debug_getDebugCnts_snd_snd_snd,
-	       man_curSendBudgetAurora
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
 Conflicts: user_writeWord
  
 Method: user_readWord
@@ -59,7 +67,11 @@ Conflict-free: user_sendCmd,
 	       debug_getDebugCnts_snd_fst,
 	       debug_getDebugCnts_snd_snd_fst,
 	       debug_getDebugCnts_snd_snd_snd,
-	       man_curSendBudgetAurora
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
 Conflicts: user_readWord
  
 Method: user_writeDataReq
@@ -79,7 +91,11 @@ Conflict-free: user_sendCmd,
 	       debug_getDebugCnts_snd_fst,
 	       debug_getDebugCnts_snd_snd_fst,
 	       debug_getDebugCnts_snd_snd_snd,
-	       man_curSendBudgetAurora
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
 Conflicts: user_writeDataReq
  
 Method: user_ackStatus
@@ -99,7 +115,11 @@ Conflict-free: user_sendCmd,
 	       debug_getDebugCnts_snd_fst,
 	       debug_getDebugCnts_snd_snd_fst,
 	       debug_getDebugCnts_snd_snd_snd,
-	       man_curSendBudgetAurora
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
 Conflicts: user_ackStatus
  
 Method: user_channel_up
@@ -120,7 +140,11 @@ Conflict-free: user_sendCmd,
 	       debug_getDebugCnts_snd_fst,
 	       debug_getDebugCnts_snd_snd_fst,
 	       debug_getDebugCnts_snd_snd_snd,
-	       man_curSendBudgetAurora
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
  
 Method: aurora_rxn_in
 Ready signal: True
@@ -140,7 +164,11 @@ Conflict-free: user_sendCmd,
 	       debug_getDebugCnts_snd_fst,
 	       debug_getDebugCnts_snd_snd_fst,
 	       debug_getDebugCnts_snd_snd_snd,
-	       man_curSendBudgetAurora
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
  
 Method: aurora_rxp_in
 Ready signal: True
@@ -160,7 +188,11 @@ Conflict-free: user_sendCmd,
 	       debug_getDebugCnts_snd_fst,
 	       debug_getDebugCnts_snd_snd_fst,
 	       debug_getDebugCnts_snd_snd_snd,
-	       man_curSendBudgetAurora
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
  
 Method: aurora_txn_out
 Ready signal: True
@@ -180,7 +212,11 @@ Conflict-free: user_sendCmd,
 	       debug_getDebugCnts_snd_fst,
 	       debug_getDebugCnts_snd_snd_fst,
 	       debug_getDebugCnts_snd_snd_snd,
-	       man_curSendBudgetAurora
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
  
 Method: aurora_txp_out
 Ready signal: True
@@ -200,7 +236,11 @@ Conflict-free: user_sendCmd,
 	       debug_getDebugCnts_snd_fst,
 	       debug_getDebugCnts_snd_snd_fst,
 	       debug_getDebugCnts_snd_snd_snd,
-	       man_curSendBudgetAurora
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
  
 Method: debug_debugRecPacket_fst
 Ready signal: True
@@ -220,7 +260,11 @@ Conflict-free: user_sendCmd,
 	       debug_getDebugCnts_snd_fst,
 	       debug_getDebugCnts_snd_snd_fst,
 	       debug_getDebugCnts_snd_snd_snd,
-	       man_curSendBudgetAurora
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
  
 Method: debug_debugRecPacket_snd
 Ready signal: True
@@ -240,7 +284,11 @@ Conflict-free: user_sendCmd,
 	       debug_getDebugCnts_snd_fst,
 	       debug_getDebugCnts_snd_snd_fst,
 	       debug_getDebugCnts_snd_snd_snd,
-	       man_curSendBudgetAurora
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
  
 Method: debug_getDebugCnts_fst
 Ready signal: True
@@ -260,7 +308,11 @@ Conflict-free: user_sendCmd,
 	       debug_getDebugCnts_snd_fst,
 	       debug_getDebugCnts_snd_snd_fst,
 	       debug_getDebugCnts_snd_snd_snd,
-	       man_curSendBudgetAurora
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
  
 Method: debug_getDebugCnts_snd_fst
 Ready signal: True
@@ -280,7 +332,11 @@ Conflict-free: user_sendCmd,
 	       debug_getDebugCnts_snd_fst,
 	       debug_getDebugCnts_snd_snd_fst,
 	       debug_getDebugCnts_snd_snd_snd,
-	       man_curSendBudgetAurora
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
  
 Method: debug_getDebugCnts_snd_snd_fst
 Ready signal: True
@@ -300,7 +356,11 @@ Conflict-free: user_sendCmd,
 	       debug_getDebugCnts_snd_fst,
 	       debug_getDebugCnts_snd_snd_fst,
 	       debug_getDebugCnts_snd_snd_snd,
-	       man_curSendBudgetAurora
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
  
 Method: debug_getDebugCnts_snd_snd_snd
 Ready signal: True
@@ -320,7 +380,11 @@ Conflict-free: user_sendCmd,
 	       debug_getDebugCnts_snd_fst,
 	       debug_getDebugCnts_snd_snd_fst,
 	       debug_getDebugCnts_snd_snd_snd,
-	       man_curSendBudgetAurora
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
  
 Method: man_curSendBudgetAurora
 Ready signal: True
@@ -340,7 +404,107 @@ Conflict-free: user_sendCmd,
 	       debug_getDebugCnts_snd_fst,
 	       debug_getDebugCnts_snd_snd_fst,
 	       debug_getDebugCnts_snd_snd_snd,
-	       man_curSendBudgetAurora
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
+ 
+Method: man_getDebugCnts_fst
+Ready signal: True
+Conflict-free: user_sendCmd,
+	       user_writeWord,
+	       user_readWord,
+	       user_writeDataReq,
+	       user_ackStatus,
+	       user_channel_up,
+	       aurora_rxn_in,
+	       aurora_rxp_in,
+	       aurora_txn_out,
+	       aurora_txp_out,
+	       debug_debugRecPacket_fst,
+	       debug_debugRecPacket_snd,
+	       debug_getDebugCnts_fst,
+	       debug_getDebugCnts_snd_fst,
+	       debug_getDebugCnts_snd_snd_fst,
+	       debug_getDebugCnts_snd_snd_snd,
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
+ 
+Method: man_getDebugCnts_snd_fst
+Ready signal: True
+Conflict-free: user_sendCmd,
+	       user_writeWord,
+	       user_readWord,
+	       user_writeDataReq,
+	       user_ackStatus,
+	       user_channel_up,
+	       aurora_rxn_in,
+	       aurora_rxp_in,
+	       aurora_txn_out,
+	       aurora_txp_out,
+	       debug_debugRecPacket_fst,
+	       debug_debugRecPacket_snd,
+	       debug_getDebugCnts_fst,
+	       debug_getDebugCnts_snd_fst,
+	       debug_getDebugCnts_snd_snd_fst,
+	       debug_getDebugCnts_snd_snd_snd,
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
+ 
+Method: man_getDebugCnts_snd_snd_fst
+Ready signal: True
+Conflict-free: user_sendCmd,
+	       user_writeWord,
+	       user_readWord,
+	       user_writeDataReq,
+	       user_ackStatus,
+	       user_channel_up,
+	       aurora_rxn_in,
+	       aurora_rxp_in,
+	       aurora_txn_out,
+	       aurora_txp_out,
+	       debug_debugRecPacket_fst,
+	       debug_debugRecPacket_snd,
+	       debug_getDebugCnts_fst,
+	       debug_getDebugCnts_snd_fst,
+	       debug_getDebugCnts_snd_snd_fst,
+	       debug_getDebugCnts_snd_snd_snd,
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
+ 
+Method: man_getDebugCnts_snd_snd_snd
+Ready signal: True
+Conflict-free: user_sendCmd,
+	       user_writeWord,
+	       user_readWord,
+	       user_writeDataReq,
+	       user_ackStatus,
+	       user_channel_up,
+	       aurora_rxn_in,
+	       aurora_rxp_in,
+	       aurora_txn_out,
+	       aurora_txp_out,
+	       debug_debugRecPacket_fst,
+	       debug_debugRecPacket_snd,
+	       debug_getDebugCnts_fst,
+	       debug_getDebugCnts_snd_fst,
+	       debug_getDebugCnts_snd_snd_fst,
+	       debug_getDebugCnts_snd_snd_snd,
+	       man_curSendBudgetAurora,
+	       man_getDebugCnts_fst,
+	       man_getDebugCnts_snd_fst,
+	       man_getDebugCnts_snd_snd_fst,
+	       man_getDebugCnts_snd_snd_snd
  
 Rule schedule
 -------------
@@ -406,6 +570,10 @@ Logical execution order: user_sendCmd,
 			 debug_getDebugCnts_snd_snd_fst,
 			 debug_getDebugCnts_snd_snd_snd,
 			 man_curSendBudgetAurora,
+			 man_getDebugCnts_fst,
+			 man_getDebugCnts_snd_fst,
+			 man_getDebugCnts_snd_snd_fst,
+			 man_getDebugCnts_snd_snd_snd,
 			 forwardCmd,
 			 forwardWrData,
 			 receivePacketBuf,

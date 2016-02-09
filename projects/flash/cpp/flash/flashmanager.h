@@ -19,6 +19,7 @@ private:
 	static FlashManager* m_pInstance;
 	int getIdleTag();
 
+
 public:
 	//FIXME use dma Buffer instead
 	void* storebuffer[TAG_COUNT];
@@ -26,6 +27,8 @@ public:
 	timespec sentTime[TAG_COUNT];
 
 	int readinflight;
+	pthread_mutex_t flashMutex;
+	pthread_cond_t flashCond;
 };
 #endif
 

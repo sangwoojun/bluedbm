@@ -33,13 +33,17 @@ void* flashManagerThread(void* arg) {
 		uint8_t code = (msg>>16)&0xff;
 		switch ( code ) {
 			case 0: {
+				pthread_mutex_lock(&(flash->flashMutex));
+
 				flash->tagBusy[tag] = false; 
 				timespec now;
 				clock_gettime(CLOCK_REALTIME, & now);
 				double diff = timespec_diff_sec(flash->sentTime[tag], now);
 				readpagetotal++;
 				flash->readinflight--;
-				printf( "read done to tag %d Latency %f total %d inflight %d \n", tag, diff, readpagetotal, flash->readinflight ); 
+				//printf( "read done to tag %d Latency %f total %d inflight %d \n", tag, diff, readpagetotal, flash->readinflight ); 
+				pthread_cond_broadcast(&(flash->flashCond));
+				pthread_mutex_unlock(&(flash->flashMutex));
 			}
 			break;
 			case 1: printf( "write done to tag %d\n", tag ); flash->tagBusy[tag] = false; break;
@@ -61,8 +65,8 @@ void* flashManagerThread(void* arg) {
 				int up = (w.d[2]>>16);
 				int budget = (w.d[2]& 0xffff);
 
-				printf( "Flash state: %d %d %d %d\n", up, budget, cmdc, wc );
-				printf( "%x %x %x %x\n", w.d[0], w.d[1], w.d[2], w.d[3] );
+				//printf( "Flash state: %d %d %d %d\n", up, budget, cmdc, wc );
+				//printf( "%x %x %x %x\n", w.d[0], w.d[1], w.d[2], w.d[3] );
 				break;
 			}
 			default: {
@@ -73,6 +77,8 @@ void* flashManagerThread(void* arg) {
 }
 
 FlashManager::FlashManager() {
+	pthread_mutex_init(&flashMutex, NULL);
+	pthread_cond_init(&flashCond, NULL);
 	for ( int i = 0; i < TAG_COUNT; i++ ) {
 		tagBusy[i] = false;
 	}
@@ -125,26 +131,31 @@ void FlashManager::writePage(int bus, int chip, int block, int page, void* buffe
 }
 void FlashManager::readPage(int bus, int chip, int block, int page, void* buffer) {
 	
+	DMASplitter* dma = DMASplitter::getInstance();
+	BdbmPcie* pcie = BdbmPcie::getInstance();
+	
 	timespec start;
 	clock_gettime(CLOCK_REALTIME, & start);
 
-	DMASplitter* dma = DMASplitter::getInstance();
+	pthread_mutex_lock(&flashMutex);
 
-	BdbmPcie* pcie = BdbmPcie::getInstance();
 	int tag = getIdleTag();
 	while (tag < 0 ) {
+		pthread_cond_wait(&flashCond, &flashMutex);
 		tag = getIdleTag();
-		usleep(10);
+		//usleep(50);
 	}
 	tagBusy[tag] = true;
 	sentTime[tag] = start;
+	this->storebuffer[tag] = buffer;
 
 	uint32_t blockpagetag = (block<<16) | (page<<8) | tag;
 	uint32_t buschip = (bus<<8) | chip;
 	dma->sendWord(1, blockpagetag, buschip, 0);//read
-	this->storebuffer[tag] = buffer;
-	printf( "sent read req %d %d %d %d %d\n", tag, bus, chip, block, page );
-
 	readinflight++;
+	pthread_mutex_unlock(&flashMutex);
+
+	//printf( "sent read req %d %d %d %d %d\n", tag, bus, chip, block, page ); fflush(stdout);
+
 
 }

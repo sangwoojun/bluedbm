@@ -62,6 +62,19 @@ interface StreamingSerializerIfc#(type tFrom, type tTo);
 	method Action enq(tFrom in);
 endinterface
 
+/*
+module mkStreamingSerializer1 (StreamingSerializerIfc#(tFrom, tTo))
+	provisos(
+		Bits#(tFrom, tFromSz)
+		, Bits#(tTo, tToSz)
+		, Add#(tToSz, __a, tFromSz)
+		//, Log#(tFromSz, tFromSzLog)
+	);
+
+endmodule
+*/
+
+
 module mkStreamingSerializer (StreamingSerializerIfc#(tFrom, tTo))
 	provisos(
 		Bits#(tFrom, tFromSz)

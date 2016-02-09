@@ -342,6 +342,10 @@ Predicate: auroraGearbox.RDY_auroraRecv && auroraRecvQ.i_notEmpty &&
 	   (! (auroraInitCnt < 32'd512))
 Blocking rules: (none)
  
+Rule: aSendB_clock_domain_crossing
+Predicate: True
+Blocking rules: (none)
+ 
 Logical execution order: getDebugCnts_fst,
 			 send,
 			 getDebugCnts_snd_fst,
@@ -364,6 +368,7 @@ Logical execution order: getDebugCnts_fst,
 			 auroraIntraImport_updateLaneUp,
 			 auroraIntraImport_detectFull,
 			 auroraR,
-			 auroraInit
+			 auroraInit,
+			 aSendB_clock_domain_crossing
 
 =============================================

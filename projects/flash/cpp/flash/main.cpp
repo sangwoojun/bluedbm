@@ -25,6 +25,7 @@ main() {
 
 	uint32_t* pageBufferW = (uint32_t*)malloc(8192+32);
 	uint32_t* pageBufferR = (uint32_t*)malloc(8192+32);
+	uint32_t* pageBufferR0 = (uint32_t*)malloc(8192+32);
 	for ( int i = 0; i < 8192/4; i++ ) {
 		pageBufferW[i] = i;
 	}
@@ -39,6 +40,7 @@ main() {
 	printf( "\t\tSending read cmd\n" ); fflush(stdout);
 	sleep (2);
 	
+	flash->readPage(1,1,1,0, pageBufferR0);
 
 	timespec start, now;
 	clock_gettime(CLOCK_REALTIME, & start);
@@ -64,5 +66,9 @@ main() {
 	*/
 
 	sleep (2);
+
+	for ( int i = 0; i < 32; i++ ) {
+		printf( "%x ", pageBufferR0[i] );
+	}
 
 }

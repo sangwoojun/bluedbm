@@ -38,7 +38,7 @@ module mkHwMain#(PcieUserIfc pcie, FlashCtrlUser flash, FlashManagerIfc flashMan
 	DMASplitterIfc#(4) dma <- mkDMASplitter(pcie);
 
 	Merge2Ifc#(Bit#(128)) m0 <- mkMerge2;
-	Merge4Ifc#(Bit#(128)) m4flash <- mkMerge4;
+	Merge2Ifc#(Bit#(32)) m4flash <- mkMerge2;
 
 	FIFO#(FlashCmd) flashCmdQ <- mkFIFO;
 	Reg#(Bit#(16)) flashCmdCount <- mkReg(0);
@@ -64,7 +64,7 @@ module mkHwMain#(PcieUserIfc pcie, FlashCtrlUser flash, FlashManagerIfc flashMan
 	endrule
 	rule flushm4flash;
 		m4flash.deq;
-		m0.enq[0].enq(m4flash.first);
+		m0.enq[0].enq(zeroExtend(m4flash.first));
 	endrule
 
 	FIFO#(Bit#(128)) dmainQ <- mkFIFO;
@@ -73,6 +73,29 @@ module mkHwMain#(PcieUserIfc pcie, FlashCtrlUser flash, FlashManagerIfc flashMan
 		started <= True;
 		Bit#(128) d = dma.first;
 		dmainQ.enq(d);
+	endrule
+
+	FIFO#(Tuple2#(Bit#(128), Bit#(8))) flashWriteQ <- mkFIFO;
+	Reg#(Bit#(32)) flashWriteBytesOut <- mkReg(0);
+	Reg#(Bit#(8)) flashWriteTag <- mkReg(0);
+	rule flashWriteR;
+		if ( flashWriteBytesOut + 16 <= 8192 ) begin
+			let d = flashWriteQ.first;
+			flashWriteQ.deq;
+			let data = tpl_1(d);
+			let tag = tpl_2(d);
+			flashWriteTag <= tag;
+
+			flash.writeWord(tuple2(data, truncate(tag)));
+			flashWriteBytesOut <= flashWriteBytesOut + 16;
+		end else begin
+			flash.writeWord(tuple2(0, truncate(flashWriteTag)));
+			if ( flashWriteBytesOut + 16 >= 8192+32 ) begin
+				flashWriteBytesOut <= 0;
+			end else begin
+				flashWriteBytesOut <= flashWriteBytesOut + 16;
+			end
+		end
 	endrule
 	
 	rule procFlashCmd;
@@ -99,34 +122,38 @@ module mkHwMain#(PcieUserIfc pcie, FlashCtrlUser flash, FlashManagerIfc flashMan
 				tagBusMap[tag] <= bus;
 			end
 
-				
-			//$display( "cmd recv %d", opcode );	
-			flashCmdCount <= flashCmdCount + 1;
-			if ( (flashCmdCount & 16'b111111) == 16'h0 ) begin
-				Tuple4#(Bit#(32), Bit#(32), Bit#(32), Bit#(32)) dbg = flashMan.getDebugCnts;
-				Bit#(8) gbs = truncate(tpl_1(dbg));
-				Bit#(8) gbr = truncate(tpl_2(dbg));
-				Bit#(8) as = truncate(tpl_3(dbg));
-				Bit#(8) ar = truncate(tpl_4(dbg));
-				//dma.enq({zeroExtend(flash.channel_up),
-				m4flash.enq[0].enq({zeroExtend(flash.channel_up),
-					gbs, gbr, as, ar,
-					flashReadWords, flashCmdCount, 32'hFFFFFFFF});
+			if ( opcode <= 2 ) begin
+				//$display( "cmd recv %d", opcode );	
+				flashCmdCount <= flashCmdCount + 1;
+				/*
+				if ( (flashCmdCount & 16'b111111) == 16'h0 ) begin
+					Tuple4#(Bit#(32), Bit#(32), Bit#(32), Bit#(32)) dbg = flashMan.getDebugCnts;
+					Bit#(8) gbs = truncate(tpl_1(dbg));
+					Bit#(8) gbr = truncate(tpl_2(dbg));
+					Bit#(8) as = truncate(tpl_3(dbg));
+					Bit#(8) ar = truncate(tpl_4(dbg));
+					//dma.enq({zeroExtend(flash.channel_up),
+					m4flash.enq[0].enq({zeroExtend(flash.channel_up),
+						gbs, gbr, as, ar,
+						flashReadWords, flashCmdCount, 32'hFFFFFFFF});
+				end
+				*/
+				flash.sendCmd(FlashCmd{
+					op:cur_flashop,
+					tag:truncate(tag),
+					bus: truncate(bus),
+					chip: truncate(cur_buschip),
+					block:truncate(cur_blockpagetag>>16),
+					page:truncate(cur_blockpagetag>>8)
+					});
 			end
-			flash.sendCmd(FlashCmd{
-				op:cur_flashop,
-				tag:truncate(tag),
-				bus: truncate(bus),
-				chip: truncate(cur_buschip),
-				block:truncate(cur_blockpagetag>>16),
-				page:truncate(cur_blockpagetag>>8)
-				});
 		end else if ( conf == 1 ) begin
 			Bit#(64) data = truncate(d);
 			if ( isValid(flashWriteBuf) ) begin
 				let d2 = fromMaybe(?, flashWriteBuf);
-				flash.writeWord(tuple2({data, d2}, truncate(writeTagsQ.first)));
-				if ( flashWriteBytes + 16 >= 8192+32 ) begin
+				flashWriteQ.enq(tuple2({data, d2}, truncate(writeTagsQ.first)));
+				//flash.writeWord(tuple2({data, d2}, truncate(writeTagsQ.first)));
+				if ( flashWriteBytes + 16 >= 8192 ) begin
 					writeTagsQ.deq;
 					flashWriteBytes <= 0;
 				end else begin
@@ -154,7 +181,7 @@ module mkHwMain#(PcieUserIfc pcie, FlashCtrlUser flash, FlashManagerIfc flashMan
 		TagT tag <- flash.writeDataReq;
 		Bit#(32) data = {8'h0, 8'h4, zeroExtend(tag)};
 		//dma.enq({zeroExtend(data)}); // 32'h1 for testing purposes
-		m4flash.enq[1].enq({zeroExtend(data)}); // 32'h1 for testing purposes
+		m4flash.enq[0].enq((data)); // 32'h1 for testing purposes
 		flashStatusIn <= flashStatusIn + 1;
 		writeTagsQ.enq(zeroExtend(tag));
 	endrule
@@ -170,11 +197,13 @@ module mkHwMain#(PcieUserIfc pcie, FlashCtrlUser flash, FlashManagerIfc flashMan
 			ERASE_ERROR: data = {8'h00, 8'h3, zeroExtend(tag)};
 		endcase
 		//flashStatusQ.enq(data);
-		m4flash.enq[2].enq(zeroExtend(data));
+		m4flash.enq[1].enq(data);
 		//dma.enq(zeroExtend(data));
 		flashStatusIn <= flashStatusIn + 1;
 	endrule
 
+	// CosineSimilarity Stuff begin//////////////////////
+	// CosineSimilarity end//////////////////////////////
 	
 
 	Vector#(BusCount, FIFO#(Tuple2#(Bit#(128), Bit#(8)))) dmaWriteQ <- replicateM(mkSizedFIFO(32));
@@ -216,6 +245,8 @@ module mkHwMain#(PcieUserIfc pcie, FlashCtrlUser flash, FlashManagerIfc flashMan
 			dmaWriteCnt[busid] <= 0;
 		end
 	endrule
+	
+	//Vector#(TagCount, FIFO#(Tuple2#(Bit#(128), Bit#(8)))) reorderPageBuffer <- replicateM(mkSizedBRAMFIFO#(8192/16));
 	rule procDataFromFlash;
 		let taggedRdata = flashReadQ.first;
 		flashReadQ.deq;
@@ -238,8 +269,10 @@ module mkHwMain#(PcieUserIfc pcie, FlashCtrlUser flash, FlashManagerIfc flashMan
 		Bit#(32) data = {8'h0, 8'h0, zeroExtend(tag)}; // read done
 		//dma.enq({zeroExtend(data)}); 
 		m0.enq[1].enq(zeroExtend(data));
-		$display( "dma.enq from %d", tag );
+		//$display( "dma.enq from %d", tag );
 	endrule
+
+
 	for ( Integer i = 0; i < busCount/2; i = i + 1 ) begin
 		Vector#(2, Reg#(Bit#(16))) dmaOffset <- replicateM(mkReg(0));
 		Reg#(Bit#(5)) dmaSrcBus <- mkReg(0);
@@ -271,7 +304,7 @@ module mkHwMain#(PcieUserIfc pcie, FlashCtrlUser flash, FlashManagerIfc flashMan
 			if ( dmaOffset[mergeidx] + 128 >= 8192) begin
 				//Bit#(32) data = {8'h0, 8'h0, zeroExtend(tag)}; // read done
 				
-				$display( "sending dma.enq from %d", i );
+				//$display( "sending dma.enq from %d", i );
 				//dma.enq({zeroExtend(data)}); 
 				m4dma.enq[i].enq(tag);
 				//pageReadDoneQ.enq(data);

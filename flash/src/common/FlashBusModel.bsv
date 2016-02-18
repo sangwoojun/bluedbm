@@ -332,8 +332,10 @@ module mkFlashBusModel(FlashBusModelIfc);
 			end
 		endrule
 
-		rule errorState if (chipSt==ST_ERROR);
+		Reg#(Bool) errormsg <- mkReg(False);
+		rule errorState if (chipSt==ST_ERROR && errormsg == False);
 			$display("**ERROR: FlashBusModel chip[%d] in error state", c);
+			errormsg <= True;
 		endrule
 	end //chipsPerBus
 

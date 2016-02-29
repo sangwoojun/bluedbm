@@ -89,7 +89,7 @@ void* flashManagerThread(void* arg) {
 				uint32_t* buf = (uint32_t*)flash->storebuffer[tag];
 				for ( int i = 0; i < (1024*8)/8; i++ ) {
 					int idx = i*2;
-					dma->sendWord(buf[idx], buf[idx+1], 0, 1);
+					dma->sendWord(0, buf[idx], buf[idx+1], 0, 1);
 				}
 				pthread_cond_broadcast(&(flash->flashCond));
 				pthread_mutex_unlock(&(flash->flashMutex));
@@ -155,7 +155,7 @@ void FlashManager::eraseBlock(int bus, int chip, int block, uint8_t* status) {
 
 	uint32_t blockpagetag = (block<<16) | (page<<8) | tag;
 	uint32_t buschip = (bus<<8) | chip;
-	dma->sendWord(0, blockpagetag, buschip, 0);//erase
+	dma->sendWord(0, 0, blockpagetag, buschip, 0);//erase
 	pthread_mutex_unlock(&flashMutex);
 //	printf( "Erase sent to %d: %d %d %d\n", tag, bus,chip,block ); fflush(stdout);
 }
@@ -175,7 +175,7 @@ void FlashManager::writePage(int bus, int chip, int block, int page, void* buffe
 	
 	uint32_t blockpagetag = (block<<16) | (page<<8) | tag;
 	uint32_t buschip = (bus<<8) | chip;
-	dma->sendWord(2, blockpagetag, buschip, 0);//write
+	dma->sendWord(0, 2, blockpagetag, buschip, 0);//write
 	pthread_mutex_unlock(&flashMutex);
 //	printf( "Write command sent to %d: %d %d %d %d\n", tag, bus,chip,block,page ); fflush(stdout);
 }
@@ -208,7 +208,7 @@ void FlashManager::readPage(int bus, int chip, int block, int page, void* buffer
 	
 	uint32_t blockpagetag = (block<<16) | (page<<8) | tag;
 	uint32_t buschip = (bus<<8) | chip;
-	dma->sendWord(1, blockpagetag, buschip, 0);//read
+	dma->sendWord(0, 1, blockpagetag, buschip, 0);//read
 
 	//printf( "sent read req %d %d %d %d %d\n", tag, bus, chip, block, page ); fflush(stdout);
 

@@ -9,6 +9,16 @@
 #define BSBFS_ERASE_PREPARE 16
 #define BSBFS_ERASE_INFLIGHT 8
 
+
+/*
+Functional TODO
+
+1.
+periodically flush appendbuffer to flash.
+But this means if it's appended again after,
+the whole block has to be moved
+*/
+
 #ifndef __BSBFS_H__
 #define __BSBFS_H__
 
@@ -54,11 +64,15 @@ public:
 	int createFile(std::string filename);
 	int deleteFile(std::string filename);
 	int open(std::string filename);
-	int fread(void* ptr, uint64_t size, int fd);
+	uint64_t fread(int fd, void* ptr, uint64_t size);
 	int fseek(int fd, uint64_t offset, int whence);
+	int feof(int fd);
 	uint64_t ftell(int fd);
-	int fappend(int fd, void* buffer, uint64_t size);
+	uint64_t fappend(int fd, void* buffer, uint64_t size);
 	void fileList();
+
+	int readPage(int fd, uint64_t page, void* buf, uint8_t* stat);
+	int writePage(int fd, uint64_t page, void* buf, uint8_t* stat);
 	
 
 private:
@@ -68,6 +82,8 @@ private:
 	std::vector<File*> files;
 
 	pthread_t eraserThread;
+	
+	void waitBlockExist(int fd, uint32_t bidx);
 public:
 	uint32_t cur_blockeraseidx;
 	std::list<uint32_t> listErased;

@@ -178,39 +178,147 @@ BSBFS::blockIdx(uint64_t page) {
 	return (uint32_t)idx;
 }
 
-int 
-BSBFS::fread(void* ptr, uint64_t size, int fd) {
+int
+BSBFS::feof(int fd) {
+	File* nf = files[fd];
+	if ( nf == NULL ) return 0;
+
+	if ( nf->seek >= nf->size ) return 1;
+
+	return 0;
 }
 
-int 
-BSBFS::fappend(int fd, void* buffer, uint64_t size) {
+int
+BSBFS::readPage(int fd, uint64_t page, void* buf, uint8_t* stat) {
 	FlashManager* flash = FlashManager::getInstance();
-
-	uint8_t* statusbuffer = (uint8_t*)malloc(size/FPAGE_SIZE+1);
-	memset(statusbuffer, 0, size/FPAGE_SIZE+1);
-	int wcount = 0;
-
+	
 	File* nf = files[fd];
 	if ( nf == NULL ) return -1;
 
-	uint8_t* buf = (uint8_t*)buffer;
+	uint32_t bidx = BSBFS::blockIdx(page);
+	uint32_t bl = nf->blockmap[bidx];
+	int bus = bl & 0x7;
+	int chip = (bl>>3) & 0x7;
+	int block = bl>>6;
 
-	uint64_t ioff = size & 0x1fff;
-	if ( size + ioff < FPAGE_SIZE ) {
-		memcpy((nf->appendbuffer)+ioff, buffer, size);
-		nf->size += size;
-		return 0;
+	PhysPage mapped;
+	BSBFS::pageMap(page, mapped);
+
+	*stat = 0;
+	flash->readPage(bus,chip,block,mapped.page, buf, stat);
+}
+
+int
+BSBFS::writePage(int fd, uint64_t page, void* buf, uint8_t* stat) {
+	FlashManager* flash = FlashManager::getInstance();
+	
+	File* nf = files[fd];
+	if ( nf == NULL ) return -1;
+
+	uint32_t bidx = BSBFS::blockIdx(page);
+	uint32_t bl = nf->blockmap[bidx];
+	int bus = bl & 0x7;
+	int chip = (bl>>3) & 0x7;
+	int block = bl>>6;
+
+	PhysPage mapped;
+	BSBFS::pageMap(page, mapped);
+
+	*stat = 0;
+	flash->writePage(bus,chip,block,mapped.page, buf, stat);
+}
+
+uint64_t
+BSBFS::fread(int fd, void* buffer, uint64_t size) {
+	FlashManager* flash = FlashManager::getInstance();
+	int tsize = size;
+	
+	File* nf = files[fd];
+	if ( nf == NULL ) return -1;
+	
+	uint8_t* buf = (uint8_t*)buffer;
+	uint8_t* tbuf = buf;
+
+	if (feof(fd)) return 0;
+
+
+	uint64_t ioff = nf->seek & 0x1fff;
+	uint64_t soff = nf->size & 0x1fff;
+	
+	uint8_t* statusbuffer = (uint8_t*)malloc(size/FPAGE_SIZE+1);
+	int rcount = 0;
+
+	uint64_t pageoff = ((nf->size)>>13);
+	uint64_t spoff = ((nf->seek)>>13);
+	if ( spoff > pageoff ) return 0;
+
+	uint8_t pbuf[8192];
+
+	uint64_t tread = 0;
+	//unaligned read start position
+	int ileft = 0;
+	if ( ioff > 0 ) {
+		if ( spoff == pageoff ) {
+			uint64_t diff = nf->size - nf->seek;
+			if ( size < diff ) {
+				diff = size;
+			}
+			memcpy(buffer, (nf->appendbuffer)+ioff, diff);
+
+			free(statusbuffer);
+			return diff;
+		}
+		this->readPage(fd, spoff, pbuf, &statusbuffer[rcount++]);
+		ileft = FPAGE_SIZE-ioff;
+		size -= ileft;
+		nf->seek += ileft;
+		buf += ileft;
+		tread += ileft;
 	}
 
-	//size + ioff >= FPAGE_SIZE from here
+	while ( size > 0 ) {
+		// should be in appendbuffer
+		// FIXME not true!!
+		if ( size < FPAGE_SIZE ) {
+			if ( soff < size ) {
+				size = soff;
+			}
+			memcpy(buf, (nf->appendbuffer), size);
+			tread += size;
+			break;
+		}
 
-	size_t ileft = FPAGE_SIZE - ioff;
-
-	memcpy((nf->appendbuffer)+ioff, buffer, ileft);
+		uint64_t spoff = ((nf->seek)>>13);
+		this->readPage(fd, spoff, buf, &statusbuffer[rcount++]);
+		size -= FPAGE_SIZE;
+		nf->seek += FPAGE_SIZE;
+		buf += FPAGE_SIZE;
+		tread += FPAGE_SIZE;
+	}
 	
-	uint64_t pageoff = ((nf->size)>>13);
+	//wait until reads are done
+	bool alldone = false;
+	while ( alldone == false ) {
+		alldone = true;
+		for ( int i = 0; i < rcount; i++ ) {
+			if ( statusbuffer[i] != 1 ) alldone = false;
+		}
+		if ( alldone == false ) usleep(50);
+	}
+	free(statusbuffer);
 
-	uint32_t bidx = BSBFS::blockIdx(pageoff);
+	if ( ileft > 0 ) {
+		memcpy(tbuf, pbuf, ileft);
+	}
+
+	return tread;
+}
+
+void 
+BSBFS::waitBlockExist(int fd, uint32_t bidx) {
+	File* nf = files[fd];
+	if ( nf == NULL ) return;
+
 	while ( nf->blockmap.size() <= bidx ) {
 		pthread_mutex_lock(&eraseMutex);
 		while ( listErased.empty() ) {
@@ -222,15 +330,40 @@ BSBFS::fappend(int fd, void* buffer, uint64_t size) {
 		nf->blockmap.push_back(bc);
 		pthread_mutex_unlock(&eraseMutex);
 	}
+}
 
-	uint32_t bl = nf->blockmap[bidx];
-	int bus = bl & 0x7;
-	int chip = (bl>>3) & 0x7;
-	int block = bl>>6;
+uint64_t 
+BSBFS::fappend(int fd, void* buffer, uint64_t size) {
+	FlashManager* flash = FlashManager::getInstance();
+	int tsize = size;
 
-	PhysPage mapped;
-	BSBFS::pageMap(pageoff, mapped);
-	flash->writePage(bus,chip,block,mapped.page, nf->appendbuffer, &statusbuffer[wcount++]);
+	File* nf = files[fd];
+	if ( nf == NULL ) return -1;
+
+	uint8_t* buf = (uint8_t*)buffer;
+
+	uint64_t ioff = nf->size & 0x1fff;
+	if ( size + ioff < FPAGE_SIZE ) {
+		memcpy((nf->appendbuffer)+ioff, buffer, size);
+		nf->size += size;
+		return size;
+	}
+	
+	uint8_t* statusbuffer = (uint8_t*)malloc(size/FPAGE_SIZE+1);
+	memset(statusbuffer, 0, size/FPAGE_SIZE+1);
+	int wcount = 0;
+
+	//size + ioff >= FPAGE_SIZE from here
+
+	size_t ileft = FPAGE_SIZE - ioff;
+
+	memcpy((nf->appendbuffer)+ioff, buffer, ileft);
+	
+	uint64_t pageoff = ((nf->size)>>13);
+
+	uint32_t bidx = BSBFS::blockIdx(pageoff);
+	this->waitBlockExist(fd, bidx);
+	this->writePage(fd, pageoff, nf->appendbuffer, &statusbuffer[wcount++]);
 	
 	size -= ileft;
 	nf->size += ileft;
@@ -248,34 +381,27 @@ BSBFS::fappend(int fd, void* buffer, uint64_t size) {
 		uint64_t pageoff = ((nf->size)>>13);
 
 		uint32_t bidx = BSBFS::blockIdx(pageoff);
-		while ( nf->blockmap.size() <= bidx ) {
-			pthread_mutex_lock(&eraseMutex);
-			while ( listErased.empty() ) {
-				pthread_cond_wait(&eraseCond, &eraseMutex);
-			}
-
-			uint32_t bc = listErased.front();
-			listErased.pop_front();
-			nf->blockmap.push_back(bc);
-			pthread_mutex_unlock(&eraseMutex);
-		}
-
-		uint32_t bl = nf->blockmap[bidx];
-		int bus = bl & 0x7;
-		int chip = (bl>>3) & 0x7;
-		int block = bl>>6;
-
-		PhysPage mapped;
-		BSBFS::pageMap(pageoff, mapped);
-		flash->writePage(bus,chip,block,mapped.page, buf, &statusbuffer[wcount++]); 
+		this->waitBlockExist(fd, bidx);
+		this->writePage(fd, pageoff, buf, &statusbuffer[wcount++]);
+		//printf ( "wcount: %d limit: %d\n", wcount, tsize/FPAGE_SIZE+1 );
 		
 		size -= FPAGE_SIZE;
 		nf->size += FPAGE_SIZE;
-		buf += ileft;
+		buf += FPAGE_SIZE;
 	}
 
-	//TODO wait until writes are done
+	//wait until writes are done
+	bool alldone = false;
+	while ( alldone == false ) {
+		alldone = true;
+		for ( int i = 0; i < wcount; i++ ) {
+			if ( statusbuffer[i] != 1 ) alldone = false;
+		}
+		if ( alldone == false ) usleep(50);
+	}
 	free(statusbuffer);
+
+	return size;
 }
 
 

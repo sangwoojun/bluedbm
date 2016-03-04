@@ -52,11 +52,11 @@
 
 //***************************** Entity Declaration ****************************
 
-module aurora_8b10b_fmc1_gt_common_wrapper
+module aurora_8b10b_gt_common_wrapper
 (
 //____________________________COMMON PORTS ,_______________________________{
-output                     gt_qpllclk_quad6_i,
-output                     gt_qpllrefclk_quad6_i,
+output                     gt_qpllclk_quad_i,
+output                     gt_qpllrefclk_quad_i,
 //____________________________COMMON PORTS ,_______________________________}
     //-------------------- Common Block  - Ref Clock Ports ---------------------
     input           gt0_gtrefclk0_common_in,
@@ -162,8 +162,8 @@ gtxe2_common_i
         .QPLLLOCK                       (gt0_qplllock_out),
         .QPLLLOCKDETCLK                 (gt0_qplllockdetclk_in),
         .QPLLLOCKEN                     (tied_to_vcc_i),
-        .QPLLOUTCLK                     (gt_qpllclk_quad6_i),
-        .QPLLOUTREFCLK                  (gt_qpllrefclk_quad6_i),
+        .QPLLOUTCLK                     (gt_qpllclk_quad_i),
+        .QPLLOUTREFCLK                  (gt_qpllrefclk_quad_i),
         .QPLLOUTRESET                   (tied_to_ground_i),
         .QPLLPD                         (tied_to_vcc_i),
         .QPLLREFCLKLOST                 (gt0_qpllrefclklost_out),

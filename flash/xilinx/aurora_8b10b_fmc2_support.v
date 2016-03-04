@@ -50,7 +50,7 @@
  `timescale 1 ns / 10 ps
 
 (* core_generation_info = "aurora_8b10b_fmc1,aurora_8b10b_v10_2,{user_interface=AXI_4_Streaming,backchannel_mode=Sidebands,c_aurora_lanes=4,c_column_used=right,c_gt_clock_1=GTXQ5,c_gt_clock_2=None,c_gt_loc_1=X,c_gt_loc_10=X,c_gt_loc_11=X,c_gt_loc_12=X,c_gt_loc_13=X,c_gt_loc_14=X,c_gt_loc_15=X,c_gt_loc_16=X,c_gt_loc_17=X,c_gt_loc_18=X,c_gt_loc_19=X,c_gt_loc_2=X,c_gt_loc_20=X,c_gt_loc_21=1,c_gt_loc_22=2,c_gt_loc_23=3,c_gt_loc_24=4,c_gt_loc_25=X,c_gt_loc_26=X,c_gt_loc_27=X,c_gt_loc_28=X,c_gt_loc_29=X,c_gt_loc_3=X,c_gt_loc_30=X,c_gt_loc_31=X,c_gt_loc_32=X,c_gt_loc_33=X,c_gt_loc_34=X,c_gt_loc_35=X,c_gt_loc_36=X,c_gt_loc_37=X,c_gt_loc_38=X,c_gt_loc_39=X,c_gt_loc_4=X,c_gt_loc_40=X,c_gt_loc_41=X,c_gt_loc_42=X,c_gt_loc_43=X,c_gt_loc_44=X,c_gt_loc_45=X,c_gt_loc_46=X,c_gt_loc_47=X,c_gt_loc_48=X,c_gt_loc_5=X,c_gt_loc_6=X,c_gt_loc_7=X,c_gt_loc_8=X,c_gt_loc_9=X,c_lane_width=4,c_line_rate=44000,c_nfc=false,c_nfc_mode=IMM,c_refclk_frequency=275000,c_simplex=false,c_simplex_mode=TX,c_stream=true,c_ufc=false,flow_mode=None,interface_mode=Streaming,dataflow_config=Duplex}" *)
-module aurora_8b10b_fmc1_support
+module aurora_8b10b_fmc2_support
  (
  
 input   [0:127]    s_axi_tx_tdata,
@@ -146,8 +146,8 @@ output             pll_not_locked_out
 wire                      gt0_qplllock_i;
 wire                      gt0_qpllrefclklost_i;
 wire                      gt0_qpllreset_i;
-wire                      gt_qpllclk_quad6_i;
-wire                      gt_qpllrefclk_quad6_i;
+wire                      gt_qpllclk_quad4_i;
+wire                      gt_qpllrefclk_quad4_i;
 //____________________________COMMON PORTS ;_______________________________}
 //------------------}
 
@@ -214,8 +214,8 @@ wire               gt_reset_i;
 aurora_8b10b_gt_common_wrapper gt_common_support
 (
 //____________________________COMMON PORTS ,_______________________________{
-.gt_qpllclk_quad_i     (gt_qpllclk_quad6_i   ),
-.gt_qpllrefclk_quad_i  (gt_qpllrefclk_quad6_i),
+.gt_qpllclk_quad_i     (gt_qpllclk_quad4_i   ),
+.gt_qpllrefclk_quad_i  (gt_qpllrefclk_quad4_i),
     //-------------------- Common Block  - Ref Clock Ports ---------------------
     .gt0_gtrefclk0_common_in ( gt_refclk1_i ),
 
@@ -231,7 +231,7 @@ aurora_8b10b_gt_common_wrapper gt_common_support
 //------ instance of _gt_common_wrapper ---}
 
 //----- Instance of _xci -----[
-aurora_8b10b_fmc1 aurora_8b10b_fmc1_i
+aurora_8b10b_fmc2 aurora_8b10b_fmc2_i
      (
         // AXI TX Interface
        .s_axi_tx_tdata               (s_axi_tx_tdata),
@@ -312,8 +312,8 @@ aurora_8b10b_fmc1 aurora_8b10b_fmc1_i
 .gt0_qplllock_in        (gt0_qplllock_i),
 .gt0_qpllrefclklost_in  (gt0_qpllrefclklost_i),
 .gt0_qpllreset_out      (gt0_qpllreset_i),
-.gt_qpllclk_quad6_in (gt_qpllclk_quad6_i ),
-.gt_qpllrefclk_quad6_in (gt_qpllrefclk_quad6_i ),
+.gt_qpllclk_quad4_in (gt_qpllclk_quad4_i ),
+.gt_qpllrefclk_quad4_in (gt_qpllrefclk_quad4_i ),
 //____________________________COMMON PORTS ,_______________________________}
 //------------------}
 

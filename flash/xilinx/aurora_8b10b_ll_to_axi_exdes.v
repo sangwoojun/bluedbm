@@ -48,46 +48,43 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 //
-//  AXI_TO_LL
+//  LL_TO_AXI
 //
 //
 //  Description: This light wrapper/shim convertes Legacy LocalLink interface
-//               signals from AXI-4 Stream protocol signals
+//               signals to AXI-4 Stream protocol signals
 //
 //
 ///////////////////////////////////////////////////////////////////////////////
 
 `timescale 1 ns/1 ps
 (* core_generation_info = "aurora_8b10b_fmc1,aurora_8b10b_v10_2,{user_interface=AXI_4_Streaming,backchannel_mode=Sidebands,c_aurora_lanes=4,c_column_used=right,c_gt_clock_1=GTXQ5,c_gt_clock_2=None,c_gt_loc_1=X,c_gt_loc_10=X,c_gt_loc_11=X,c_gt_loc_12=X,c_gt_loc_13=X,c_gt_loc_14=X,c_gt_loc_15=X,c_gt_loc_16=X,c_gt_loc_17=X,c_gt_loc_18=X,c_gt_loc_19=X,c_gt_loc_2=X,c_gt_loc_20=X,c_gt_loc_21=1,c_gt_loc_22=2,c_gt_loc_23=3,c_gt_loc_24=4,c_gt_loc_25=X,c_gt_loc_26=X,c_gt_loc_27=X,c_gt_loc_28=X,c_gt_loc_29=X,c_gt_loc_3=X,c_gt_loc_30=X,c_gt_loc_31=X,c_gt_loc_32=X,c_gt_loc_33=X,c_gt_loc_34=X,c_gt_loc_35=X,c_gt_loc_36=X,c_gt_loc_37=X,c_gt_loc_38=X,c_gt_loc_39=X,c_gt_loc_4=X,c_gt_loc_40=X,c_gt_loc_41=X,c_gt_loc_42=X,c_gt_loc_43=X,c_gt_loc_44=X,c_gt_loc_45=X,c_gt_loc_46=X,c_gt_loc_47=X,c_gt_loc_48=X,c_gt_loc_5=X,c_gt_loc_6=X,c_gt_loc_7=X,c_gt_loc_8=X,c_gt_loc_9=X,c_lane_width=4,c_line_rate=44000,c_nfc=false,c_nfc_mode=IMM,c_refclk_frequency=275000,c_simplex=false,c_simplex_mode=TX,c_stream=true,c_ufc=false,flow_mode=None,interface_mode=Streaming,dataflow_config=Duplex}" *)
-module aurora_8b10b_fmc1_AXI_TO_LL_EXDES #
+module aurora_8b10b_LL_TO_AXI_EXDES #
 (
     parameter            DATA_WIDTH         = 16, // DATA bus width
     parameter            STRB_WIDTH         = 2, // STROBE bus width
+    parameter            USE_UFC_REM        = 0, // UFC REM bus width identifier
+    parameter            USE_4_NFC          = 0, // 0 => PDU, 1 => NFC, 2 => UFC 
     parameter            BC                 =  DATA_WIDTH/8, //Byte count
-    parameter            USE_4_NFC          = 0, // 0 => PDU, 1 => NFC, 2 => UFC
     parameter            REM_WIDTH          = 1 // REM bus width
+   
 )
 (
 
-    // AXI4-S input signals
-    AXI4_S_IP_TX_TVALID,
-    AXI4_S_IP_TX_TREADY,
-    AXI4_S_IP_TX_TDATA,
-    AXI4_S_IP_TX_TKEEP,
-    AXI4_S_IP_TX_TLAST,
+    // LocalLink input Interface
+    LL_IP_DATA,
+    LL_IP_SOF_N,
+    LL_IP_EOF_N,
+    LL_IP_REM,
+    LL_IP_SRC_RDY_N,
+    LL_OP_DST_RDY_N,
 
-    // LocalLink output Interface
-    LL_OP_DATA,
-    LL_OP_SOF_N,
-    LL_OP_EOF_N,
-    LL_OP_REM,
-    LL_OP_SRC_RDY_N,
-    LL_IP_DST_RDY_N,
-
-    // System Interface
-    USER_CLK,
-    RESET, 
-    CHANNEL_UP
+    // AXI4-S output signals
+    AXI4_S_OP_TVALID,
+    AXI4_S_OP_TDATA,
+    AXI4_S_OP_TKEEP,
+    AXI4_S_OP_TLAST,
+    AXI4_S_IP_TREADY
 
 );
 
@@ -95,57 +92,39 @@ module aurora_8b10b_fmc1_AXI_TO_LL_EXDES #
 
 //***********************************Port Declarations*******************************
 
-    // AXI4-Stream Interface
-    input   [0:(DATA_WIDTH-1)]     AXI4_S_IP_TX_TDATA;
-    input   [0:(STRB_WIDTH-1)]     AXI4_S_IP_TX_TKEEP;
-    input                          AXI4_S_IP_TX_TVALID;
-    input                          AXI4_S_IP_TX_TLAST;
-    output                         AXI4_S_IP_TX_TREADY;
+    // AXI4-Stream TX Interface
+     output     [0:(DATA_WIDTH-1)]     AXI4_S_OP_TDATA;
+     output     [0:(STRB_WIDTH-1)]     AXI4_S_OP_TKEEP;
+    output                            AXI4_S_OP_TVALID;
+    output                            AXI4_S_OP_TLAST;
+    input                             AXI4_S_IP_TREADY;
+
 
     // LocalLink TX Interface
-    output    [0:(DATA_WIDTH-1)]   LL_OP_DATA;
-    output    [0:(REM_WIDTH-1)]    LL_OP_REM;
-    output                         LL_OP_SRC_RDY_N;
-    output                         LL_OP_SOF_N;
-    output                         LL_OP_EOF_N;
-    input                          LL_IP_DST_RDY_N;
+    input      [0:(DATA_WIDTH-1)]     LL_IP_DATA;
+    input      [0:(REM_WIDTH-1)]      LL_IP_REM;
+    input                             LL_IP_SOF_N;
+    input                             LL_IP_EOF_N;
+    input                             LL_IP_SRC_RDY_N;
+    output                            LL_OP_DST_RDY_N;
 
-    // System Interface
-    input                          USER_CLK;
-    input                          RESET;
-    input                          CHANNEL_UP;
-
-
-    reg                            new_pkt_r;
-
-    wire                           new_pkt;
- wire   [0:(STRB_WIDTH-1)]     AXI4_S_IP_TX_TKEEP_i;
+ wire     [0:(STRB_WIDTH-1)]     AXI4_S_OP_TKEEP_i;
 
 //*********************************Main Body of Code**********************************
 
-   assign AXI4_S_IP_TX_TREADY = !LL_IP_DST_RDY_N;
-
- 
-   assign LL_OP_DATA = AXI4_S_IP_TX_TDATA;
-
- 
-    assign AXI4_S_IP_TX_TKEEP_i =  AXI4_S_IP_TX_TKEEP;
-
-   assign LL_OP_SRC_RDY_N = !AXI4_S_IP_TX_TVALID;
-   assign LL_OP_EOF_N = !AXI4_S_IP_TX_TLAST;
-   assign LL_OP_REM = (AXI4_S_IP_TX_TKEEP_i[0] + AXI4_S_IP_TX_TKEEP_i[1] + AXI4_S_IP_TX_TKEEP_i[2] + AXI4_S_IP_TX_TKEEP_i[3] + AXI4_S_IP_TX_TKEEP_i[4] + AXI4_S_IP_TX_TKEEP_i[5] + AXI4_S_IP_TX_TKEEP_i[6] + AXI4_S_IP_TX_TKEEP_i[7] + AXI4_S_IP_TX_TKEEP_i[8] + AXI4_S_IP_TX_TKEEP_i[9] + AXI4_S_IP_TX_TKEEP_i[10] + AXI4_S_IP_TX_TKEEP_i[11] + AXI4_S_IP_TX_TKEEP_i[12] + AXI4_S_IP_TX_TKEEP_i[13] + AXI4_S_IP_TX_TKEEP_i[14] + AXI4_S_IP_TX_TKEEP_i[15]) - 1'b1;
-   assign new_pkt = ( AXI4_S_IP_TX_TVALID && AXI4_S_IP_TX_TREADY && AXI4_S_IP_TX_TLAST ) ? 1'b0 : ((AXI4_S_IP_TX_TVALID && AXI4_S_IP_TX_TREADY && !AXI4_S_IP_TX_TLAST ) ? 1'b1 : new_pkt_r);
   
-   assign LL_OP_SOF_N  = ~ ( ( AXI4_S_IP_TX_TVALID && AXI4_S_IP_TX_TREADY && AXI4_S_IP_TX_TLAST ) ? ((new_pkt_r) ? 1'b0 : 1'b1) : (new_pkt && (!new_pkt_r)));
+ 
+   assign AXI4_S_OP_TDATA  = LL_IP_DATA;
 
-always @ (posedge USER_CLK)
-begin
-  if(RESET)
-    new_pkt_r <= `DLY 1'b0;
-  else if(CHANNEL_UP)
-    new_pkt_r <= `DLY new_pkt;
-  else
-    new_pkt_r <= `DLY 1'b0;
-end
+ 
+    assign AXI4_S_OP_TKEEP = AXI4_S_OP_TKEEP_i ;
+
+   assign AXI4_S_OP_TVALID = !LL_IP_SRC_RDY_N;
+   assign AXI4_S_OP_TLAST  = !LL_IP_EOF_N;
+
+   assign AXI4_S_OP_TKEEP_i  = (LL_IP_REM == {REM_WIDTH{1'b1}})? ({STRB_WIDTH{1'b1}}) :
+                             (~({STRB_WIDTH{1'b1}}>>(LL_IP_REM + 1'b1)));
+
+   assign LL_OP_DST_RDY_N  = !AXI4_S_IP_TREADY;
 
 endmodule

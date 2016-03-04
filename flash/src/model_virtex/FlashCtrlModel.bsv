@@ -11,7 +11,7 @@ import RegFile::*;
 import AuroraGearbox::*;
 import AuroraImportFmc1::*;
 import ControllerTypes::*;
-import FlashCtrlVirtex::*;
+import FlashCtrlVirtex1::*;
 import FlashBusModel::*;
 
 //simulator options
@@ -56,7 +56,7 @@ module mkFlashCtrlModel#(
 	FIFO#(Tuple2#(TagT, StatusT)) ackQ <- mkSizedFIFO(16);
 	
 	//GTX-GTP Aurora. Unused in model
-	AuroraIfc auroraIntra <- mkAuroraIntra(gtx_clk_p, gtx_clk_n, clk250);
+	AuroraIfc auroraIntra <- mkAuroraIntra1(gtx_clk_p, gtx_clk_n, clk250);
 
 
 	//handle reads, acks, writedataReq

@@ -38,5 +38,6 @@ clean:
 core:
 	mkdir -p ../../bluespecpcie/core
 	cd ../../bluespecpcie/core/ ; vivado -mode batch -source core_gen_pcie.tcl -nolog -nojournal
-	cd ../../flash/ ; vivado -mode batch -source synth-aurora-intra.tcl -nolog -nojournal 
+	cd ../../flash/ ; vivado -mode batch -source synth-aurora-intra1.tcl -nolog -nojournal 
+	cd ../../flash/ ; vivado -mode batch -source synth-aurora-intra2.tcl -nolog -nojournal 
 	find ../../flash/ -name "aurora_8b10b_*transceiver_wrapper.v" -exec sed -i "s/_txdiffctrl_in[ \t]\+([4'b10]\+),/_txdiffctrl_in (4'b1011),/g" '{}' \;

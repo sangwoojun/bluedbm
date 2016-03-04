@@ -14,7 +14,7 @@ import DMASplitter::*;
 
 import AuroraImportFmc1::*;
 import ControllerTypes::*;
-import FlashCtrlVirtex::*;
+import FlashCtrlVirtex1::*;
 import FlashCtrlModel::*;
 
 typedef 8 BusCount; // 8 per card in hw, 2 per card in sim
@@ -23,8 +23,11 @@ typedef 64 TagCount; // Has to be larger than the software setting
 interface HwMainIfc;
 endinterface
 
-module mkHwMain#(PcieUserIfc pcie, FlashCtrlUser flash, FlashManagerIfc flashMan) 
+module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManagerIfc flashMan) 
 	(HwMainIfc);
+
+	//FIXME
+	FlashCtrlUser flash = flashes[1];
 
 	Clock curClk <- exposeCurrentClock;
 	Reset curRst <- exposeCurrentReset;
@@ -60,7 +63,7 @@ module mkHwMain#(PcieUserIfc pcie, FlashCtrlUser flash, FlashManagerIfc flashMan
 
 	rule senddmaenq;
 		m0.deq;
-		dma.enq(m0.first);
+		dma.enq(0, m0.first);
 	endrule
 	rule flushm4flash;
 		m4flash.deq;

@@ -28,8 +28,9 @@ read_xdc $pciedir/src/xilinx_pcie_7x_ep_x8g2_VC707.xdc
 
 ############# Flash Stuff
 read_ip $flashdir/aurora_8b10b_fmc1/aurora_8b10b_fmc1.xci
+read_ip $flashdir/aurora_8b10b_fmc2/aurora_8b10b_fmc2.xci
 read_verilog [ glob $flashdir/xilinx/*.v ]
-read_xdc $flashdir/xilinx/aurora_8b10b_fmc1_exdes.xdc
+read_xdc $flashdir/xilinx/aurora_8b10b_exdes.xdc
 ############# end Flash Stuff
 
 read_xdc ../top.xdc

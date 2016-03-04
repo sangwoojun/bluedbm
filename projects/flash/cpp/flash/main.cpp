@@ -23,12 +23,10 @@ int main() {
 
 	BSBFS* fs = BSBFS::getInstance();
 	
-	/*
 	uint32_t* testBuf = (uint32_t*)malloc(8192);
 	for ( int i = 0; i < 8192/4; i++ ) {
 		testBuf[i] = i;
 	}
-	*/
 
 	fs->createFile("testfile1.txt");
 	fs->createFile("testfile2.txt");
@@ -48,7 +46,16 @@ int main() {
 		//if ( i % 100 == 0 ) fs->fileList();
 	}
 */
+	fs->fappend(fd, testBuf, 128);
+	fs->fappend(fd, testBuf, 8192);
+	for ( int i = 0; i < 64; i++ ) {
+		printf( "%d--\n", i ); fflush(stdout);
+		fs->fappend(fd, testBuf, 8192);
 
+		//if ( i % 100 == 0 ) fs->fileList();
+	}
+
+/*
 	FILE* fsparse = fopen("cpp/datagen/obj/sparse.dat", "rb");
 	if ( fsparse == NULL ) {
 		fprintf(stderr, "file not found!\n");
@@ -63,11 +70,13 @@ int main() {
 	}
 	free(frb);
 
+*/
 	fs->fileList();
 	uint32_t* pageBufferR = (uint32_t*)malloc(8192);
 	uint64_t read = fs->fread(fd, pageBufferR, 4000);
 	while ( !fs->feof(fd) ) {
 		uint64_t read = fs->fread(fd, pageBufferR, 8192);
+		printf("----\n");
 		for ( int i = 0; i < 8192/4; i++ ) {
 			if ( pageBufferR[i]>>31 == 1 ) {
 				printf( "Discovered idx %d\n", pageBufferR[i]&0xfffffff );

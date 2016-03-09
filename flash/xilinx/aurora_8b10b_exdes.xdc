@@ -69,10 +69,10 @@ create_clock -name aurora1_user_clk_i -period 9.091	 [get_pins -hier -regexp {.*
 create_clock -name aurora2_user_clk_i -period 9.091	 [get_pins -hier -regexp {.*aurora2IntraImport/aurora_module_i/clock_module_i/user_clk_buf_i/O}]
 
 # 20.0 ns period Board Clock Constraint 
-create_clock -name init_clk_1_i -period 20.0 [get_pins -hier -regexp .*auroraIntra1ClockDiv5/CLK_slowClock]
-
-# 20.0 ns period Board Clock Constraint 
-create_clock -name init_clk_2_i -period 20.0 [get_pins -hier -regexp .*auroraIntra2ClockDiv5/CLK_slowClock]
+create_clock -name init_clk_1_i -period 20.0 [get_pins -hier -regexp .*auroraIntra1ClockDiv5/Q]
+create_clock -name init_clk_2_i -period 20.0 [get_pins -hier -regexp .*auroraIntra2ClockDiv5/Q]
+#create_clock -name init_clk_1_i -period 20.0 [get_pins -hier -filter {NAME=~ *flashCtrl1/CLK_slowClock}]
+#create_clock -name init_clk_2_i -period 20.0 [get_pins -hier -filter {NAME=~ *flashCtrl2/CLK_slowClock}]
 
 ###### CDC in RESET_LOGIC from INIT_CLK to USER_CLK ##############
 set_max_delay -from [get_clocks init_clk_1_i] -to [get_clocks aurora1_user_clk_i] -datapath_only 9.091	 
@@ -157,11 +157,13 @@ set_property LOC GTXE2_CHANNEL_X1Y15 [get_cells -hier -regexp .*aurora_8b10b_fmc
 #set_false_path -from [get_pins -hierarchical -regexp {NAME=~*auroraGearbox/*Q/*dGDeqPtr*/*}] -to [get_pins -hierarchical -regexp {NAME=~ *auroraGearbox/*Q/*sSyncReg*/*}]
 #set_false_path -from [get_pins -hierarchical -regexp {NAME=~*auroraGearbox/*Q/*sGEnqPtr*/*}] -to [get_pins -hierarchical -regexp {NAME=~ *auroraGearbox/*Q/*dSyncReg*/*}]
 #set_false_path -from [get_pins -hierarchical -regexp {NAME=~*auroraGearbox/*Q/*fifoMem*/*}] -to [get_pins -hierarchical -regexp {NAME=~ *auroraGearbox/*Q/*dDoutReg*/*}]
+set_false_path -to [get_pins -of_objects [get_cells -hierarchical -filter {NAME =~ *auroraGearbox/*Q/dGDeqPtr*}] -filter {NAME =~ *CLR}]
+set_false_path -to [get_pins -of_objects [get_cells -hierarchical -filter {NAME =~ *auroraGearbox/*Q/dGDeqPtr*}] -filter {NAME =~ *PRE}]
 
 #set_false_path -from [get_pins -of_objects [get_cells -hierarchical -filter {NAME=~*auroraGearbox/*Q/*fifoMem*}]] -to [get_pins -of_objects [get_cells -hierarchical -regexp {NAME=~ *auroraGearbox/*Q/*dDoutReg*}]]
 
 
-set_false_path -to [get_pins -of_objects [get_cells -hierarchical -filter {NAME =~ *dD_OUT_reg*}] -filter {NAME =~ *CLR}]
+set_false_path -to [get_pins -of_objects [get_cells -hierarchical -filter {NAME =~ *dDOutReg*}] -filter {NAME =~ *CLR}]
 set_false_path -to [get_pins -of_objects [get_cells -hierarchical -filter {NAME =~ *dSyncReg*}] -filter {NAME =~ *CLR}]
 set_false_path -to [get_pins -of_objects [get_cells -hierarchical -filter {NAME =~ *dLastState*}] -filter {NAME =~ *CLR}]
 set_false_path -from [get_pins -hierarchical -filter {NAME=~ *CHANNEL_UP_reg/C}]

@@ -9,6 +9,8 @@ import RegFile::*;
 
 import ControllerTypes::*;
 
+import MergeN::*;
+
 //For BSIM: use hashed read data (so we don't have to write before read)
 typedef 0 BSIM_USE_HASHED_DATA; 
 typedef 0 BSIM_DEBUG_LOG;
@@ -97,7 +99,8 @@ module mkFlashBusModel(FlashBusModelIfc);
 	FIFO#(Tuple2#(Bit#(WordSz), TagT)) busReadQ <- mkFIFO();
 	Reg#(Bool) busInUse <- mkReg(False);
 	Reg#(ChipT) busReservedChipIdx <- mkReg(0);
-	FIFO#(Tuple2#(TagT, StatusT)) ackQ <- mkSizedFIFO(valueOf(NumTags));
+	//FIFO#(Tuple2#(TagT, StatusT)) ackQ <- mkSizedFIFO(valueOf(NumTags));
+	MergeNIfc#(TMul#(ChipsPerBus,2), Tuple2#(TagT, StatusT)) ackM <- mkMergeN;
 	FIFOF#(TagT) writeReqQ <- mkSizedFIFOF(3); 
 	Reg#(Bit#(4)) writeDataReqIssued <- mkReg(0);
 	Reg#(Bit#(4)) writeDataReqProcessed <- mkReg(0);
@@ -130,7 +133,7 @@ module mkFlashBusModel(FlashBusModelIfc);
 	endrule
 
 
-	for (Integer c=0; c<chipsPerBus; c=c+1) begin
+	for (Integer c=0; c< chipsPerBus; c=c+1) begin
 		Reg#(ChipState) chipSt <- mkReg(ST_CMD);
 		Reg#(ChipState) chipStReturn <- mkReg(ST_CMD);
 		Reg#(Bit#(32)) delayCnt <- mkReg(0);
@@ -300,7 +303,8 @@ module mkFlashBusModel(FlashBusModelIfc);
 		rule chipWriteAck if (chipSt==ST_WRITE_ACK);
 			let cmd = flashChipCmdQs[c].first;
 			flashChipCmdQs[c].deq;
-			ackQ.enq(tuple2(cmd.tag, WRITE_DONE));
+			//ackQ.enq(tuple2(cmd.tag, WRITE_DONE));
+			ackM.enq[c*2].enq(tuple2(cmd.tag, WRITE_DONE));
 			chipSt <= ST_CMD;
 			if (valueOf(BSIM_DEBUG_LOG)==1) begin $display("%m FlashBus chip[%d] write ack tag=%d", c, cmd.tag) ; end
 		endrule
@@ -320,7 +324,8 @@ module mkFlashBusModel(FlashBusModelIfc);
 				if (erasePageCnt == fromInteger(pagesPerBlock-1)) begin //done block
 					flashChipCmdQs[c].deq;
 					erasePageCnt <= 0;
-					ackQ.enq(tuple2(cmd.tag, ERASE_DONE));
+					//ackQ.enq(tuple2(cmd.tag, ERASE_DONE));
+					ackM.enq[c*2+1].enq(tuple2(cmd.tag, ERASE_DONE));
 					chipSt <= ST_CMD;
 				end
 				else begin
@@ -358,8 +363,10 @@ module mkFlashBusModel(FlashBusModelIfc);
 	endmethod
 
 	method ActionValue#(Tuple2#(TagT, StatusT)) ackStatus ();
-		ackQ.deq;
-		return ackQ.first;
+		//ackQ.deq;
+		//return ackQ.first;
+		ackM.deq;
+		return ackM.first;
 	endmethod
 
 

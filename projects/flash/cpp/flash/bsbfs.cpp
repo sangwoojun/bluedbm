@@ -139,41 +139,43 @@ BSBFS::ftell(int fd) {
 
 /*
 // page/block map: [addr. bits]
-	block[remain]:chip[1]:page[8]:chip[2]:bus[3]
+	block[remain]:chip[1]:page[8]:chip[2]:board[1]:bus[3]
 
 	BSIM:
-	block[remain]:chip[1]:page[4]:chip[2]:bus[3]
+	block[remain]:chip[1]:page[4]:chip[2]:board[1]:bus[3]
 */
 void
 BSBFS::pageMap(uint64_t page, PhysPage& np) {
 #ifdef BLUESIM
 	int bus = page & 0x7;
-	int chipd = (page>>3) & 0x3;
-	int page_ = (page>>5) & 0xf;
-	int chipu = (page>>9) & 0x1;
-	int block = (page>>10);
+	int board = (page>>3) & 0x1;
+	int chipd = (page>>4) & 0x3;
+	int page_ = (page>>6) & 0xf;
+	int chipu = (page>>10) & 0x1;
+	int block = (page>>11);
 #else
 	int bus = page & 0x7;
-	int chipd = (page>>3) & 0x3;
-	int page_ = (page>>5) & 0xff;
-	int chipu = (page>>13) & 0x1;
-	int block = (page>>14);
+	int board = (page>>3) & 0x1;
+	int chipd = (page>>4) & 0x3;
+	int page_ = (page>>6) & 0xff;
+	int chipu = (page>>14) & 0x1;
+	int block = (page>>15);
 #endif
 	
-	np.bus = bus;
+	np.bus = (board<<3) | bus;
 	np.chip = ((chipu<<2) | chipd);
 	np.block = block;
 	np.page = page_;
 }
 uint32_t
 BSBFS::blockIdx(uint64_t page) {
-	uint64_t down = page & 0x1f;
+	uint64_t down = page & 0x3f;
 #ifdef BLUESIM
-	uint64_t up = (page>>9);
+	uint64_t up = (page>>10);
 #else
-	uint64_t up = (page>>13);
+	uint64_t up = (page>>14);
 #endif
-	uint64_t idx = down | (up<<5);
+	uint64_t idx = down | (up<<6);
 
 	return (uint32_t)idx;
 }
@@ -197,9 +199,9 @@ BSBFS::readPage(int fd, uint64_t page, void* buf, uint8_t* stat) {
 
 	uint32_t bidx = BSBFS::blockIdx(page);
 	uint32_t bl = nf->blockmap[bidx];
-	int bus = bl & 0x7;
-	int chip = (bl>>3) & 0x7;
-	int block = bl>>6;
+	int bus = bl & 0xf;
+	int chip = (bl>>4) & 0x7;
+	int block = bl>>7;
 
 	PhysPage mapped;
 	BSBFS::pageMap(page, mapped);
@@ -217,9 +219,9 @@ BSBFS::writePage(int fd, uint64_t page, void* buf, uint8_t* stat) {
 
 	uint32_t bidx = BSBFS::blockIdx(page);
 	uint32_t bl = nf->blockmap[bidx];
-	int bus = bl & 0x7;
-	int chip = (bl>>3) & 0x7;
-	int block = bl>>6;
+	int bus = bl & 0xf;
+	int chip = (bl>>4) & 0x7;
+	int block = bl>>7;
 
 	PhysPage mapped;
 	BSBFS::pageMap(page, mapped);
@@ -476,9 +478,9 @@ void* blockEraserThread(void* arg) {
 			*slot = FLASHSTAT_ERASE_WAIT;
 
 			uint32_t curblock = fs->cur_blockeraseidx;
-			int bus = curblock & 0x07;
-			int chip = (curblock>>3) & 0x07;
-			int block = (curblock>>6);
+			int bus = curblock & 0x0F; //board/bus
+			int chip = (curblock>>4) & 0x07;
+			int block = (curblock>>7);
 			//printf( "%d --E\n", curblock ); fflush(stdout);
 
 			flash->eraseBlock(bus,chip,block, slot);

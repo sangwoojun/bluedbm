@@ -3,7 +3,8 @@
 #ifndef __FLASHMANAGER__H__
 #define __FLASHMANAGER__H__
 
-#define TAG_COUNT 64
+#define TAG_COUNT 128
+#define TAG_PERBUS 8
 
 //Flash page size
 #define FPAGE_SIZE 8192
@@ -30,7 +31,7 @@ void readPage(int bus, int chip, int block, int page, void* buffer, uint8_t* sta
 private:
 	pthread_t flashThread;
 	static FlashManager* m_pInstance;
-	int getIdleTag();
+	int getIdleTag(int bbus); //board(1bit)/bus(3bits)
 	
 	FlashManager();
 
@@ -43,7 +44,6 @@ public:
 	bool tagBusy[TAG_COUNT];
 	timespec sentTime[TAG_COUNT];
 
-	int readinflight;
 	pthread_mutex_t flashMutex;
 	pthread_cond_t flashCond;
 };

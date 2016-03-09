@@ -31,7 +31,6 @@ void* flashManagerThread(void* arg) {
 	void* dmabuffer = dma->dmaBuffer();
 	uint8_t* bdb = (uint8_t*)dmabuffer;
 
-	int readpagetotal = 0;
 	while (1) {
 		PCIeWord w = dma->recvWord();
 		uint32_t msg = w.d[0];
@@ -46,9 +45,7 @@ void* flashManagerThread(void* arg) {
 				//timespec now;
 				//clock_gettime(CLOCK_REALTIME, & now);
 				//double diff = timespec_diff_sec(flash->sentTime[tag], now);
-				//readpagetotal++;
-				//flash->readinflight--;
-				//printf( "read done to tag %d Latency %f total %d inflight %d \n", tag, diff, readpagetotal, flash->readinflight ); 
+				printf( "read done to tag %d \n", tag); 
 				memcpy(flash->storebuffer[tag], bdb+(1024*8*tag), (1024*8));
 				pthread_cond_broadcast(&(flash->flashCond));
 				pthread_mutex_unlock(&(flash->flashMutex));
@@ -124,38 +121,41 @@ FlashManager::FlashManager() {
 }
 
 int
-FlashManager::getIdleTag() {
-	for ( int i = 0; i < TAG_COUNT; i++ ) {
-		if ( tagBusy[i] == false ) {
-			return i;
+FlashManager::getIdleTag(int bbus) {
+	for ( int i = 0; i < TAG_PERBUS; i++ ) {
+		int idx = (bbus<<3) | i;
+		if ( tagBusy[idx] == false ) {
+			return idx;
 		}
 	}
 	return -1;
 }
 
 /*
+New encoding!
 0: op
-1: blockpagetag
-2: buschip
+1: blockpagechip
+2: tag (board(1), bus(3), tag(3))
 */
 void FlashManager::eraseBlock(int bus, int chip, int block, uint8_t* status) {
 	DMASplitter* dma = DMASplitter::getInstance();
 	
 	pthread_mutex_lock(&flashMutex);
 	int page = 0;
-	int tag = getIdleTag();
+	int tag = getIdleTag(bus);
 	while (tag < 0 ) {
 		pthread_cond_wait(&flashCond, &flashMutex);
 		//usleep(10);
-		tag = getIdleTag();
+		tag = getIdleTag(bus);
 	}
 	tagBusy[tag] = true;
 	
 	this->statusbuffer[tag] = status;
 
-	uint32_t blockpagetag = (block<<16) | (page<<8) | tag;
-	uint32_t buschip = (bus<<8) | chip;
-	dma->sendWord(0, 0, blockpagetag, buschip, 0);//erase
+	//uint32_t blockpagetag = (block<<16) | (page<<8) | tag;
+	//uint32_t buschip = (bus<<8) | chip;
+	uint32_t blockpagechip = (block<<16) | (page<<8) | chip;
+	dma->sendWord(0, 0, blockpagechip, tag, 0);//erase
 	pthread_mutex_unlock(&flashMutex);
 //	printf( "Erase sent to %d: %d %d %d\n", tag, bus,chip,block ); fflush(stdout);
 }
@@ -163,21 +163,22 @@ void FlashManager::writePage(int bus, int chip, int block, int page, void* buffe
 	DMASplitter* dma = DMASplitter::getInstance();
 	
 	pthread_mutex_lock(&flashMutex);
-	int tag = getIdleTag();
+	int tag = getIdleTag(bus);
 	while (tag < 0 ) {
 		pthread_cond_wait(&flashCond, &flashMutex);
 		//usleep(10);
-		tag = getIdleTag();
+		tag = getIdleTag(bus);
 	}
 	tagBusy[tag] = true;
 	this->storebuffer[tag] = buffer;
 	this->statusbuffer[tag] = status;
 	
-	uint32_t blockpagetag = (block<<16) | (page<<8) | tag;
-	uint32_t buschip = (bus<<8) | chip;
-	dma->sendWord(0, 2, blockpagetag, buschip, 0);//write
+	//uint32_t blockpagetag = (block<<16) | (page<<8) | tag;
+	//uint32_t buschip = (bus<<8) | chip;
+	uint32_t blockpagechip = (block<<16) | (page<<8) | chip;
+	dma->sendWord(0, 2, blockpagechip, tag, 0);//write
 	pthread_mutex_unlock(&flashMutex);
-//	printf( "Write command sent to %d: %d %d %d %d\n", tag, bus,chip,block,page ); fflush(stdout);
+	//printf( "Write command sent to %d: %d %d %d %d\n", tag, bus,chip,block,page ); fflush(stdout);
 }
 void FlashManager::readPage(int bus, int chip, int block, int page, void* buffer, uint8_t* status) {
 	
@@ -191,26 +192,26 @@ void FlashManager::readPage(int bus, int chip, int block, int page, void* buffer
 
 	pthread_mutex_lock(&flashMutex);
 
-	int tag = getIdleTag();
+	int tag = getIdleTag(bus);
 	while (tag < 0 ) {
 		//usleep(50);
 		pthread_cond_wait(&flashCond, &flashMutex);
-		tag = getIdleTag();
+		tag = getIdleTag(bus);
 	}
 	tagBusy[tag] = true;
 	sentTime[tag] = start;
 	this->storebuffer[tag] = buffer;
 	this->statusbuffer[tag] = status;
 
-	readinflight++;
 	pthread_mutex_unlock(&flashMutex);
 
 	
-	uint32_t blockpagetag = (block<<16) | (page<<8) | tag;
-	uint32_t buschip = (bus<<8) | chip;
-	dma->sendWord(0, 1, blockpagetag, buschip, 0);//read
+	//uint32_t blockpagetag = (block<<16) | (page<<8) | tag;
+	//uint32_t buschip = (bus<<8) | chip;
+	uint32_t blockpagechip = (block<<16) | (page<<8) | chip;
+	dma->sendWord(0, 1, blockpagechip, tag, 0);//read
 
-	//printf( "sent read req %d %d %d %d %d\n", tag, bus, chip, block, page ); fflush(stdout);
+	printf( "sent read req %d %d %d %d %d\n", tag, bus, chip, block, page ); fflush(stdout);
 
 
 }

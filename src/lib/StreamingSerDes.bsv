@@ -16,7 +16,8 @@ module mkStreamingDeserializer (StreamingDeserializerIfc#(tFrom, tTo))
 	Integer fromSz = valueOf(tFromSz);
 	Integer toSz = valueOf(tToSz);
 
-	Reg#(Bit#(32)) outCounter <- mkReg(0);
+	//Reg#(Bit#(32)) outCounter <- mkReg(0);
+	Reg#(Bit#(TAdd#(TLog#(tToSz),1))) outCounter <- mkReg(0);
 	Reg#(Bit#(tToSz)) outBuffer <- mkReg(0);
 
 	FIFO#(tTo) outQ <- mkFIFO;
@@ -87,7 +88,8 @@ module mkStreamingSerializer (StreamingSerializerIfc#(tFrom, tTo))
 	Integer toSz = valueOf(tToSz);
 
 	FIFOF#(Bit#(tFromSz)) inQ <- mkFIFOF;
-	Reg#(Bit#(32)) inCounter <- mkReg(0); // FIXME 32
+	//Reg#(Bit#(32)) inCounter <- mkReg(0); // FIXME 32
+	Reg#(Bit#(TAdd#(TLog#(tFromSz),1))) inCounter <- mkReg(0);
 	Reg#(Maybe#(Bit#(tFromSz))) inBuffer <- mkReg(tagged Invalid);
 
 	FIFO#(Tuple2#(tTo, Bool)) outQ <- mkFIFO;

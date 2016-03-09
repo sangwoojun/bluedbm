@@ -17,4 +17,4 @@ set_false_path -from [get_cells -hierarchical -filter {NAME=~*auroraGearbox_send
 set_false_path -from [get_cells -hierarchical -filter {NAME=~*auroraGearbox_sendQ*sGEnqPtr*}] -to [get_cells -hierarchical -filter {NAME=~ *auroraGearbox_sendQ*dSyncReg*}]
 set_false_path -from [get_cells -hierarchical -filter {NAME=~*auroraGearbox_sendQ*fifoMem*}] -to [get_cells -hierarchical -filter {NAME=~ *auroraGearbox_sendQ*dDoutReg*}]
 
-set_false_path -from [get_cells -hierarchical -filter {NAME=~rst125*}]
+#set_false_path -from [get_cells -hierarchical -filter {NAME=~rst125*}]

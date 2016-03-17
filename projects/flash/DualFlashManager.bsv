@@ -64,11 +64,15 @@ module mkDualFlashManager#(Vector#(2,FlashCtrlUser) flashes) (DualFlashManagerIf
 				ERASE_DONE: stat = STATE_ERASE_DONE;
 				ERASE_ERROR: stat = STATE_ERASE_FAIL;
 			endcase
-			mstat.enq[i].enq(tuple2(tag, stat));
+			Bit#(8) mask = (fromInteger(i)<<7);
+			mstat.enq[i].enq(tuple2(tag|mask, stat));
 		endrule
 		rule writeReady;
 			TagT tag <- flashes[i].writeDataReq;
-			mstat.enq[i].enq(tuple2(zeroExtend(tag), STATE_WRITE_READY));
+			Bit#(8) mask = (fromInteger(i)<<7);
+			Bit#(8) ntag = zeroExtend(tag)|mask;
+			mstat.enq[i].enq(tuple2(ntag, STATE_WRITE_READY));
+			$display ( "Write ready, %d", ntag );
 		endrule
 	end
 
@@ -80,17 +84,20 @@ module mkDualFlashManager#(Vector#(2,FlashCtrlUser) flashes) (DualFlashManagerIf
 			endmethod
 			method ActionValue#(Tuple2#(Bit#(8), Bit#(128))) readWord;
 				let d <- flashes[i].readWord;
-				return tuple2(zeroExtend(tpl_2(d)), tpl_1(d)) ;
+				Bit#(8) mask = (fromInteger(i)<<7);
+				return tuple2(zeroExtend(tpl_2(d))|mask, tpl_1(d)) ;
 			endmethod
 		endinterface: FlashDataIfc;
 	end
 
 	method Action command(FlashManagerCmd cmd);
+		Bit#(3) bus = truncate(cmd.bus);
+		Bit#(7) tag = truncate(cmd.tag);
 		if ( cmd.bus[3] == 0 ) begin // board(1), bus(3)
 			flashes[0].sendCmd(FlashCmd{
 				op:cmd.op,
-				tag:truncate(cmd.tag),
-				bus: truncate(cmd.bus>>1),
+				tag: tag,
+				bus: bus,
 				chip: cmd.chip,
 				block:cmd.block,
 				page:cmd.page
@@ -98,8 +105,8 @@ module mkDualFlashManager#(Vector#(2,FlashCtrlUser) flashes) (DualFlashManagerIf
 		end else begin
 			flashes[1].sendCmd(FlashCmd{
 				op:cmd.op,
-				tag:truncate(cmd.tag),
-				bus: truncate(cmd.bus>>1),
+				tag: tag,
+				bus: bus,
 				chip: cmd.chip,
 				block:cmd.block,
 				page:cmd.page

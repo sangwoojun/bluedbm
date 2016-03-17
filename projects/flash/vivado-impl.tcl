@@ -6,6 +6,7 @@ set_param general.maxThreads 8
 #
 set pciedir ../../../bluespecpcie/
 set flashdir ../../../flash/
+set ddr3dir ../../../ddr3_v2_0/
 
 set outputDir ./hw
 file mkdir $outputDir
@@ -31,6 +32,12 @@ read_ip $flashdir/aurora_8b10b_fmc1/aurora_8b10b_fmc1.xci
 read_ip $flashdir/aurora_8b10b_fmc2/aurora_8b10b_fmc2.xci
 read_verilog [ glob $flashdir/xilinx/*.v ]
 read_xdc $flashdir/xilinx/aurora_8b10b_exdes.xdc
+############# end Flash Stuff
+
+############# DDR3 Stuff
+read_ip $ddr3dir/core/ddr3_v2_0/ddr3_v2_0.xci
+read_verilog [ glob $ddr3dir/*.v ]
+read_xdc $ddr3dir/ddr3_v2_0.xdc
 ############# end Flash Stuff
 
 read_xdc ../top.xdc

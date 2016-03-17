@@ -18,6 +18,8 @@ import FlashCtrlVirtex1::*;
 import FlashCtrlModel::*;
 import DualFlashManager::*;
 
+import DRAMController::*;
+
 typedef 8 BusCount; // 8 per card in hw, 2 per card in sim
 typedef TMul#(2,BusCount) BBusCount; //Board*bus
 //typedef 64 TagCount; // Has to be larger than the software setting
@@ -25,7 +27,8 @@ typedef TMul#(2,BusCount) BBusCount; //Board*bus
 interface HwMainIfc;
 endinterface
 
-module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManagerIfc flashMan) 
+module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManagerIfc flashMan, 
+	DRAMUserIfc dram) 
 	(HwMainIfc);
 
 	Clock curClk <- exposeCurrentClock;
@@ -88,12 +91,12 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 			let data = tpl_1(d);
 			let tag = tpl_2(d);
 			flashWriteTag <= tag;
-			let board = tag[6];
+			let board = tag[7];
 
 			flashman.ifc[board].writeWord(tag, data);
 			flashWriteBytesOut <= flashWriteBytesOut + 16;
 		end else begin
-			let board = flashWriteTag[6];
+			let board = flashWriteTag[7];
 			flashman.ifc[board].writeWord(flashWriteTag, 0);
 			if ( flashWriteBytesOut + 16 >= 8192+32 ) begin
 				flashWriteBytesOut <= 0;
@@ -113,9 +116,9 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 
 			let cur_blockpagechip = d[63:32];
 			let cur_bustag = d[95:64];
-			Bit#(1) board = cur_bustag[6];
-			Bit#(3) bus = truncate(cur_bustag>>3);
-			Bit#(4) bbus = truncate(cur_bustag>>3);
+			Bit#(1) board = cur_bustag[7];
+			Bit#(3) bus = truncate(cur_bustag>>4);
+			Bit#(4) bbus = truncate(cur_bustag>>4);
 			Bit#(8) tag = truncate(cur_bustag);
 
 			let cur_flashop = ERASE_BLOCK;
@@ -131,8 +134,8 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 				//$display( "cmd recv %d", opcode );	
 				flashman.command(FlashManagerCmd{
 					op:cur_flashop,
-					tag:truncate(tag),
-					bus: truncate(bbus),
+					tag:tag,
+					bus: bbus,
 					chip: truncate(cur_blockpagechip),
 					block:truncate(cur_blockpagechip>>16),
 					page:truncate(cur_blockpagechip>>8)
@@ -157,60 +160,105 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 		end
 	endrule
 
-
+	Merge2Ifc#(Bit#(16)) mFlashEvent <- mkMerge2;
 	rule flashEvent;
 		let evt <- flashman.fevent;
 		Bit#(8) tag = tpl_1(evt);
 		FlashStatus stat = tpl_2(evt);
-		Bit#(32) data = 0;
+		Bit#(16) data = 0;
 		case (stat)
-			STATE_WRITE_DONE: data = {8'h00, 8'h1, zeroExtend(tag)};
-			STATE_ERASE_DONE: data = {8'h00, 8'h2, zeroExtend(tag)};
-			STATE_ERASE_FAIL: data = {8'h00, 8'h3, zeroExtend(tag)};
-			STATE_WRITE_READY: data = {8'h00, 8'h4, zeroExtend(tag)};
+			STATE_WRITE_DONE: data = {tag, 8'h1};
+			STATE_ERASE_DONE: data = {tag, 8'h2};
+			STATE_ERASE_FAIL: data = {tag, 8'h3};
+			STATE_WRITE_READY: data = {tag, 8'h4};
 		endcase
-		m0.enq[0].enq(zeroExtend(data));
+		mFlashEvent.enq[0].enq(data);
 
 		if ( stat == STATE_WRITE_READY ) begin
 			writeTagsQ.enq(tag);
+			$display( "writeTagsQ enqing %d", tag );
+		end
+	endrule
+	Merge4Ifc#(Bit#(8)) m4dma <- mkMerge4;
+	rule getReadDone;
+		m4dma.deq;
+		mFlashEvent.enq[1].enq({m4dma.first, 0});
+	endrule
+
+	Reg#(Bit#(128)) flashEventBuf <- mkReg(~0);
+	Reg#(Bit#(16)) flashEventCnt <- mkReg(0);
+	Reg#(Bit#(16)) flashEventCounter <- mkReg(0);
+	(* descending_urgency = "sendFlashEvent, flashEventTimeout" *)
+	rule sendFlashEvent;
+		mFlashEvent.deq;
+		Bit#(16) dat = mFlashEvent.first;
+		flashEventCounter <= 0;
+
+		if ( flashEventCnt >= 7 ) begin
+			m0.enq[0].enq((flashEventBuf<<16)|zeroExtend(dat));
+			flashEventBuf <= ~0;
+		end else begin
+			flashEventCnt <= flashEventCnt + 1;
+			flashEventBuf <= (flashEventBuf<<16) | zeroExtend(dat);
+		end
+	endrule
+	rule flashEventTimeout;
+		if ( flashEventCounter > 32 ) begin
+			flashEventCounter <= 0;
+			flashEventCnt <= 0;
+			flashEventBuf <= ~0;
+			m0.enq[0].enq(flashEventBuf);
+		end else begin
+			flashEventCounter <= flashEventCounter + 1;
 		end
 	endrule
 
-	Merge4Ifc#(Bit#(8)) m4dma <- mkMerge4;
-	rule sendReadDone;
-		m4dma.deq;
-		Bit#(8) tag = m4dma.first;
-		Bit#(32) data = {8'h0, 8'h0, zeroExtend(tag)}; // read done
-		//dma.enq({zeroExtend(data)}); 
-		m0.enq[1].enq(zeroExtend(data));
-		//$display( "dma.enq from %d", tag );
-	endrule
-
 	for ( Integer i = 0; i < 2; i=i+1 ) begin
-		Vector#(BusCount, FIFO#(Tuple2#(Bit#(128), Bit#(8)))) dmaWriteQ <- replicateM(mkSizedFIFO(32));
+		FIFO#(Tuple2#(Bit#(8), Bit#(128))) flashReadQ <- mkSizedBRAMFIFO(512);
+
+
+		Vector#(BusCount, FIFO#(Tuple2#(Bit#(128), Bit#(8)))) dmaWriteQ <- replicateM(mkSizedBRAMFIFO(512));
 		Vector#(BusCount, Reg#(Bit#(16))) dmaWriteCnt <- replicateM(mkReg(0));
-		FIFO#(Tuple2#(Bit#(8), Bit#(128))) flashReadQ <- mkSizedFIFO(16);
+
+		//Tag, Count
+		Vector#(TDiv#(BusCount,4), Merge4Ifc#(Tuple2#(Bit#(8),Bit#(10)))) dmaEngineSelect <- replicateM(mkMerge4);
+
 		rule readDataFromFlash1;
 			let taggedRdata <- flashman.ifc[i].readWord();
 			flashReadQ.enq(taggedRdata);
 		endrule
 
-		//Tag, Count
-		Vector#(TDiv#(BusCount,4), Merge4Ifc#(Tuple2#(Bit#(8),Bit#(10)))) dmaEngineSelect <- replicateM(mkMerge4);
+/*
+		Reg#(Bit#(32)) rcnt <- mkReg(0);
+		rule procread;
+			flashReadQ.deq;
+			let d = flashReadQ.first;
+			let tag = tpl_1(d);
+			let data = tpl_2(d);
 
+			if ( rcnt+1 < (8192+32)/16 ) begin
+				rcnt <= rcnt + 1;
+			end else begin
+				rcnt <= 0;
+				m4dma.enq[i].enq(tag);
+			end
+		endrule
+*/
+		
 		rule relayDMAWrite;
 			flashReadQ.deq;
 			let d = flashReadQ.first;
 
 			let tag = tpl_1(d);
 			let data = tpl_2(d);
-			Bit#(3) busid = tag[5:3];
+			Bit#(3) busid = tag[6:4];
 			
 			let curcnt = dmaWriteCnt[busid];
 			if ( curcnt < 8192/16 ) begin
 				dmaWriteQ[busid].enq(tuple2(data,tag));
 				dmaWriteCnt[busid] <= curcnt+1;
 
+				//if ( curcnt[2:0] == 0 ) begin
 				if ( curcnt[2:0] == 3'b111 ) begin
 					Tuple2#(Bit#(8),Bit#(10)) dmaReq;
 					let mergeidx = busid[1:0];
@@ -238,7 +286,7 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 
 				let tag = tpl_1(d);
 				let dmacnt = tpl_2(d);
-				Bit#(3) busid = tag[5:3];
+				Bit#(3) busid = tag[6:4];
 				let mergeidx = busid[1:0];
 
 				dmaSrcBus <= zeroExtend(mergeidx);

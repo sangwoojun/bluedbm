@@ -7,6 +7,7 @@ import Clocks :: *;
 import DefaultValue :: *;
 import Xilinx :: *;
 import XilinxCells :: *;
+import Connectable::*;
 
 import PcieImport :: *;
 import PcieCtrl :: *;
@@ -25,6 +26,11 @@ import FlashCtrlVirtex2::*;
 import AuroraImportFmc1::*;
 import AuroraImportFmc2::*;
 
+import DDR3Sim::*;
+import DDR3Controller::*;
+import DDR3Common::*;
+import DRAMController::*;
+
 //import Platform :: *;
 
 //import NullReset :: *;
@@ -40,6 +46,8 @@ interface TopIfc;
 	interface Aurora_Pins#(4) aurora_fmc1;
 	(* always_ready *)
 	interface Aurora_Pins#(4) aurora_fmc2;
+
+   interface DDR3_Pins_VC707_1GB pins_ddr3;
 endinterface
 
 (* no_default_clock, no_default_reset *)
@@ -74,9 +82,12 @@ module mkProjectTop #(
 	clk_params.clkfbout_mult_f   = 10.000;       // 1000 MHz VCO
 	clk_params.clkout0_divide_f  = 4;          // 250MHz clock
 	clk_params.clkout1_divide    = 8;           // 125MHz clock
+	clk_params.clkout2_divide    = 5;          // 200MHz clock
 	ClockGenerator7 clk_gen <- mkClockGenerator7(clk_params, clocked_by sys_clk_buf, reset_by sys_rst_n_buf);
 	Clock clk250 = clk_gen.clkout0;
 	Reset rst250 <- mkAsyncReset( 4, sys_rst_n_buf, clk250);
+
+	Clock clk200 = clk_gen.clkout2;
 	
 	Clock clk125 = clk_gen.clkout1;
 	Reset rst125 <- mkAsyncReset( 8, sys_rst_n_buf, clk125);
@@ -90,8 +101,26 @@ module mkProjectTop #(
 	Vector#(2,FlashCtrlUser) flashes;
 	flashes[0] = flashCtrl1.user;
 	flashes[1] = flashCtrl2.user;
+   
+////////// DDR3
+	DRAMControllerIfc dramController <- mkDRAMController(clocked_by uclk, reset_by urst);
+	Clock ddr_buf = clk200;
+	Reset ddr3ref_rst_n <- mkAsyncResetFromCR(4, ddr_buf, reset_by urst);
+
+	DDR3_Configure_1G ddr3_cfg = defaultValue;
+	ddr3_cfg.reads_in_flight = 32;   // adjust as needed
+	DDR3_Controller_VC707_1GB ddr3_ctrl <- mkDDR3Controller_VC707_2_1(ddr3_cfg, ddr_buf, clocked_by ddr_buf, reset_by ddr3ref_rst_n);
+
+	Clock ddr3clk = ddr3_ctrl.user.clock;
+	Reset ddr3rstn = ddr3_ctrl.user.reset_n;
+
+	let ddr_cli_200Mhz <- mkDDR3ClientSync(dramController.ddr3_cli, clockOf(dramController), resetOf(dramController), ddr3clk, ddr3rstn, clocked_by uclk, reset_by urst);
+	mkConnection(ddr_cli_200Mhz, ddr3_ctrl.user);
 	
-	HwMainIfc hwmain <- mkHwMain(pcie.ctrl.user, flashes, flashCtrl2.man, clocked_by uclk, reset_by urst);
+
+
+////////////////
+	HwMainIfc hwmain <- mkHwMain(pcie.ctrl.user, flashes, flashCtrl2.man, dramController.user, clocked_by uclk, reset_by urst);
 
 	//ReadOnly#(Bit#(4)) leddata <- mkNullCrossingWire(noClock, pcieCtrl.leds);
 
@@ -99,6 +128,7 @@ module mkProjectTop #(
 	interface PcieImportPins pcie_pins = pcie.pins;
 	interface Aurora_Pins aurora_fmc1 = flashCtrl1.aurora;
 	interface Aurora_Pins aurora_fmc2 = flashCtrl2.aurora;
+	interface DDR3_Pins_VC707_1GB pins_ddr3 = ddr3_ctrl.ddr3;
 
 	method Bit#(4) led;
 		//return leddata;
@@ -115,8 +145,13 @@ module mkProjectTop_bsim (Empty);
 	Vector#(2,FlashCtrlUser) flashes;
 	flashes[0] = flashCtrl1.user;
 	flashes[1] = flashCtrl2.user;
+	
 
-	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, flashes, flashCtrl2.man);
+	DRAMControllerIfc dramController <- mkDRAMController();
+	let ddr3_ctrl_user <- mkDDR3Simulator;
+	mkConnection(dramController.ddr3_cli, ddr3_ctrl_user);
+
+	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, flashes, flashCtrl2.man, dramController.user);
 	rule flushAlwaysEn;
 		flashCtrl1.aurora.rxn_in(1);
 		flashCtrl1.aurora.rxp_in(1);

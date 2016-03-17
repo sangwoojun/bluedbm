@@ -62,6 +62,7 @@ public:
 	static BSBFS* getInstance();
 
 	int createFile(std::string filename);
+	int createFile(File* nf, int fd);
 	int deleteFile(std::string filename);
 	int open(std::string filename);
 	uint64_t fread(int fd, void* ptr, uint64_t size);
@@ -74,6 +75,8 @@ public:
 	int readPage(int fd, uint64_t page, void* buf, uint8_t* stat);
 	int writePage(int fd, uint64_t page, void* buf, uint8_t* stat);
 	
+	void loadConfig();
+	void storeConfig();
 
 private:
 	static BSBFS* m_pInstance;
@@ -84,6 +87,7 @@ private:
 	pthread_t eraserThread;
 	
 	void waitBlockExist(int fd, uint32_t bidx);
+
 public:
 	uint32_t cur_blockeraseidx;
 	std::list<uint32_t> listErased;

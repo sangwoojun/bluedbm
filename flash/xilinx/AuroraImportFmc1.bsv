@@ -86,9 +86,9 @@ module mkAuroraIntra1#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk50) (AuroraIfc
 	endrule
 
 
-	Reg#(Bit#(32)) auroraInitCnt <- mkReg(0, clocked_by aclk, reset_by arst);
+	Reg#(Bit#(64)) auroraInitCnt <- mkReg(0, clocked_by aclk, reset_by arst);
 `ifndef BSIM
-	Integer auroraInitWait = 1024*1024*512;
+	Integer auroraInitWait = 1024*1024*125*16;
 `else
 	Integer auroraInitWait = 512;
 `endif

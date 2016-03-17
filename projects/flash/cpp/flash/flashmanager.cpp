@@ -23,6 +23,79 @@ FlashManager::getInstance() {
 	return m_pInstance;
 }
 
+void procFlashEvent(uint8_t tag, uint8_t code) {
+	BdbmPcie* pcie = BdbmPcie::getInstance();
+	DMASplitter* dma = DMASplitter::getInstance();
+	FlashManager* flash = FlashManager::getInstance();
+	void* dmabuffer = dma->dmaBuffer();
+	uint8_t* bdb = (uint8_t*)dmabuffer;
+	switch ( code ) {
+		case 0: { // read done
+			pthread_mutex_lock(&(flash->flashMutex));
+
+			{
+				flash->tagBusy[tag] = false; 
+				*flash->statusbuffer[tag] = 1;
+				flash->readInFlight --;
+				memcpy(flash->storebuffer[tag], bdb+(1024*8*tag), (1024*8));
+			}
+			timespec now;
+			clock_gettime(CLOCK_REALTIME, & now);
+			double diff = timespec_diff_sec(flash->sentTime[tag], now);
+			//printf( "read done to tag %d > %d %f\n", tag, ++readcnt, diff); 
+			pthread_cond_broadcast(&(flash->flashCond));
+			pthread_mutex_unlock(&(flash->flashMutex));
+		}
+		break;
+		case 1: {
+			printf( "write done to tag %d\n", tag );
+			pthread_mutex_lock(&(flash->flashMutex));
+			flash->tagBusy[tag] = false; 
+			*flash->statusbuffer[tag] = 1;
+			pthread_cond_broadcast(&(flash->flashCond));
+			pthread_mutex_unlock(&(flash->flashMutex));
+		}
+		break;
+		case 2: {
+			printf( "erase done to tag %d\n", tag ); fflush(stdout);
+			pthread_mutex_lock(&(flash->flashMutex));
+			uint8_t* buf = flash->statusbuffer[tag];
+			*buf = FLASHSTAT_ERASE_DONE;
+			flash->tagBusy[tag] = false;
+			pthread_cond_broadcast(&(flash->flashCond));
+			pthread_mutex_unlock(&(flash->flashMutex));
+		}
+		break;
+		case 3: {
+			pthread_mutex_lock(&(flash->flashMutex));
+			uint8_t* buf = flash->statusbuffer[tag];
+			*buf = FLASHSTAT_ERASE_FAIL;
+			printf( "erase failed to tag %d\n", tag ); 
+			flash->tagBusy[tag] = false;
+			pthread_cond_broadcast(&(flash->flashCond));
+			pthread_mutex_unlock(&(flash->flashMutex));
+		}
+		break;
+		case 4: {
+			printf( "ready to write to tag %d\n", tag );
+			fflush(stdout);
+			pthread_mutex_lock(&(flash->flashMutex));
+			uint32_t* buf = (uint32_t*)flash->storebuffer[tag];
+			for ( int i = 0; i < (1024*8)/8; i++ ) {
+				int idx = i*2;
+				dma->sendWord(0, buf[idx], buf[idx+1], 0, 1);
+			}
+			pthread_cond_broadcast(&(flash->flashCond));
+			pthread_mutex_unlock(&(flash->flashMutex));
+			printf( "wrote to tag %d\n", tag );
+		}
+		break;
+		default: {
+			printf( "Uncaught flash event code: %x tag: %x\n", code, tag ); fflush(stdout);
+		}
+	}
+}
+
 void* flashManagerThread(void* arg) {
 	BdbmPcie* pcie = BdbmPcie::getInstance();
 	DMASplitter* dma = DMASplitter::getInstance();
@@ -33,79 +106,19 @@ void* flashManagerThread(void* arg) {
 
 	while (1) {
 		PCIeWord w = dma->recvWord();
-		uint32_t msg = w.d[0];
-		uint32_t tag = msg & 0xffff;
-		uint8_t code = (msg>>16)&0xff;
-		switch ( code ) {
-			case 0: { // read done
-				pthread_mutex_lock(&(flash->flashMutex));
-
-				flash->tagBusy[tag] = false; 
-				*flash->statusbuffer[tag] = 1;
-				//timespec now;
-				//clock_gettime(CLOCK_REALTIME, & now);
-				//double diff = timespec_diff_sec(flash->sentTime[tag], now);
-				printf( "read done to tag %d \n", tag); 
-				memcpy(flash->storebuffer[tag], bdb+(1024*8*tag), (1024*8));
-				pthread_cond_broadcast(&(flash->flashCond));
-				pthread_mutex_unlock(&(flash->flashMutex));
-			}
-			break;
-			case 1: {
-				//printf( "write done to tag %d\n", tag );
-				pthread_mutex_lock(&(flash->flashMutex));
-				flash->tagBusy[tag] = false; 
-				*flash->statusbuffer[tag] = 1;
-				pthread_cond_broadcast(&(flash->flashCond));
-				pthread_mutex_unlock(&(flash->flashMutex));
-			}
-			break;
-			case 2: {
-				//printf( "erase done to tag %d\n", tag ); fflush(stdout);
-				pthread_mutex_lock(&(flash->flashMutex));
-				uint8_t* buf = flash->statusbuffer[tag];
-				*buf = FLASHSTAT_ERASE_DONE;
-				flash->tagBusy[tag] = false;
-				pthread_cond_broadcast(&(flash->flashCond));
-				pthread_mutex_unlock(&(flash->flashMutex));
-			}
-			break;
-			case 3: {
-				pthread_mutex_lock(&(flash->flashMutex));
-				uint8_t* buf = flash->statusbuffer[tag];
-				*buf = FLASHSTAT_ERASE_FAIL;
-				//printf( "erase failed to tag %d\n", tag ); 
-				flash->tagBusy[tag] = false;
-				pthread_cond_broadcast(&(flash->flashCond));
-				pthread_mutex_unlock(&(flash->flashMutex));
-			}
-			break;
-			case 4: {
-				//printf( "ready to write to tag %d\n", tag );
-				pthread_mutex_lock(&(flash->flashMutex));
-				uint32_t* buf = (uint32_t*)flash->storebuffer[tag];
-				for ( int i = 0; i < (1024*8)/8; i++ ) {
-					int idx = i*2;
-					dma->sendWord(0, buf[idx], buf[idx+1], 0, 1);
-				}
-				pthread_cond_broadcast(&(flash->flashCond));
-				pthread_mutex_unlock(&(flash->flashMutex));
-				//printf( "wrote to tag %d\n", tag );
-			}
-			break;
-			case 0xff: {
-				int cmdc = (w.d[1] & 0xffff);
-				int wc = (w.d[1]>>16);
-				int up = (w.d[2]>>16);
-				int budget = (w.d[2]& 0xffff);
-
-				printf( "Flash state: %d %d %d %d\n", up, budget, cmdc, wc );
-				printf( "%x %x %x %x\n", w.d[0], w.d[1], w.d[2], w.d[3] );
-			}
-			break;
-			default: {
-				printf( "Uncaught %x %x %x %x\n", w.d[0], w.d[1], w.d[2], w.d[3] );
-			}
+		for ( int i = 0; i < 4; i++ ) {
+			uint32_t msg1 = w.d[i] & 0xffff;
+			uint32_t msg2 = (w.d[i]>>16) & 0xffff;
+			uint8_t tag1 = (msg1>>8)&0xff;
+			uint8_t tag2 = (msg2>>8)&0xff;
+			uint8_t code1 = (msg1&0xff);
+			uint8_t code2 = (msg2&0xff);
+			if ( code1 != 0xff ) {
+				procFlashEvent(tag1,code1);
+			} else break;
+			if ( code2 != 0xff ) {
+				procFlashEvent(tag2,code2);
+			} else break;
 		}
 	}
 }
@@ -116,6 +129,7 @@ FlashManager::FlashManager() {
 	for ( int i = 0; i < TAG_COUNT; i++ ) {
 		tagBusy[i] = false;
 	}
+	readInFlight = 0;
 	pthread_create(&flashThread, NULL, flashManagerThread, NULL);
 	
 }
@@ -123,7 +137,7 @@ FlashManager::FlashManager() {
 int
 FlashManager::getIdleTag(int bbus) {
 	for ( int i = 0; i < TAG_PERBUS; i++ ) {
-		int idx = (bbus<<3) | i;
+		int idx = (bbus<<4) | i;
 		if ( tagBusy[idx] == false ) {
 			return idx;
 		}
@@ -185,33 +199,33 @@ void FlashManager::readPage(int bus, int chip, int block, int page, void* buffer
 	DMASplitter* dma = DMASplitter::getInstance();
 	BdbmPcie* pcie = BdbmPcie::getInstance();
 	
-	timespec start;
-	clock_gettime(CLOCK_REALTIME, & start);
 
 
 
 	pthread_mutex_lock(&flashMutex);
+	timespec start;
+	clock_gettime(CLOCK_REALTIME, & start);
 
 	int tag = getIdleTag(bus);
-	while (tag < 0 ) {
-		//usleep(50);
+	//while (tag < 0 || readInFlight > 250) { // 250 FIXME
+	while (tag < 0 ) { 
 		pthread_cond_wait(&flashCond, &flashMutex);
 		tag = getIdleTag(bus);
 	}
 	tagBusy[tag] = true;
-	sentTime[tag] = start;
 	this->storebuffer[tag] = buffer;
 	this->statusbuffer[tag] = status;
 
-	pthread_mutex_unlock(&flashMutex);
 
 	
-	//uint32_t blockpagetag = (block<<16) | (page<<8) | tag;
-	//uint32_t buschip = (bus<<8) | chip;
 	uint32_t blockpagechip = (block<<16) | (page<<8) | chip;
 	dma->sendWord(0, 1, blockpagechip, tag, 0);//read
+	readInFlight++;
+	
+	sentTime[tag] = start;
+	pthread_mutex_unlock(&flashMutex);
 
-	printf( "sent read req %d %d %d %d %d\n", tag, bus, chip, block, page ); fflush(stdout);
+	//printf( "sent read req %d %d %d %d %d\n", tag, bus, chip, block, page ); fflush(stdout);
 
 
 }

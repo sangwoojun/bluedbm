@@ -3,8 +3,8 @@
 #ifndef __FLASHMANAGER__H__
 #define __FLASHMANAGER__H__
 
-#define TAG_COUNT 128
-#define TAG_PERBUS 8
+#define TAG_COUNT 256
+#define TAG_PERBUS 16
 
 //Flash page size
 #define FPAGE_SIZE 8192
@@ -46,6 +46,8 @@ public:
 
 	pthread_mutex_t flashMutex;
 	pthread_cond_t flashCond;
+
+	int readInFlight;
 };
 #endif
 

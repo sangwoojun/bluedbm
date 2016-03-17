@@ -18,3 +18,5 @@ set_false_path -from [get_cells -hierarchical -filter {NAME=~*auroraGearbox_send
 set_false_path -from [get_cells -hierarchical -filter {NAME=~*auroraGearbox_sendQ*fifoMem*}] -to [get_cells -hierarchical -filter {NAME=~ *auroraGearbox_sendQ*dDoutReg*}]
 
 #set_false_path -from [get_cells -hierarchical -filter {NAME=~rst125*}]
+set_false_path -from [get_pins -of_objects [get_cells -hier -filter {NAME=~ *rst125/*}] -hier -filter {NAME=~ *C}]
+set_false_path -from [get_pins -of_objects [get_cells -hier -filter {NAME =~ *ddr3_ctrl_user_reset_n/*}] -hier -filter {NAME=~ *C}]

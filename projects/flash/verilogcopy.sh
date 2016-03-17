@@ -14,6 +14,7 @@ VFILES="
 	ClockDiv.v
 	ResetEither.v
 	MakeReset.v
+	MakeReset0.v
 	SyncReset.v
 	SyncReset0.v
 	BRAM2.v

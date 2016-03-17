@@ -2,7 +2,7 @@ BSCFLAGS = -show-schedule -aggressive-conditions --wait-for-license
 
 BSCFLAGS_SYNTH = -bdir ./build/obj -vdir ./build/verilog/top -simdir ./build/obj -info-dir ./build -fdir ./build
 BSCFLAGS_BSIM = -bdir ./bsim/obj -vdir ./bsim/verilog/top -simdir ./bsim/obj -info-dir ./bsim -fdir ./bsim
-BSVPATH =../../bluespecpcie/src/:../../src/lib/:../../flash/src/common/:../../flash/src/model_virtex/:../../flash/src/hw_virtex/:../../flash/aurora_8b10b_fmc1/:../../flash/xilinx/
+BSVPATH =../../bluespecpcie/src/:../../src/lib/:../../flash/src/common/:../../flash/src/model_virtex/:../../flash/src/hw_virtex/:../../flash/aurora_8b10b_fmc1/:../../flash/xilinx/:../../ddr3_v2_0/
 
 BSIM_CPPFILES =../../bluespecpcie/src/PcieBdpi.cpp \
 	../../bluespecpcie/src/ShmFifo.cpp
@@ -41,3 +41,6 @@ core:
 	cd ../../flash/ ; vivado -mode batch -source synth-aurora-intra1.tcl -nolog -nojournal 
 	cd ../../flash/ ; vivado -mode batch -source synth-aurora-intra2.tcl -nolog -nojournal 
 	find ../../flash/ -name "aurora_8b10b_*transceiver_wrapper.v" -exec sed -i "s/_txdiffctrl_in[ \t]\+([4'b10]\+),/_txdiffctrl_in (4'b1011),/g" '{}' \;
+core_ddr3:
+	mkdir -p ../../ddr3_v2_0/core
+	cd ../../ddr3_v2_0/ ; vivado -mode batch -source synth-ip.tcl -nolog -nojournal 

@@ -19,3 +19,5 @@ aurora_8b10b_fmc2/
 
 *.sched
 res.txt
+
+core/

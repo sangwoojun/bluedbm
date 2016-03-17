@@ -10,12 +10,14 @@
 File::File(std::string name) {
 	filename = name;
 	size = 0;
+	seek = 0;
 	blockmap.clear();
 	appendbuffer = (uint8_t*)malloc(FPAGE_SIZE);
 	readbuffer = (uint8_t*)malloc(FPAGE_SIZE);
 }
 void
 File::clear() {
+	seek = 0;
 	blockmap.clear();
 	free(appendbuffer);
 	free(readbuffer);
@@ -33,15 +35,117 @@ BSBFS::getInstance() {
 	return m_pInstance;
 }
 
-BSBFS::BSBFS() {
-	//create eraser thread
 
-	// TODO load?
-	cur_blockeraseidx = 0;
+BSBFS::BSBFS() {
+	loadConfig();
+
 	pthread_mutex_init(&eraseMutex, NULL);
 	pthread_cond_init(&eraseCond, NULL);
 
 	pthread_create(&eraserThread, NULL, blockEraserThread, NULL);
+}
+
+/*
+config format:
+fdcount
+TODO:freelist/map of blocks
+cur_blockeraseidx
+
+[fd,filename]...
+[fd, appendbuffer, size]... <- overwritten when updated
+[fd,blockidx]...
+*/
+void
+BSBFS::loadConfig() {
+	std::string confname = "bsbfs.conf";
+	FILE* conf;
+	conf = fopen(confname.c_str(), "rb");
+
+	cur_blockeraseidx = 0; // load as well
+	if ( conf == NULL ) return;
+		
+	int fdcount = 0;
+	::fread(&fdcount, sizeof(int), 1, conf);
+	::fread(&cur_blockeraseidx, sizeof(int), 1, conf);
+	char filename[128];
+	uint8_t* abuf = (uint8_t*)malloc(8192);
+	for ( int i = 0; i < fdcount; i++ ) {
+		int fd = 0;
+		int abufsize = 0;
+		::fread(&fd, sizeof(int), 1, conf);
+		::fread(&abufsize, sizeof(int), 1, conf);
+		fgets(filename, 128, conf);
+		// create file, read into its appendbuffer
+		File* nf = new File(std::string(filename));
+		createFile(nf, fd);
+		::fread(nf->appendbuffer, sizeof(uint8_t), abufsize, conf);
+		nf->size = abufsize;
+	}
+	
+	while (!::feof(conf)) {
+		int fd;
+		::fread(&fd, sizeof(int), 1, conf);
+		if ( ::feof(conf) ) break;
+		uint32_t blockid;
+		::fread(&blockid, sizeof(uint32_t), 1, conf);
+		files[fd]->blockmap.push_back(blockid);
+		files[fd]->size += FPAGE_SIZE;
+	}
+
+	fclose(conf);
+}
+
+void 
+BSBFS::storeConfig() {
+	std::string confname = "bsbfs.conf";
+	FILE* conf;
+	conf = fopen(confname.c_str(), "wb");
+
+	int fdcount = 0;
+	for ( int i = 0; i < files.size(); i++ ) {
+		if ( files[i] != NULL ) fdcount++;
+	}
+	fwrite(&fdcount, sizeof(int), 1, conf);
+	fwrite(&cur_blockeraseidx, sizeof(int), 1, conf);
+	int fdw = 0;
+	for ( int i = 0; i < files.size(); i++ ) {
+		if ( files[i] == NULL || fdw >= fdcount ) break;
+		fdw++;
+
+		File* nf = files[i];
+
+		::fwrite(&i, sizeof(int), 1, conf);
+		int abufsize = (nf->size)%FPAGE_SIZE;
+		::fwrite(&abufsize, sizeof(int), 1, conf);
+		fputs(nf->filename.c_str(), conf);
+		::fwrite(nf->appendbuffer, sizeof(uint8_t), abufsize,conf);
+	}
+	for ( int i = 0; i < files.size(); i++ ) {
+		if ( files[i] == NULL || fdw >= fdcount ) break;
+		fdw++;
+
+		File* nf = files[i];
+		for ( int j = 0; j < nf->blockmap.size(); j++ ) {
+			::fwrite(&i,sizeof(int), 1, conf);
+			uint32_t bi = nf->blockmap[j];
+			::fwrite(&bi, sizeof(uint32_t), 1, conf);
+		}
+	}
+	fclose(conf);
+}
+
+int 
+BSBFS::createFile(File* nf, int fd) {
+	if ( files.size() <= fd )  {
+		while (files.size() <= fd ) {
+			files.push_back(NULL);
+		}
+		files[fd] = nf;
+	} else {
+		if ( files[fd] != NULL ) return -File::EEXIST;
+		files[fd] = nf;
+	}
+	return fd;
 }
 	
 int 
@@ -414,7 +518,7 @@ BSBFS::fileList() {
 		if ( files[i] == NULL ) continue; 
 		fcount++;
 
-		printf( "%s : %ld\n", files[i]->filename.c_str(), files[i]->size );
+		printf( "%d %s : %ld\n", i, files[i]->filename.c_str(), files[i]->size );
 	}
 	/*
 	File::Stat* stats = (File::Stat*)malloc(sizeof(File::Stat)*fcount);

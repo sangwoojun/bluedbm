@@ -5,7 +5,7 @@ export BDBM_BSIM_PID=$!
 echo "running sw"
 echo $BDBM_BSIM_PID
 sleep 1
-if [ $1 == "gdb" ]
+if [ "$1" == "gdb" ]
 then
 	gdb ./sw 
 else

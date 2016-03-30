@@ -29,20 +29,24 @@ void procFlashEvent(uint8_t tag, uint8_t code) {
 	FlashManager* flash = FlashManager::getInstance();
 	void* dmabuffer = dma->dmaBuffer();
 	uint8_t* bdb = (uint8_t*)dmabuffer;
+	//FIXME
+	int readcnt = 0;
 	switch ( code ) {
 		case 0: { // read done
 			pthread_mutex_lock(&(flash->flashMutex));
 
-			{
-				flash->tagBusy[tag] = false; 
-				*flash->statusbuffer[tag] = 1;
-				flash->readInFlight --;
-				memcpy(flash->storebuffer[tag], bdb+(1024*8*tag), (1024*8));
-			}
+			flash->tagBusy[tag] = false; 
+			*flash->statusbuffer[tag] = 1;
+
+			memcpy(flash->storebuffer[tag], bdb+(1024*8*flash->readCount), (1024*8));
+			flash->readCount++;
+			if ( flash->readCount >= 256 ) flash->readCount = 0;
+
+
 			timespec now;
 			clock_gettime(CLOCK_REALTIME, & now);
 			double diff = timespec_diff_sec(flash->sentTime[tag], now);
-			//printf( "read done to tag %d > %d %f\n", tag, ++readcnt, diff); 
+			printf( "read done to tag %d > %d %f\n", tag, ++readcnt, diff); 
 			pthread_cond_broadcast(&(flash->flashCond));
 			pthread_mutex_unlock(&(flash->flashMutex));
 		}
@@ -106,6 +110,7 @@ void* flashManagerThread(void* arg) {
 
 	while (1) {
 		PCIeWord w = dma->recvWord();
+		int rcount = 0;
 		for ( int i = 0; i < 4; i++ ) {
 			uint32_t msg1 = w.d[i] & 0xffff;
 			uint32_t msg2 = (w.d[i]>>16) & 0xffff;
@@ -115,11 +120,15 @@ void* flashManagerThread(void* arg) {
 			uint8_t code2 = (msg2&0xff);
 			if ( code1 != 0xff ) {
 				procFlashEvent(tag1,code1);
+				rcount++;
 			} else break;
 			if ( code2 != 0xff ) {
 				procFlashEvent(tag2,code2);
+				rcount++;
 			} else break;
 		}
+		//if ( rcount > 2 )
+		//printf( "rcount= %d\n", rcount );
 	}
 }
 
@@ -129,7 +138,8 @@ FlashManager::FlashManager() {
 	for ( int i = 0; i < TAG_COUNT; i++ ) {
 		tagBusy[i] = false;
 	}
-	readInFlight = 0;
+	readCount = 0;
+
 	pthread_create(&flashThread, NULL, flashManagerThread, NULL);
 	
 }
@@ -194,7 +204,11 @@ void FlashManager::writePage(int bus, int chip, int block, int page, void* buffe
 	pthread_mutex_unlock(&flashMutex);
 	//printf( "Write command sent to %d: %d %d %d %d\n", tag, bus,chip,block,page ); fflush(stdout);
 }
+
 void FlashManager::readPage(int bus, int chip, int block, int page, void* buffer, uint8_t* status) {
+	this->readPage(bus,chip,block,page,buffer,0,status);
+}
+void FlashManager::readPage(int bus, int chip, int block, int page, void* buffer, int target, uint8_t* status) {
 	
 	DMASplitter* dma = DMASplitter::getInstance();
 	BdbmPcie* pcie = BdbmPcie::getInstance();
@@ -207,7 +221,6 @@ void FlashManager::readPage(int bus, int chip, int block, int page, void* buffer
 	clock_gettime(CLOCK_REALTIME, & start);
 
 	int tag = getIdleTag(bus);
-	//while (tag < 0 || readInFlight > 250) { // 250 FIXME
 	while (tag < 0 ) { 
 		pthread_cond_wait(&flashCond, &flashMutex);
 		tag = getIdleTag(bus);
@@ -219,8 +232,8 @@ void FlashManager::readPage(int bus, int chip, int block, int page, void* buffer
 
 	
 	uint32_t blockpagechip = (block<<16) | (page<<8) | chip;
-	dma->sendWord(0, 1, blockpagechip, tag, 0);//read
-	readInFlight++;
+	uint32_t desttag = (target<<16) | tag;
+	dma->sendWord(0, 1, blockpagechip, desttag, 0);//read
 	
 	sentTime[tag] = start;
 	pthread_mutex_unlock(&flashMutex);

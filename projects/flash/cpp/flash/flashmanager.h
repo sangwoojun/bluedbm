@@ -25,6 +25,7 @@ public:
 void eraseBlock(int bus, int chip, int block, uint8_t* status);
 void writePage(int bus, int chip, int block, int page, void* buffer, uint8_t* status);
 void readPage(int bus, int chip, int block, int page, void* buffer, uint8_t* status);
+void readPage(int bus, int chip, int block, int page, void* buffer, int target, uint8_t* status);
 
 	static FlashManager* getInstance();
 
@@ -47,7 +48,7 @@ public:
 	pthread_mutex_t flashMutex;
 	pthread_cond_t flashCond;
 
-	int readInFlight;
+	int readCount;
 };
 #endif
 

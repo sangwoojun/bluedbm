@@ -60,12 +60,14 @@ public:
 class BSBFS {
 public:
 	static BSBFS* getInstance();
+	void startEraser();
 
 	int createFile(std::string filename);
 	int createFile(File* nf, int fd);
 	int deleteFile(std::string filename);
 	int open(std::string filename);
 	uint64_t fread(int fd, void* ptr, uint64_t size);
+	uint32_t pread(int fd, void* ptr, uint32_t count, int target, bool blocking);
 	int fseek(int fd, uint64_t offset, int whence);
 	int feof(int fd);
 	uint64_t ftell(int fd);
@@ -73,6 +75,7 @@ public:
 	void fileList();
 
 	int readPage(int fd, uint64_t page, void* buf, uint8_t* stat);
+	int readPage(int fd, uint64_t page, void* buf, int target, uint8_t* stat);
 	int writePage(int fd, uint64_t page, void* buf, uint8_t* stat);
 	
 	void loadConfig();
@@ -82,17 +85,22 @@ private:
 	static BSBFS* m_pInstance;
 	BSBFS();
 
-	std::vector<File*> files;
 
 	pthread_t eraserThread;
 	
 	void waitBlockExist(int fd, uint32_t bidx);
 
+	uint8_t statusdump;
+
 public:
+	std::vector<File*> files;
+
 	uint32_t cur_blockeraseidx;
 	std::list<uint32_t> listErased;
 	pthread_mutex_t eraseMutex;
 	pthread_cond_t eraseCond;
+	
+	bool eraserStarted;
 
 static void pageMap(uint64_t page, PhysPage& np);
 static uint32_t blockIdx(uint64_t page);

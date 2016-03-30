@@ -21,41 +21,48 @@ int main() {
 	printf( "All Init Done\n" );
 	fflush(stdout);
 
-//#ifdef BLUESIM
-//	BSBFS* fs = BSBFS::getInstance();
-//	
-//	uint32_t* testBuf = (uint32_t*)malloc(8192);
-//	for ( int i = 0; i < 8192/4; i++ ) {
-//		testBuf[i] = i;
-//	}
-//
-//	fs->createFile("testfile1.txt");
-//	fs->createFile("testfile2.txt");
-//	int fd = fs->open("testfile1.txt");
-//	int fd2 = fs->open("testfile2.txt");
-//	printf( "%d %d\n", fd, fd2 );
-//	testBuf[0] = 0;
-//	//fs->fappend(fd2, testBuf, 128);
-//	fs->fappend(fd2, testBuf, 8192);
-//	for ( int i = 0; i < 64; i++ ) {
-//		testBuf[0] = i;
-//		//printf( "%d--\n", i ); fflush(stdout);
-//		fs->fappend(fd2, testBuf, 8192);
-//
-//		//if ( i % 100 == 0 ) fs->fileList();
-//	}
-//	fs->fileList();
-//	fflush(stdout);
-//	uint32_t* pageBufferR = (uint32_t*)malloc(8192*2);
-//	//uint64_t read = fs->fread(fd2, pageBufferR, 128);
-//	//printf("----%d\n", pageBufferR[0]);
-//	while ( !fs->feof(fd2) ) {
-//		uint64_t read = fs->fread(fd2, pageBufferR, 8192*2);
-//		printf("----%d\n", pageBufferR[0]);
-//	}
-//
-//	exit(0);
-//#endif
+	BSBFS* fs = BSBFS::getInstance();
+	//fs->startEraser();
+	fs->fileList();
+	
+	uint32_t* testBuf = (uint32_t*)malloc(8192);
+	for ( int i = 0; i < 8192/4; i++ ) {
+		testBuf[i] = i;
+	}
+
+	fs->createFile("testfile1.txt");
+	fs->createFile("testfile2.txt");
+	int fd = fs->open("testfile1.txt");
+	int fd2 = fs->open("testfile2.txt");
+	printf( "%d %d\n", fd, fd2 );
+
+	for ( int i = 0; i < 64; i++ ) {
+		for ( int j = 0; j < 8192/4;j++ ) {
+			testBuf[j] = i;
+		}
+		testBuf[0] = 0xdeadbeef;
+		testBuf[8192/4-1] = 0xf00dd00d;
+
+		//printf( "%d--\n", i ); fflush(stdout);
+		fs->fappend(fd2, testBuf, 8192);
+
+		//if ( i % 100 == 0 ) fs->fileList();
+	}
+	fs->storeConfig();
+	fs->fileList();
+
+	fflush(stdout);
+	uint32_t* pageBufferR = (uint32_t*)malloc(8192*2);
+	//uint64_t read = fs->fread(fd2, pageBufferR, 128);
+	//printf("----%d\n", pageBufferR[0]);
+	while ( !fs->feof(fd2) ) {
+		uint64_t read = fs->pread(fd2, pageBufferR, 1,0,true);
+		for ( int i = 0; i < 16;i++ ) {
+			printf("----%x\n", pageBufferR[i]);
+		}
+	}
+	exit(0);
+
 
 	uint32_t* pageBufferR0 = (uint32_t*)malloc(8192+32);
 /*
@@ -138,7 +145,7 @@ int main() {
 			printf( "sending req %d\n", i ); fflush(stdout);
 		}
 		//if ( bus == 1 && chip == 1 && block == 1 && page == 0 ) {
-			flash->readPage(bus,chip,block,page, pageBufferR0, &stat);
+			flash->readPage(bus,chip,block,page, pageBufferR0, 0, &stat);
 		//} else {
 		//	flash->readPage(bus,chip,block,page, pageBufferR, &stat);
 		//}
@@ -146,7 +153,11 @@ int main() {
 	clock_gettime(CLOCK_REALTIME, & now);
 	printf( "Elapsed: %f\n", timespec_diff_sec(start, now) );
 
-	for ( int i = 0; i < 8; i++ ) {
+	sleep(1);
+	for ( int i = 0; i < TAG_COUNT; i++ ) {
+		if ( flash->tagBusy[i] ) printf( "tag %d still busy!!\n", i );
+	}
+	for ( int i = 0; i < 3; i++ ) {
 		sleep(1);
 		fflush(stdout);
 	}

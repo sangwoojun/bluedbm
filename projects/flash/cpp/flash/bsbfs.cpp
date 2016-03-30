@@ -37,12 +37,35 @@ BSBFS::getInstance() {
 
 
 BSBFS::BSBFS() {
+	eraserStarted = false;
+
+#ifndef BLUESIM
 	loadConfig();
+#endif
 
 	pthread_mutex_init(&eraseMutex, NULL);
 	pthread_cond_init(&eraseCond, NULL);
 
 	pthread_create(&eraserThread, NULL, blockEraserThread, NULL);
+}
+	
+void 
+BSBFS::startEraser() {
+	eraserStarted = true;
+}
+
+std::string strtrim(std::string const& str)
+{
+	if(str.empty())
+		return str;
+
+	std::size_t firstScan = str.find_first_not_of(' ');
+	std::size_t first     = firstScan == std::string::npos ? str.length() : firstScan;
+	std::size_t last      = str.find_last_not_of(' ');
+	std::size_t last2      = str.find_last_not_of('\n');
+	if ( last2 < last ) last = last2;
+
+	return str.substr(first, last-first+1);
 }
 
 /*
@@ -67,19 +90,22 @@ BSBFS::loadConfig() {
 	int fdcount = 0;
 	::fread(&fdcount, sizeof(int), 1, conf);
 	::fread(&cur_blockeraseidx, sizeof(int), 1, conf);
-	char filename[128];
-	uint8_t* abuf = (uint8_t*)malloc(8192);
 	for ( int i = 0; i < fdcount; i++ ) {
+		char filename[128];
 		int fd = 0;
 		int abufsize = 0;
 		::fread(&fd, sizeof(int), 1, conf);
 		::fread(&abufsize, sizeof(int), 1, conf);
+		fflush(stdout);
 		fgets(filename, 128, conf);
 		// create file, read into its appendbuffer
-		File* nf = new File(std::string(filename));
+		File* nf = new File(strtrim(std::string(filename)));
 		createFile(nf, fd);
 		::fread(nf->appendbuffer, sizeof(uint8_t), abufsize, conf);
 		nf->size = abufsize;
+		
+		printf( "Loaded file %s\n", filename );
+		fflush(stdout);
 	}
 	
 	while (!::feof(conf)) {
@@ -108,8 +134,11 @@ BSBFS::storeConfig() {
 	fwrite(&fdcount, sizeof(int), 1, conf);
 	fwrite(&cur_blockeraseidx, sizeof(int), 1, conf);
 	int fdw = 0;
+	uint8_t nc = '\n';
+	
 	for ( int i = 0; i < files.size(); i++ ) {
-		if ( files[i] == NULL || fdw >= fdcount ) break;
+		if ( files[i] == NULL ) continue;
+		if ( fdw >= fdcount ) break;
 		fdw++;
 
 		File* nf = files[i];
@@ -118,8 +147,12 @@ BSBFS::storeConfig() {
 		int abufsize = (nf->size)%FPAGE_SIZE;
 		::fwrite(&abufsize, sizeof(int), 1, conf);
 		fputs(nf->filename.c_str(), conf);
+		::fwrite(&nc, sizeof(uint8_t), 1, conf);
+
 		::fwrite(nf->appendbuffer, sizeof(uint8_t), abufsize,conf);
+		printf( "storing file %s\n", nf->filename.c_str() );
 	}
+	fdw = 0;
 	for ( int i = 0; i < files.size(); i++ ) {
 		if ( files[i] == NULL || fdw >= fdcount ) break;
 		fdw++;
@@ -296,6 +329,11 @@ BSBFS::feof(int fd) {
 
 int
 BSBFS::readPage(int fd, uint64_t page, void* buf, uint8_t* stat) {
+	return this->readPage(fd, page, buf, 0, stat);
+}
+
+int
+BSBFS::readPage(int fd, uint64_t page, void* buf, int target, uint8_t* stat) {
 	FlashManager* flash = FlashManager::getInstance();
 	
 	File* nf = files[fd];
@@ -311,7 +349,7 @@ BSBFS::readPage(int fd, uint64_t page, void* buf, uint8_t* stat) {
 	BSBFS::pageMap(page, mapped);
 
 	*stat = 0;
-	flash->readPage(bus,chip,block,mapped.page, buf, stat);
+	flash->readPage(bus,chip,block,mapped.page, buf, target, stat);
 }
 
 int
@@ -419,6 +457,61 @@ BSBFS::fread(int fd, void* buffer, uint64_t size) {
 
 	return tread;
 }
+uint32_t
+BSBFS::pread(int fd, void* ptr, uint32_t count, int target, bool blocking) {
+	FlashManager* flash = FlashManager::getInstance();
+	
+	File* nf = files[fd];
+	if ( nf == NULL ) return -1;
+	
+	uint8_t* buf = (uint8_t*)ptr;
+
+	if (feof(fd)) return 0;
+
+	uint64_t sizeoff = ((nf->size)>>13);
+	uint64_t spoff = ((nf->seek)>>13);
+	if ( spoff > sizeoff ) return 0;
+	
+	
+	uint8_t* statusbuffer = NULL;
+	
+	if ( blocking ) {
+		statusbuffer = (uint8_t*)malloc(count);
+	}
+	uint32_t rcount = 0;
+	
+	for ( uint64_t i = 0; i < count; i++ ) {
+		uint64_t idx = i + spoff;
+	
+		if ( idx > sizeoff ) break;
+		
+		if ( blocking ) {
+			this->readPage(fd, idx, buf, target, &statusbuffer[rcount]);
+		} else {
+			this->readPage(fd, idx, buf, target, &this->statusdump);
+		}
+		nf->seek += FPAGE_SIZE;
+		buf += FPAGE_SIZE;
+		rcount++;
+	}
+	
+	
+	
+	if ( blocking ) {
+		//wait until reads are done
+		bool alldone = false;
+		while ( alldone == false ) {
+			alldone = true;
+			for ( int i = 0; i < rcount; i++ ) {
+				if ( statusbuffer[i] != 1 ) alldone = false;
+			}
+			if ( alldone == false ) usleep(50);
+		}
+		free(statusbuffer);
+	}
+
+	return rcount;
+}
 
 void 
 BSBFS::waitBlockExist(int fd, uint32_t bidx) {
@@ -440,8 +533,11 @@ BSBFS::waitBlockExist(int fd, uint32_t bidx) {
 
 uint64_t 
 BSBFS::fappend(int fd, void* buffer, uint64_t size) {
+	this->startEraser();
+
 	FlashManager* flash = FlashManager::getInstance();
 	int tsize = size;
+	
 
 	File* nf = files[fd];
 	if ( nf == NULL ) return -1;
@@ -518,7 +614,7 @@ BSBFS::fileList() {
 		if ( files[i] == NULL ) continue; 
 		fcount++;
 
-		printf( "%d %s : %ld\n", i, files[i]->filename.c_str(), files[i]->size );
+		printf( "%d %s : %ld (%ld)\n", i, files[i]->filename.c_str(), files[i]->size,files[i]->blockmap.size() );
 	}
 	/*
 	File::Stat* stats = (File::Stat*)malloc(sizeof(File::Stat)*fcount);
@@ -533,9 +629,13 @@ void* blockEraserThread(void* arg) {
 	BSBFS* fs = BSBFS::getInstance();
 	FlashManager* flash = FlashManager::getInstance();
 
+
 	uint8_t erase_reqstate[BSBFS_ERASE_INFLIGHT];
 	uint32_t erase_reqaddr[BSBFS_ERASE_INFLIGHT];
 	int erase_inflight = 0;
+
+	while(!fs->eraserStarted);
+
 	while (1) {
 		pthread_mutex_lock(&fs->eraseMutex);
 		size_t les = fs->listErased.size();

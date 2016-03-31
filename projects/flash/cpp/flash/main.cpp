@@ -30,37 +30,79 @@ int main() {
 		testBuf[i] = i;
 	}
 
+//#ifdef BLUESIM
+	fs->createFile("mat.test");
 	fs->createFile("testfile1.txt");
 	fs->createFile("testfile2.txt");
+//#endif
+	int fdm = fs->open("mat.test");
 	int fd = fs->open("testfile1.txt");
 	int fd2 = fs->open("testfile2.txt");
-	printf( "%d %d\n", fd, fd2 );
+
+//#ifdef BLUESIM
+	FILE* fsparse = fopen("mat.test", "rb");
+	if ( fsparse == NULL ) {
+		fprintf(stderr, "file not found!\n");
+	} else {
+		uint32_t* frb = (uint32_t*)calloc(64,8192);
+		while (!feof(fsparse) ) {
+			int count = fread(frb,8192, 64, fsparse);
+			if ( count > 0 ) {
+				fs->fappend(fdm, frb, 8192*count);
+				printf( "appending %d pages (%ld)\n", count, fs->files[fdm]->size );
+			}
+		}
+		free(frb);
+	}
 
 	for ( int i = 0; i < 64; i++ ) {
 		for ( int j = 0; j < 8192/4;j++ ) {
-			testBuf[j] = i;
+			testBuf[j] = i+j;
 		}
 		testBuf[0] = 0xdeadbeef;
 		testBuf[8192/4-1] = 0xf00dd00d;
 
 		//printf( "%d--\n", i ); fflush(stdout);
-		fs->fappend(fd2, testBuf, 8192);
+		fs->fappend(fd, testBuf, 8192);
 
 		//if ( i % 100 == 0 ) fs->fileList();
 	}
+
 	fs->storeConfig();
+//#endif
+
 	fs->fileList();
+	int fdm2 = fs->open("mat.test");
+
+	FILE* fread = fopen("fread.dat", "wb");
 
 	fflush(stdout);
 	uint32_t* pageBufferR = (uint32_t*)malloc(8192*2);
 	//uint64_t read = fs->fread(fd2, pageBufferR, 128);
 	//printf("----%d\n", pageBufferR[0]);
-	while ( !fs->feof(fd2) ) {
-		uint64_t read = fs->pread(fd2, pageBufferR, 1,0,true);
+	while ( !fs->feof(fdm2) ) {
+		uint64_t read = fs->pread(fdm2, pageBufferR, 1,0,true);
+		//uint64_t read = fs->pread(fdm2, pageBufferR, 1,1,true);
+		fwrite(pageBufferR, FPAGE_SIZE, 1, fread);
+		/*
 		for ( int i = 0; i < 16;i++ ) {
 			printf("----%x\n", pageBufferR[i]);
 		}
+		*/
 	}
+	fclose(fread);
+	FILE* fread1 = fopen("fread1.dat", "wb");
+	while ( !fs->feof(fd) ) {
+		uint64_t read = fs->pread(fd, pageBufferR, 1,0,true);
+		//uint64_t read = fs->pread(fdm2, pageBufferR, 1,1,true);
+		fwrite(pageBufferR, FPAGE_SIZE, 1, fread1);
+		/*
+		for ( int i = 0; i < 16;i++ ) {
+			printf("----%x\n", pageBufferR[i]);
+		}
+		*/
+	}
+	fclose(fread1);
 	exit(0);
 
 
@@ -76,21 +118,6 @@ int main() {
 	}
 	*/
 
-/*
-	FILE* fsparse = fopen("cpp/datagen/obj/sparse.dat", "rb");
-	if ( fsparse == NULL ) {
-		fprintf(stderr, "file not found!\n");
-	}
-	uint32_t* frb = (uint32_t*)calloc(32,8192);
-	while (!feof(fsparse) ) {
-		int count = fread(frb,8192, 32, fsparse);
-		if ( count > 0 ) {
-			printf( "appending %d pages\n", count );
-			fs->fappend(fd, frb, 8192*count);
-		}
-	}
-	free(frb);
-*/
 
 
 /*

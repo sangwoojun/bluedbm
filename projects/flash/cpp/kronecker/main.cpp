@@ -67,20 +67,21 @@ void edge_sort(uint64_t* rbuf, int count) {
 */
 uint64_t totalrcount = 0;
 uint64_t woff = 0;
-uint64_t lastcidx = 0;
 uint64_t lastpoff = -1;
-void write_ind(int scale) {
+void write_ind(int scale, uint64_t cidx) {
 	if ( woff % 8192 == 0 ) {
 		//printf( "cidx %ld is aligned\n", cidx );
 		uint64_t poff = (woff>>13);
 		if ( poff > lastpoff + scale*4 ) { // scale*4 is arbitrary
 			fwrite(&poff, sizeof(uint64_t), 1, ifile);
+			fwrite(&cidx, sizeof(uint64_t), 1, ifile);
 			lastpoff = poff;
 		}
 	}
 }
-void write_row(uint64_t* rbuf, uint64_t cidx, int count) {
-	uint64_t last = -1;
+void write_row(uint64_t* rbuf, uint64_t cidx, int count, int scale) {
+	write_ind(scale, cidx);
+	uint64_t last = 0;
 	for ( int i = 0; i < count; i++ ) {
 		if ( rbuf[i] != last ) {
 			//printf( "%lx, %lx\n", cidx, rbuf[i] );
@@ -164,8 +165,7 @@ int main(int argc, char** argv) {
 			rbuf[i] = rv;
 		}
 		edge_sort(rbuf, rcount);
-		write_ind(scale);
-		write_row(rbuf, cidx, rcount);
+		write_row(rbuf, cidx, rcount, scale);
 
 	}
 	printf( "Done!\n" );

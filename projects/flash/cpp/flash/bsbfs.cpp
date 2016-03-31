@@ -95,6 +95,8 @@ BSBFS::loadConfig() {
 		int fd = 0;
 		int abufsize = 0;
 		::fread(&fd, sizeof(int), 1, conf);
+		uint64_t fsize = 0;
+		::fread(&fsize, sizeof(uint64_t), 1, conf);
 		::fread(&abufsize, sizeof(int), 1, conf);
 		fflush(stdout);
 		fgets(filename, 128, conf);
@@ -102,7 +104,8 @@ BSBFS::loadConfig() {
 		File* nf = new File(strtrim(std::string(filename)));
 		createFile(nf, fd);
 		::fread(nf->appendbuffer, sizeof(uint8_t), abufsize, conf);
-		nf->size = abufsize;
+		//nf->size = abufsize;
+		nf->size = fsize;
 		
 		printf( "Loaded file %s\n", filename );
 		fflush(stdout);
@@ -115,7 +118,7 @@ BSBFS::loadConfig() {
 		uint32_t blockid;
 		::fread(&blockid, sizeof(uint32_t), 1, conf);
 		files[fd]->blockmap.push_back(blockid);
-		files[fd]->size += FPAGE_SIZE;
+		//files[fd]->size += FPAGE_SIZE;
 	}
 
 	fclose(conf);
@@ -144,6 +147,7 @@ BSBFS::storeConfig() {
 		File* nf = files[i];
 
 		::fwrite(&i, sizeof(int), 1, conf);
+		::fwrite(&nf->size, sizeof(uint64_t), 1, conf);
 		int abufsize = (nf->size)%FPAGE_SIZE;
 		::fwrite(&abufsize, sizeof(int), 1, conf);
 		fputs(nf->filename.c_str(), conf);
@@ -154,7 +158,8 @@ BSBFS::storeConfig() {
 	}
 	fdw = 0;
 	for ( int i = 0; i < files.size(); i++ ) {
-		if ( files[i] == NULL || fdw >= fdcount ) break;
+		if ( files[i] == NULL ) continue;
+		if ( fdw >= fdcount ) break;
 		fdw++;
 
 		File* nf = files[i];

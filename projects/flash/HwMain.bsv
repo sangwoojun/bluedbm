@@ -9,6 +9,7 @@ import BRAMFIFO::*;
 import MergeN::*;
 import TagDestReorder::*;
 import PageFIFO::*;
+import SparseCore::*;
 
 import PcieCtrl::*;
 
@@ -26,7 +27,7 @@ import DRAMController::*;
 typedef 8 BusCount; // 8 per card in hw, 2 per card in sim
 typedef TMul#(2,BusCount) BBusCount; //Board*bus
 //typedef 64 TagCount; // Has to be larger than the software setting
-typedef 2 DMAEngineCount;
+typedef 4 DMAEngineCount;
 typedef 4 DestCount;
 
 interface HwMainIfc;
@@ -81,11 +82,17 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 	*/
 
 	FIFO#(Bit#(128)) dmainQ <- mkFIFO;
+	FIFO#(Bit#(128)) flashWriteInQ <- mkFIFO;
 	rule getFlashCmd;
 		dma.deq;
 		started <= True;
 		Bit#(128) d = dma.first;
-		dmainQ.enq(d);
+		Bit#(32) h = dma.header;
+		if ( h == 0 ) begin
+			dmainQ.enq(d);
+		end if ( h == 1 ) begin
+			flashWriteInQ.enq(d);
+		end
 	endrule
 
 	FIFO#(Tuple2#(Bit#(128), Bit#(8))) flashWriteQ <- mkFIFO;
@@ -112,6 +119,18 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 			end
 		end
 	endrule
+	rule flashWriteIn;
+		let d = flashWriteInQ.first;
+		flashWriteInQ.deq;
+
+		flashWriteQ.enq(tuple2(d, truncate(writeTagsQ.first)));
+		if ( flashWriteBytes + 16 >= 8192 ) begin
+			writeTagsQ.deq;
+			flashWriteBytes <= 0;
+		end else begin
+			flashWriteBytes <= flashWriteBytes + 16;
+		end
+	endrule
 	
 	Reg#(Bit#(256)) readReqTagEpoch <- mkReg(0);
 	Reg#(Bit#(256)) readDoneTagEpoch <- mkReg(0);
@@ -125,55 +144,42 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 		dmainQ.deq;
 
 		let conf = d[127:96];
-		if ( conf == 0 ) begin
-			let opcode = d[31:0];
+		//if ( conf == 0 ) begin
+		let opcode = d[31:0];
 
-			let cur_blockpagechip = d[63:32];
-			let cur_bustag = d[95:64];
-			Bit#(1) board = cur_bustag[7];
-			Bit#(3) bus = truncate(cur_bustag>>4);
-			Bit#(4) bbus = truncate(cur_bustag>>4);
-			Bit#(8) tag = truncate(cur_bustag);
-			Bit#(8) dest = truncate(cur_bustag>>16);
+		let cur_blockpagechip = d[63:32];
+		let cur_bustag = d[95:64];
+		Bit#(1) board = cur_bustag[7];
+		Bit#(3) bus = truncate(cur_bustag>>4);
+		Bit#(4) bbus = truncate(cur_bustag>>4);
+		Bit#(8) tag = truncate(cur_bustag);
+		Bit#(8) dest = truncate(cur_bustag>>16);
 
-			let cur_flashop = ERASE_BLOCK;
-			if ( opcode == 0 ) cur_flashop = ERASE_BLOCK;
-			else if ( opcode == 1 ) begin
-				cur_flashop = READ_PAGE;
-				tdreorder.tagDestReq(tag,dest);
-			end
-			else if ( opcode == 2 ) begin
-				cur_flashop = WRITE_PAGE;
-			end
-
-			if ( opcode <= 2 ) begin
-				//$display( "cmd recv %d", opcode );	
-				flashman.command(FlashManagerCmd{
-					op:cur_flashop,
-					tag:tag,
-					bus: bbus,
-					chip: truncate(cur_blockpagechip),
-					block:truncate(cur_blockpagechip>>16),
-					page:truncate(cur_blockpagechip>>8)
-					});
-			end
-		end else if ( conf == 1 ) begin
-			Bit#(64) data = truncate(d);
-			if ( isValid(flashWriteBuf) ) begin
-				let d2 = fromMaybe(?, flashWriteBuf);
-				flashWriteQ.enq(tuple2({data, d2}, truncate(writeTagsQ.first)));
-				if ( flashWriteBytes + 16 >= 8192 ) begin
-					writeTagsQ.deq;
-					flashWriteBytes <= 0;
-				end else begin
-					flashWriteBytes <= flashWriteBytes + 16;
-				end
-
-				flashWriteBuf <= tagged Invalid;
-			end else begin
-				flashWriteBuf <= tagged Valid data;
-			end
+		let cur_flashop = ERASE_BLOCK;
+		if ( opcode == 0 ) cur_flashop = ERASE_BLOCK;
+		else if ( opcode == 1 ) begin
+			cur_flashop = READ_PAGE;
+			tdreorder.tagDestReq(tag,dest);
 		end
+		else if ( opcode == 2 ) begin
+			cur_flashop = WRITE_PAGE;
+		end
+
+		if ( opcode <= 2 ) begin
+			//$display( "cmd recv %d", opcode );	
+			flashman.command(FlashManagerCmd{
+				op:cur_flashop,
+				tag:tag,
+				bus: bbus,
+				chip: truncate(cur_blockpagechip),
+				block:truncate(cur_blockpagechip>>16),
+				page:truncate(cur_blockpagechip>>8)
+				});
+		end
+/*
+		end else if ( conf == 1 ) begin
+		end
+*/
 	endrule
 
 	Merge2Ifc#(Bit#(16)) mFlashEvent <- mkMerge2;
@@ -336,6 +342,7 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 	*/
 
 	Vector#(DestCount, PageFIFOIfc) pfifov;
+	Vector#(DestCount, FIFO#(Bit#(8))) dtagfifov <- replicateM(mkSizedFIFO(16));
 	MergeNIfc#(DestCount,Bit#(8)) mpreq <- mkMergeN;
 	for ( Integer i = 0; i < destCount; i=i+1 ) begin
 		pfifov[i] <- mkPageFIFO(1);
@@ -369,12 +376,15 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 	endrule
 
 	FIFO#(Bit#(8)) dataWordDestQ <- mkSizedFIFO(64);
+	FIFO#(Bit#(8)) dataWordTagQ <- mkSizedFIFO(64);
+	
 	rule readOrdDRAMReq( orderedReadCount > 0 );
 		Bit#(64) addr = (zeroExtend(orderedReadReadyTag)<<13|zeroExtend(readByteOff));
 		dram.readReq(addr, 64);
 		orderedReadCount <= orderedReadCount - 1;
 		readByteOff <= readByteOff + 64;
 		dataWordDestQ.enq(readDest);
+		dataWordTagQ.enq(orderedReadReadyTag);
 		if ( orderedReadCount == 1 ) begin
 			m4dma.enq[0].enq(orderedReadReadyTag);
 			$display( "Done reading %d", orderedReadReadyTag );
@@ -390,16 +400,19 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 	rule relayDRAMData;
 		dramReadQ.deq;
 		dataWordDestQ.deq;
+		dataWordTagQ.deq;
 		let d = dramReadQ.first;
 		let dst = dataWordDestQ.first;
+		let tag = dataWordTagQ.first;
 		pfifov[dst].enq(d);
-		//if ( dst == 0 ) begin
-		//	hostDestQ.enq(d);
-		//end
+		dtagfifov[dst].enq(tag);
 	endrule
 
+	SparseCoreIfc sc <- mkSparseCore;
 	rule flushdst1;
 		pfifov[1].deq;
+		dtagfifov[1].deq;
+		sc.dataIn(pfifov[1].first);
 	endrule
 	Reg#(Bit#(16)) flush2cnt <- mkReg(0);
 	rule flushdst2;
@@ -407,19 +420,22 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 
 		if ( flush2cnt[6:0] == 0 ) begin
 			pfifov[2].deq;
+			dtagfifov[2].deq;
 		end
 	endrule
 
 	Reg#(Bit#(4)) splitCounter <- mkReg(0);
 	Reg#(Bit#(4)) dmaEngineDest <- mkReg(0);
 	Vector#(DMAEngineCount, FIFO#(Bit#(512))) dmaSplitQ <- replicateM(mkFIFO);
+	Vector#(DMAEngineCount, FIFO#(Bit#(8))) dmaSplitTagQ <- replicateM(mkFIFO);
 	rule relayHostDest;
-		//hostDestQ.deq;
-		//let d = hostDestQ.first;
 		pfifov[0].deq;
+		dtagfifov[0].deq;
 		let d = pfifov[0].first;
+		let t = dtagfifov[0].first;
 
 		dmaSplitQ[dmaEngineDest].enq(d);
+		dmaSplitTagQ[dmaEngineDest].enq(t);
 
 		if ( splitCounter >= 1 ) begin
 			splitCounter <= 0;
@@ -434,18 +450,28 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 	endrule
 	for ( Integer i = 0; i < dmaEngineCount; i=i+1 ) begin
 		FIFO#(Bit#(128)) dmaOutQ <- mkSizedFIFO(16);
+		FIFO#(Bit#(8)) dmaOutTagQ <- mkSizedFIFO(16);
+
 		Reg#(Bit#(8)) dmaSplitCnt <- mkReg(0);
 		Reg#(Bit#(512)) dmaSplitBuf <- mkReg(0);
+		Reg#(Bit#(8)) dmaOutTag <- mkReg(0);
 		rule serializeSplit;
 			if ( dmaSplitCnt == 0 ) begin
 				dmaSplitQ[i].deq;
 				let d = dmaSplitQ[i].first;
-				dmaSplitCnt <= 3;
+				dmaSplitTagQ[i].deq;
+				let t = dmaSplitTagQ[i].first;
+
 				dmaOutQ.enq(d[511:384]);
+				dmaOutTagQ.enq(t);
+
 				dmaSplitBuf <= (d<<128);
+				dmaOutTag <= t;
+				dmaSplitCnt <= 3;
 			end else begin
 				dmaSplitCnt <= dmaSplitCnt - 1;
 				dmaOutQ.enq(dmaSplitBuf[511:384]);
+				dmaOutTagQ.enq(dmaOutTag);
 				dmaSplitBuf <= (dmaSplitBuf<<128);
 			end
 		endrule
@@ -454,10 +480,14 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 		Reg#(Bit#(5)) wtag <- mkReg(0);
 		rule dmaWrite;
 			dmaOutQ.deq;
+			dmaOutTagQ.deq;
+
 			let d = dmaOutQ.first;
+			let t = dmaOutTagQ.first;
 
 			if ( dmaWordCnt[2:0] == 3'b111 ) begin
-				Bit#(32) dmao = zeroExtend(dmaOffset[19:0]); // 8K*256
+				//Bit#(32) dmao = zeroExtend(dmaOffset[20:0]); // 8K*256
+				Bit#(32) dmao = zeroExtend(dmaOffset[12:0]) + 8192*zeroExtend(t); // 8K
 				dma.users[i].dmaWriteReq(dmao, 8, 0); // tag is actually irrelevant in writes...
 				//dma.users[i].dmaWriteReq(dmao, 8, (zeroExtend(wtag)|(fromInteger(i)<<5))); // tag is actually irrelevant in writes...
 				wtag <= wtag + 1;

@@ -9,16 +9,6 @@
 #define BSBFS_ERASE_PREPARE 16
 #define BSBFS_ERASE_INFLIGHT 8
 
-
-/*
-Functional TODO
-
-1.
-periodically flush appendbuffer to flash.
-But this means if it's appended again after,
-the whole block has to be moved
-*/
-
 #ifndef __BSBFS_H__
 #define __BSBFS_H__
 

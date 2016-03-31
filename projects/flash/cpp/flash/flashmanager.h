@@ -42,6 +42,7 @@ public:
 	void* storebuffer[TAG_COUNT];
 	uint8_t* statusbuffer[TAG_COUNT];
 
+	int targetMap[TAG_COUNT];
 	bool tagBusy[TAG_COUNT];
 	timespec sentTime[TAG_COUNT];
 

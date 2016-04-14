@@ -114,21 +114,32 @@ void* flashManagerThread(void* arg) {
 	while (1) {
 		PCIeWord w = dma->recvWord();
 		int rcount = 0;
-		for ( int i = 3; i >= 0; i-- ) {
-			uint32_t msg1 = w.d[i] & 0xffff;
-			uint32_t msg2 = (w.d[i]>>16) & 0xffff;
-			uint8_t tag1 = (msg1>>8)&0xff;
-			uint8_t tag2 = (msg2>>8)&0xff;
-			uint8_t code1 = (msg1&0xff);
-			uint8_t code2 = (msg2&0xff);
-			if ( code2 != 0xff ) {
-				procFlashEvent(tag2,code2);
-				rcount++;
-			} 
-			if ( code1 != 0xff ) {
-				procFlashEvent(tag1,code1);
-				rcount++;
+		if ( w.header == 0 ) {
+			for ( int i = 3; i >= 0; i-- ) {
+				uint32_t msg1 = w.d[i] & 0xffff;
+				uint32_t msg2 = (w.d[i]>>16) & 0xffff;
+				uint8_t tag1 = (msg1>>8)&0xff;
+				uint8_t tag2 = (msg2>>8)&0xff;
+				uint8_t code1 = (msg1&0xff);
+				uint8_t code2 = (msg2&0xff);
+				if ( code2 != 0xff ) {
+					procFlashEvent(tag2,code2);
+					rcount++;
+				} 
+				if ( code1 != 0xff ) {
+					procFlashEvent(tag1,code1);
+					rcount++;
+				}
 			}
+		} 
+		else if ( w.header == 2 ) {
+			uint64_t cidx = w.d[3];
+			cidx = (cidx<<32)|w.d[2];
+			uint64_t val = (((uint64_t)w.d[1])<<32)|w.d[0];
+			printf( "VM result %ld %ld\n", cidx, val );
+			fflush(stdout);
+		} else {
+			printf( "uncaught dma.enq %d\n", w.header );
 		}
 		//if ( rcount > 2 )
 		//printf( "rcount= %d\n", rcount );

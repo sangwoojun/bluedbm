@@ -8,231 +8,334 @@ import BRAMFIFO::*;
 
 import MergeN::*;
 
-/*
-"last" is initialized to 0
-00 : 30 bit delta
-01 : 62 bit idx
-10 : 30 bit delta (incr cidx)
-11 : 62 bit idx (incr cidx)
-*/
-
-interface SparseDecoderIfc;
-	method Action enq(Bit#(128) data);
+interface Split4WidthIfc#(numeric type dst);
+	method Action enq(Bit#(TMul#(dst,4)) data);
 	method Action deq;
-	method Tuple3#(Bit#(64), Bit#(64), Bit#(64)) first;
+	method Bit#(dst) first;
 endinterface
 
-module mkSparseDecoder (SparseDecoderIfc);
-	Reg#(Bit#(62)) lastridx <- mkReg(0);
-	FIFO#(Bit#(128)) inQ <- mkFIFO;
-	Reg#(Bit#(128)) inbuf <- mkReg(0);
-	Reg#(Bit#(2)) inoff <- mkReg(0); // 32bit item offset (0~3)
-	Reg#(Bit#(64)) cidx <- mkReg(0);
+module mkSplit4Width (Split4WidthIfc#(dst))
+	provisos(Add#(a__, dst, TMul#(dst, 4)));
 
-	FIFO#(Tuple3#(Bit#(64), Bit#(64), Bit#(64))) outQ <- mkFIFO;
-
-	rule decodein( inoff == 0 );
-		inQ.deq;
-		let d = inQ.first;
-		Bit#(2) code = truncate(d);
-		Bit#(62) idx = truncate(d>>2);
-		Bit#(62) last = lastridx;
-		Bit#(64) cc = cidx;
-		if ( code[1] == 1 ) begin
-			last = 0;
-			cidx <= cidx + 1;
-			cc = cidx + 1;
-		end
-
-		Bit#(128) rbuf = (d>>64);
-		if ( code[0] == 0 ) begin
-			Bit#(30) delta = truncate(d>>2);
-			idx = last + zeroExtend(delta);
-			inoff <= 3;
-			rbuf = (d>>32);
-		end else begin
-			inoff <= 2;
-		end
-
-		lastridx <= idx;
-
-		inbuf <= rbuf;
-
-		outQ.enq(tuple3(cc, zeroExtend(idx), 1));
-		$display( "%d %d %d\n", cc, idx, 3 );
-	endrule
-	rule decodebuf( inoff >= 2 );
-		let d = inbuf;
-		Bit#(2) code = truncate(d);
-		Bit#(62) idx = truncate(d>>2);
-		Bit#(62) last = lastridx;
-		Bit#(64) cc = cidx;
-		if ( code[1] == 1 ) begin
-			last = 0;
-			cidx <= cidx + 1;
-			cc = cidx + 1;
-		end
-		
-		Bit#(128) rbuf = (d>>64);
-		if ( code[0] == 0 ) begin
-			Bit#(30) delta = truncate(d>>2);
-			idx = last + zeroExtend(delta);
-			inoff <= inoff-1;
-			rbuf = (d>>32);
-		end else begin
-			inoff <= inoff-2;
-		end
-		lastridx <= idx;
-		
-		inbuf <= rbuf;
-
-		outQ.enq(tuple3(cc, zeroExtend(idx), 1));
-		$display( "%d %d %d\n", cc, idx, 2 );
-	endrule
-
-	rule decodelast( inoff == 1 );
-		let d = inbuf;
-		Bit#(2) code = truncate(d);
-		Bit#(62) idx = 0;//truncate(d>>2);
-		Bit#(62) last = lastridx;
-		Bit#(64) cc = cidx;
-		if ( code[1] == 1 ) begin
-			last = 0;
-			cidx <= cidx + 1;
-			cc = cidx + 1;
-		end
-		
-		Bit#(128) rbuf = (d>>32);
-		if ( code[0] == 0 ) begin
-			Bit#(30) delta = truncate(d>>2);
-			idx = last + zeroExtend(delta);
-			inoff <= inoff-1;
-		end else begin
-			inoff <= 3; // 2+1
-			inQ.deq;
-			let id = inQ.first;
-			rbuf = (id>>32);
-			Bit#(32) lid = truncate(id);
-			Bit#(30) re = truncate(idx);
-			idx = {0,lid,re};
-		end
-		
-		lastridx <= idx;
-		
-		inbuf <= rbuf;
-
-		outQ.enq(tuple3(cc, zeroExtend(idx), 1));
-		$display( "%d %d %d\n", cc, idx, 1 );
-	endrule
-
-	method Action enq(Bit#(128) data);
-		inQ.enq(data);
-	endmethod
-	method Action deq;
-		outQ.deq;
-	endmethod
-	method Tuple3#(Bit#(64), Bit#(64), Bit#(64)) first;
-		return outQ.first;
-	endmethod
-endmodule
-
-interface SplitDRAM128Ifc;
-	method Action enq(Bit#(512) data);
-	method Action deq;
-	method Bit#(128) first;
-endinterface
-
-module mkSplitDRAM128 (SplitDRAM128Ifc);
-	Reg#(Bit#(512)) buffer <- mkReg(0);
+	Reg#(Bit#(TMul#(dst,4))) buffer <- mkReg(0);
 	Reg#(Bit#(2)) cnt <- mkReg(0);
-	FIFO#(Bit#(128)) outQ <- mkFIFO;
+	FIFO#(Bit#(dst)) outQ <- mkFIFO;
 	rule split( cnt > 0 );
 		cnt <= cnt - 1;
 		outQ.enq(truncate(buffer));
-		buffer <= (buffer>>128);
+		buffer <= (buffer>>valueOf(dst));
 	endrule
-	method Action enq(Bit#(512) data) if (cnt == 0);
+	method Action enq(Bit#(TMul#(dst,4)) data) if (cnt == 0);
 		cnt <= 3;
-		buffer <= (data>>128);
+		buffer <= (data>>valueOf(dst));
 		outQ.enq(truncate(data));
 	endmethod
 	method Action deq;
 		outQ.deq;
 	endmethod
-	method Bit#(128) first;
+	method Bit#(dst) first;
 		return outQ.first;
 	endmethod
 endmodule
 
-
-interface SparseCoreIfc;
-	method Action queryIn(Bit#(64) idx, Bit#(64) val);
-
-	method Action dataIn(Bit#(512) data);
-
-	// Result, colIdx, done?
-	//method ActionValue#(Tuple3#(Bit#(64),Bit#(64),Bool)) resultOut;
-	// 
+interface SparseDecoderIfc;
+	method Action enq(Bit#(128) data);
+	method Action deq;
+	method Maybe#(Tuple3#(Bit#(64), Bit#(64), Bit#(64))) first;
+	method Bit#(8) bytes;
 endinterface
 
-typedef 12 SparseQueryIdxSz;
+typedef enum {
+	DECODER_INIT,
+	DECODER_LONGCOL,
+	DECODER_LONGROW
+} DecoderState deriving (Bits,Eq);
 
-module mkSparseCore (SparseCoreIfc);
+module mkSparseDecoder (SparseDecoderIfc);
+	FIFO#(Bit#(8)) bytesQ <- mkFIFO;
+	FIFO#(Maybe#(Tuple3#(Bit#(64), Bit#(64), Bit#(64)))) outQ <- mkFIFO;
+	Split4WidthIfc#(32) splitter <- mkSplit4Width;
+	Reg#(DecoderState) decoderState <- mkReg(DECODER_INIT);
+	Reg#(Bit#(64)) curCol <- mkReg(0);
+	Reg#(Bit#(64)) curDat <- mkReg(1);
 
+	Reg#(Bit#(28)) colBuf <- mkReg(0);
+	Reg#(Bit#(28)) rowBuf <- mkReg(0);
+
+	Reg#(Bit#(64)) lastRow <- mkReg(0);
+	
+	rule procheader ( decoderState == DECODER_INIT );
+		splitter.deq;
+		Bit#(32) d = splitter.first;
+
+		Bit#(4) header = truncate(d>>28);
+		Bit#(28) body = truncate(d);
+
+		if ( header == 6 ) begin //LongCol
+			decoderState <= DECODER_LONGCOL;
+			colBuf <= body;
+		end else if ( header == 8 ) begin //ShortRow
+			Bit#(64) newRow = lastRow + zeroExtend(body);
+			lastRow <= newRow;
+
+			outQ.enq(tagged Valid tuple3(curCol, newRow, curDat));
+			bytesQ.enq(4);
+		end else if ( header == 10 ) begin //LongRow
+			decoderState <= DECODER_LONGROW;
+			rowBuf <= body;
+		end else begin
+			outQ.enq(tagged Invalid);
+			bytesQ.enq(4);
+		end
+	endrule
+
+	rule procLongcol ( decoderState == DECODER_LONGCOL );
+		splitter.deq;
+		Bit#(32) d = splitter.first;
+		decoderState <= DECODER_INIT;
+
+		Bit#(64) b = zeroExtend(colBuf);
+		curCol <= (b<<32) | zeroExtend(d);
+
+		outQ.enq(tagged Invalid);
+		bytesQ.enq(8);
+
+		lastRow <= 0;
+		
+		$display( "longcol %x", d );
+	endrule
+	
+	rule procLongrow ( decoderState == DECODER_LONGROW );
+		splitter.deq;
+		Bit#(32) d = splitter.first;
+		decoderState <= DECODER_INIT;
+			
+		Bit#(64) b = zeroExtend(rowBuf);
+		Bit#(64) nr = (b<<32) | zeroExtend(rowBuf);
+		lastRow <= nr;
+
+		outQ.enq(tagged Valid tuple3(curCol, nr, curDat));
+		
+		bytesQ.enq(8);
+		
+		$display( "longrow %x", d );
+	endrule
+
+	method Action enq(Bit#(128) data);
+		splitter.enq(data);
+	endmethod
+	method Action deq;
+		outQ.deq;
+		bytesQ.deq;
+	endmethod
+	method Maybe#(Tuple3#(Bit#(64), Bit#(64), Bit#(64))) first;
+		return outQ.first;
+	endmethod
+	method Bit#(8) bytes;
+		return bytesQ.first;
+	endmethod
+endmodule
+
+interface SparseVectorMatrixIfc;
+	method Action vectorIn(Bit#(64) idx, Bit#(64) val);
+	method Action vectorToken(Bit#(64) len);
+
+	method Action matrixIn(Bit#(512) data);
+	method Action matrixToken(Bit#(64) len);
+
+	method ActionValue#(Tuple2#(Bit#(64), Bit#(64))) colOut;
+endinterface
+
+module mkSparseVectorMatrix ( SparseVectorMatrixIfc );
+	Reg#(Bit#(64)) matrixBytesRemain <- mkReg(0);
+
+	Split4WidthIfc#(128) split <- mkSplit4Width;
 	SparseDecoderIfc dataDecoder <- mkSparseDecoder;
-	SplitDRAM128Ifc split <- mkSplitDRAM128;
 	rule feeddatadec;
 		split.deq;
 		dataDecoder.enq(split.first);
 	endrule
-	rule reda;
+	FIFO#(Maybe#(Tuple3#(Bit#(64), Bit#(64), Bit#(64)))) decodedMQ <- mkFIFO;
+	FIFO#(Bool) matrixIsLastQ <- mkFIFO;
+	rule getDecodedMatrix ( matrixBytesRemain > 0 );
+		let mo = dataDecoder.first;
+		let bytes = dataDecoder.bytes;
 		dataDecoder.deq;
-		let r = dataDecoder.first;
-		let cidx = tpl_1(r);
-		let ridx = tpl_2(r);
-		let val = tpl_3(r);
-		//$display( "%d %d %d\n", cidx, ridx, val );
-	endrule
-
-
-	FIFO#(Bit#(64)) queryIdxQ <- mkFIFO;
-	BRAM2Port#(Bit#(SparseQueryIdxSz), Bit#(64)) queryBuffer <- mkBRAM2Server(defaultValue); //32KB
-	Reg#(Bit#(SparseQueryIdxSz)) queryFillIdx; <- mkReg(0);
-	Reg#(Bit#(64)) topQueryIdx <- mkReg(~0);
-	rule fillQueryBuffer;
-		queryIdxQ.deq;
-		let idx = queryIdxQ.first;
-		let qwidx = queryFillIdx;
-
-		if ( idx < topQueryIdx ) begin
-			queryFillIdx <= 0;
-			qwidx = 0;
+		if ( isValid(mo) ) begin
+			let m = fromMaybe(?, mo);
+			$display ( "%d %d %d ... %d", tpl_1(m), tpl_2(m), tpl_3(m), matrixBytesRemain );
 		end else begin
-			queryFillIdx <= queryFillIdx + 1;
+			$display( "-- %d, %d", matrixBytesRemain, bytes );
 		end
-		topQueryIdx <= idx;
+		decodedMQ.enq(mo);
 
-		queryBuffer.portB.request.put(BRAMRequest{
-			write: True, responseOnWrite:False,
-			address: qwidx,
-			datain: idx
-			});
+		if ( matrixBytesRemain <= zeroExtend(bytes) ) begin
+			matrixBytesRemain <= 0;
+			matrixIsLastQ.enq(True);
+			$display( "matrixIsLastQ enqing true!" );
+		end else begin
+			matrixBytesRemain <= matrixBytesRemain - zeroExtend(bytes);
+			matrixIsLastQ.enq(False);
+		end
 	endrule
 
+	FIFOF#(Bit#(64)) vectorIdxQ <- mkSizedBRAMFIFOF(128);
+	Reg#(Bit#(64)) vectorInRemain <- mkReg(0);
 
+	Reg#(Bool) doFFMatrix <- mkReg(False);
+	Reg#(Bool) doFFVector <- mkReg(False);
+	Reg#(Bool) doFlushVector <- mkReg(False);
 
-	method Action queryIn(Bit#(64) idx, Bit#(64) val);
-		queryIdxQ.enq(idx);
+	FIFO#(Tuple2#(Bit#(64), Bit#(64))) outQ <- mkFIFO;
+	Reg#(Bit#(64)) colSum <- mkReg(0);
+
+	Reg#(Bool) vectorInReady <- mkReg(True);
+	Reg#(Bit#(64)) compareLastCidx <- mkReg(0);
+	Reg#(Bit#(64)) compareLastVidx <- mkReg(0);
+	rule compare (
+		doFFMatrix == False && doFFVector == False
+		&& doFlushVector == False
+		&& vectorInReady == False 
+		&& vectorInRemain == 0 );
+
+		let mo = decodedMQ.first;
+		let islast = matrixIsLastQ.first;
+
+		if ( isValid(mo) ) begin
+			let v = vectorIdxQ.first;
+
+			let m = fromMaybe(?, mo);
+
+			let cidx = tpl_1(m);
+			let ridx = tpl_2(m);
+
+			if ( compareLastCidx != cidx ) begin
+				doFFVector <= True;
+				compareLastCidx <= cidx;
+				colSum <= 0;
+				outQ.enq(tuple2(compareLastCidx, colSum));
+				$display ( "Starting vector FF" );
+			end
+			else
+			if ( compareLastVidx > v ) begin
+				doFFMatrix <= True;
+				compareLastVidx <= v;
+				colSum <= 0;
+				outQ.enq(tuple2(cidx, colSum));
+				$display ( "Starting matrix FF" );
+			end
+			else begin
+				compareLastCidx <= cidx;
+				compareLastVidx <= v;
+				if ( v == ridx ) begin
+					//match!!
+					colSum <= colSum + 1;
+					$display( "match! %d == %d > %d", v, ridx, colSum );
+
+					vectorIdxQ.deq;
+					vectorIdxQ.enq(v);
+
+					decodedMQ.deq;
+					matrixIsLastQ.deq;
+				end else if ( v > ridx ) begin
+					//$display( "mismatch! %d > %d", v, ridx );
+					decodedMQ.deq;
+					matrixIsLastQ.deq;
+					
+				end else begin // (v < ridx)
+					//$display( "mismatch! %d < %d", v, ridx );
+					vectorIdxQ.deq;
+					vectorIdxQ.enq(v);
+				end
+			end
+		
+			if (islast) begin
+				//$display( "starting vector flush" );
+				doFlushVector <= True;
+				$display( "Starting flush vector" );
+				// if last compare:
+				// empty vectorQ
+				// and then vectorInReady <= True;
+			end
+		end else begin
+			if ( islast ) begin
+				doFlushVector <= True;
+				$display( "Starting flush vector" );
+			end
+
+			$display( "Invalid matrix value" );
+
+			decodedMQ.deq;
+			matrixIsLastQ.deq;
+		end
+	endrule
+	rule ffMatrix ( doFFMatrix == True );
+		let mo = decodedMQ.first;
+		let islast = matrixIsLastQ.first;
+
+		if ( isValid(mo) ) begin
+			let m = fromMaybe(?, mo);
+			let cidx = tpl_1(m);
+			let ridx = tpl_2(m);
+			if ( cidx == compareLastCidx ) begin
+				decodedMQ.deq;
+				matrixIsLastQ.deq;
+			end else begin
+				compareLastCidx <= cidx;
+				doFFMatrix <= False;
+				$display( "Done matrix FF" );
+			end
+		end else begin
+			decodedMQ.deq;
+			matrixIsLastQ.deq;
+			doFFMatrix <= False;
+			$display( "Done matrix FF" );
+		end
+	endrule
+	rule ffVector ( doFFVector == True );
+		let v = vectorIdxQ.first;
+
+		if ( compareLastVidx < v ) begin
+			vectorIdxQ.deq;
+			vectorIdxQ.enq(v);
+		end else begin
+			compareLastVidx <= 0;
+			doFFVector <= False;
+			//$display( "Done vector FF" );
+		end
+	endrule
+	rule flushVector ( doFlushVector == True );
+		if ( vectorIdxQ.notEmpty ) begin
+			vectorIdxQ.deq;
+			$display( "vector flushing" );
+		end else begin
+			doFlushVector <= False;
+			vectorInReady <= True;
+			$display( "Done vector flush" );
+		end
+	endrule
+
+	method Action vectorIn(Bit#(64) idx, Bit#(64) val) if (vectorInRemain > 0);
+		vectorInRemain <= vectorInRemain - 1;
+		vectorIdxQ.enq(idx);
+		$display( "Vector data received for %d %d", idx, val );
+	endmethod
+	method Action vectorToken(Bit#(64) len) if (vectorInReady == True && vectorInRemain == 0);
+		vectorInReady <= False;
+		vectorInRemain <= len;
+		$display( "Vector token received for %d", len );
 	endmethod
 
-	method Action dataIn(Bit#(512) data);
-		//dataDecoder.enq(data);
+	method Action matrixIn(Bit#(512) data);// if ( matrixBytesRemain > 0 );
 		split.enq(data);
 	endmethod
-	//method Action colIdx(Bit#(64) idx);
-	//endmethod
+	method Action matrixToken(Bit#(64) len) if ( matrixBytesRemain == 0 );
+		matrixBytesRemain <= len;
+		$display( "Matrix token received for %d", len );
+	endmethod
 
-	//method ActionValue#(Tuple3#(Bit#(64),Bit#(64),Bool)) resultOut;
-	//	return ?;
-	//endmethod
+	method ActionValue#(Tuple2#(Bit#(64), Bit#(64))) colOut;
+		outQ.deq;
+		return outQ.first;
+	endmethod
 endmodule

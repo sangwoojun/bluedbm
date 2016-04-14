@@ -28,7 +28,9 @@ typedef 8 BusCount; // 8 per card in hw, 2 per card in sim
 typedef TMul#(2,BusCount) BBusCount; //Board*bus
 //typedef 64 TagCount; // Has to be larger than the software setting
 typedef 4 DMAEngineCount;
-typedef 4 DestCount;
+typedef 8 DestCount;
+
+typedef 4 MatrixVectorCoreCount;
 
 interface HwMainIfc;
 endinterface
@@ -50,48 +52,38 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 
 	DMASplitterIfc#(DMAEngineCount) dma <- mkDMASplitter(pcie);
 
-	Merge2Ifc#(Bit#(128)) m0 <- mkMerge2;
-	Merge2Ifc#(Bit#(32)) m4flash <- mkMerge2;
+	Merge2Ifc#(Tuple2#(Bit#(32), Bit#(128))) m0 <- mkMerge2;
 
 	FIFO#(FlashCmd) flashCmdQ <- mkFIFO;
 	Vector#(8, Reg#(Bit#(32))) writeBuf <- replicateM(mkReg(0));
 
 	DualFlashManagerIfc flashman <- mkDualFlashManager(flashes);
 	
-	// 8'available 8'type 16'data
-	// type: 0: readdone, 1: writedone 2: erasedone 3:erasefail 4: writeready
-	FIFOF#(Bit#(32)) flashStatusQ <- mkFIFOF(clocked_by pcieclk, reset_by pcierst);
-	Reg#(Bit#(8)) flashStatusOut <- mkReg(0);
 	FIFO#(Bit#(8)) writeTagsQ <- mkSizedBRAMFIFO(128);
 
 	Reg#(Bit#(16)) flashWriteBytes <- mkReg(0);
-	Reg#(Maybe#(Bit#(64))) flashWriteBuf <- mkReg(tagged Invalid);
-
-	//Vector#(TagCount,Reg#(Bit#(5))) tagBusMap <- replicateM(mkReg(0));
-	Reg#(Bool) started <- mkReg(False);
 
 	rule senddmaenq;
 		m0.deq;
-		dma.enq(0, m0.first);
+		let d = m0.first;
+		dma.enq(tpl_1(d), tpl_2(d));
 	endrule
-	/*
-	rule flushm4flash;
-		m4flash.deq;
-		m0.enq[0].enq(zeroExtend(m4flash.first));
-	endrule
-	*/
 
 	FIFO#(Bit#(128)) dmainQ <- mkFIFO;
 	FIFO#(Bit#(128)) flashWriteInQ <- mkFIFO;
+	FIFO#(Bit#(128)) vectorMatrixQ <- mkFIFO;
 	rule getFlashCmd;
 		dma.deq;
-		started <= True;
 		Bit#(128) d = dma.first;
 		Bit#(32) h = dma.header;
 		if ( h == 0 ) begin
 			dmainQ.enq(d);
-		end if ( h == 1 ) begin
+		end 
+		if ( h == 1 ) begin
 			flashWriteInQ.enq(d);
+		end
+		if ( h == 2 ) begin
+			vectorMatrixQ.enq(d);
 		end
 	endrule
 
@@ -132,9 +124,6 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 		end
 	endrule
 	
-	Reg#(Bit#(256)) readReqTagEpoch <- mkReg(0);
-	Reg#(Bit#(256)) readDoneTagEpoch <- mkReg(0);
-
 	//FIFO#(Bit#(8)) readReqTagOrderQ <- mkSizedBRAMFIFO(256);
 	//FIFO#(Bit#(8)) readReqDestQ <- mkSizedBRAMFIFO(256);
 	TagDestReorderIfc#(DestCount) tdreorder <- mkTagDestReorder;
@@ -217,7 +206,7 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 		flashEventCounter <= 0;
 
 		if ( flashEventCnt >= 7 ) begin
-			m0.enq[0].enq((flashEventBuf<<16)|zeroExtend(dat));
+			m0.enq[0].enq(tuple2(0,(flashEventBuf<<16)|zeroExtend(dat)));
 			flashEventBuf <= ~0;
 			flashEventCnt <= 0;
 		end else begin
@@ -232,7 +221,7 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 			if ( flashEventCnt > 0 ) begin
 				flashEventCnt <= 0;
 				flashEventBuf <= ~0;
-				m0.enq[0].enq(flashEventBuf);
+				m0.enq[0].enq(tuple2(0,flashEventBuf));
 			end
 		end else begin
 			flashEventCounter <= flashEventCounter + 1;
@@ -319,27 +308,6 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 		end
 	endrule
 	
-	/*
-	FIFO#(Bit#(8)) dramCachedTagQ <- mkSizedBRAMFIFO(256);
-	rule relayReadDoneTag;
-		mReadDoneTag.deq;
-		dramCachedTagQ.enq(mReadDoneTag.first);
-	endrule
-
-	FIFO#(Bit#(8)) orderedReadReadyTagQ <- mkFIFO;
-	rule matchReadPageOrder;
-		dramCachedTagQ.deq;
-		let d = dramCachedTagQ.first;
-		let f = readReqTagOrderQ.first;
-		if ( d == f ) begin
-			readReqTagOrderQ.deq;
-			orderedReadReadyTagQ.enq(f);
-
-		end else begin
-			mReadDoneTag.enq[1].enq(d);
-		end
-	endrule
-	*/
 
 	Vector#(DestCount, PageFIFOIfc) pfifov;
 	Vector#(DestCount, FIFO#(Bit#(8))) dtagfifov <- replicateM(mkSizedFIFO(16));
@@ -408,19 +376,78 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 		dtagfifov[dst].enq(tag);
 	endrule
 
-	SparseCoreIfc sc <- mkSparseCore;
-	rule flushdst1;
-		pfifov[1].deq;
-		dtagfifov[1].deq;
-		sc.dataIn(pfifov[1].first);
-	endrule
-	Reg#(Bit#(16)) flush2cnt <- mkReg(0);
-	rule flushdst2;
-		flush2cnt <= flush2cnt + 1;
 
-		if ( flush2cnt[6:0] == 0 ) begin
-			pfifov[2].deq;
-			dtagfifov[2].deq;
+	Vector#(MatrixVectorCoreCount, FIFO#(Bit#(128))) vectorMatrixQv <- replicateM(mkFIFO);
+	MergeNIfc#(MatrixVectorCoreCount, Bit#(128)) mVMRes <- mkMergeN;
+	for ( Integer _matrixidx = 0; _matrixidx < 4; _matrixidx = _matrixidx+1 ) begin
+		Integer matrixidx = _matrixidx+1;
+		SparseVectorMatrixIfc sc <- mkSparseVectorMatrix;
+		rule relayMatrixIn;
+			pfifov[matrixidx].deq;
+			dtagfifov[matrixidx].deq;
+			sc.matrixIn(pfifov[matrixidx].first);
+		endrule
+		rule ruleVMCmd;
+			vectorMatrixQv[_matrixidx].deq;
+			let d = vectorMatrixQv[_matrixidx].first;
+			Bit#(16) cmd = truncate(d>>96);
+			
+			if ( cmd == 0 ) begin // tokens
+				Bit#(32) vtok = d[31:0];
+				Bit#(32) mtok = d[63:32];
+				sc.vectorToken(zeroExtend(vtok));
+				sc.matrixToken(zeroExtend(mtok)*8192);
+			end
+			if ( cmd == 1 ) begin // vectorIn
+				Bit#(64) idx = d[63:0];
+				sc.vectorIn(idx, 1);
+			end
+		endrule
+		rule getVMRes;
+			let r <- sc.colOut;
+			let cidx = tpl_1(r);
+			let val = tpl_2(r);
+			if ( val > 0 ) begin
+				//$display("VM result %d %d", cidx, val);
+				mVMRes.enq[_matrixidx].enq({cidx,val});
+			end
+		endrule
+	end
+	rule relayVMRes;
+		let d = mVMRes.first;
+		mVMRes.deq;
+		m0.enq[1].enq(tuple2(2,d));
+	endrule
+	rule sendVMCmd;
+		let d = vectorMatrixQ.first;
+		vectorMatrixQ.deq;
+		Bit#(16) dst = truncate(d>>(96+16));
+		vectorMatrixQv[dst].enq(d);
+	endrule
+
+
+
+
+
+
+	Split4WidthIfc#(128) split <- mkSplit4Width;
+	SparseDecoderIfc dataDecoder <- mkSparseDecoder;
+	rule feeddatadec;
+		split.deq;
+		dataDecoder.enq(split.first);
+	endrule
+	rule flushdst2;
+		pfifov[2].deq;
+		dtagfifov[2].deq;
+		split.enq(pfifov[2].first);
+	endrule
+	rule getDecodedMatrix;
+		let mo = dataDecoder.first;
+		let bytes = dataDecoder.bytes;
+		dataDecoder.deq;
+		if ( isValid(mo) ) begin
+			let m = fromMaybe(?, mo);
+			$display( "%d %d 1", tpl_1(m), tpl_2(m) );
 		end
 	endrule
 

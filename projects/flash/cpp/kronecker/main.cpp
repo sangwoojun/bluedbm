@@ -18,13 +18,13 @@
 #include "time.h"
 
 #include "pthread.h"
-#define THREAD_COUNT 24
 
-#define FPAGE_SIZE 8192
+#include "config.h"
+
 
 double imat[2][2];
 FILE* ofile;
-FILE* ifile;
+//FILE* ifile;
 
 uint64_t kronecker_edge_generate(int coff, int scale) {
 	double* im = imat[coff&1];
@@ -73,34 +73,92 @@ void write_ind(int scale, uint64_t cidx) {
 		//printf( "cidx %ld is aligned\n", cidx );
 		uint64_t poff = (woff>>13);
 		if ( poff > lastpoff + scale*4 ) { // scale*4 is arbitrary
-			fwrite(&poff, sizeof(uint64_t), 1, ifile);
-			fwrite(&cidx, sizeof(uint64_t), 1, ifile);
+			//fwrite(&poff, sizeof(uint64_t), 1, ifile);
+			//fwrite(&cidx, sizeof(uint64_t), 1, ifile);
 			lastpoff = poff;
 		}
 	}
 }
-void write_row(uint64_t* rbuf, uint64_t cidx, int count, int scale) {
-	write_ind(scale, cidx);
-	uint64_t last = 0;
-	for ( int i = 0; i < count; i++ ) {
-		if ( rbuf[i] != last ) {
-			//printf( "%lx, %lx\n", cidx, rbuf[i] );
-			if ( rbuf[i] - last < (1<<30) ) {
-				uint32_t data = (( rbuf[i] - last ) << 2);
-				if( i == 0 ) data |= 0x2;
-				fwrite(&data, sizeof(uint32_t), 1, ofile);
-				woff += sizeof(uint32_t);
-			} else {
-				uint64_t data = (rbuf[i]<< 2) | 0x1;
-				if( i == 0 ) data |= 0x2;
-				fwrite(&data, sizeof(uint64_t), 1, ofile);
-				woff += sizeof(uint64_t);
-			}
 
-			last = rbuf[i];
-			totalrcount ++;
+/*
+type: 2 bits
+size: 2 bits
+0000 is null (32 bits)
+0010 is 14(row) 14(data)
+0100 is 28 bit col
+0110 is 60 bit col
+1000 is 28 bit row
+1010 is 60 bit row
+1100 is 28 bit data
+1110 is 60 bit data
+*/
+
+uint64_t stat_shortrow = 0;
+uint64_t stat_longrow = 0;
+uint64_t stat_padbytes = 0;
+
+uint64_t last_cidx = 0;
+uint64_t write_offset = 0;
+uint64_t internal_offset = 0;
+uint32_t* compress(uint64_t* rbuf, uint64_t cidx, int count, int& rbytes) {
+	uint64_t max28 = (1<<headeroffset)-1;
+
+	uint32_t* rowbuf = (uint32_t*)malloc(sizeof(uint32_t)*2*count + 8);// safe allocation
+	uint64_t last_row = 0;
+	int oidx = 0;
+	for ( int i = 0; i < count; i++ ) {
+		uint64_t row = rbuf[i];
+		if ( row - last_row < max28 ) {
+			rowbuf[oidx++] = (ShortRow << headeroffset) | ((uint32_t)row);
+			last_row = row;
+			stat_shortrow ++;
+		} else {
+			rowbuf[oidx++] = (LongRow << headeroffset) | ((uint32_t)(row>>32));
+			rowbuf[oidx++] = ((uint32_t)(row));
+			last_row = row;
+			stat_longrow ++;
 		}
 	}
+
+	uint64_t rowbytes = oidx*4;
+	uint64_t colbytes = 8;
+
+	uint64_t padbytes = 0;
+	if ( internal_offset + rowbytes + colbytes > block_mbs * 1024*1024) {
+		//padbytes = internal_offset + rowbytes + colbytes - block_mbs*1024*1024;
+		padbytes = block_mbs*1024*1024 - internal_offset;
+	}
+	stat_padbytes += padbytes;
+	
+	uint64_t allocsize = rowbytes+colbytes+padbytes;
+	uint32_t* buf = (uint32_t*)malloc(allocsize);
+	for ( uint64_t i = 0; i < padbytes/4; i++ ) {
+		buf[i] = 0; // Null
+	}
+	buf[padbytes/4] = (LongCol<<headeroffset) | (uint32_t)(cidx>>32);
+	buf[padbytes/4+1] = (uint32_t)cidx;
+	for ( int i = 0; i < oidx; i++ ) {
+		buf[i+padbytes/4+2] = rowbuf[i];
+	}
+
+
+	// if write_offset is 16MB aligned
+	// or if cidx - last_cidx > 28 bits
+	last_cidx = cidx;
+	internal_offset = (internal_offset + allocsize)%(block_mbs*1024*1024);
+	write_offset += allocsize;
+	
+	free(rowbuf);
+	rbytes = allocsize;
+	return buf;
+}
+
+void write_row(uint64_t* rbuf, uint64_t cidx, int count, int scale) {
+	//write_ind(scale, cidx);
+	int rbytes = 0;
+	uint32_t* wbuf = compress(rbuf, cidx, count, rbytes);
+	fwrite(wbuf, rbytes, 1 , ofile);
+	free(wbuf);
 }
 
 // usage: ./kronecker SCALE OUTPUT.dat
@@ -119,7 +177,7 @@ int main(int argc, char** argv) {
 	snprintf(oname, 128, "mat.%s", argv[2]);
 	snprintf(iname, 128, "ind.%s", argv[2]);
 	ofile = fopen(oname, "wb");
-	ifile = fopen(iname, "wb");
+	//ifile = fopen(iname, "wb");
 
 	// initialize initiator matrix
 	imat[0][0] = 0.9;
@@ -153,6 +211,13 @@ int main(int argc, char** argv) {
 	int avgpercol = (int)(ecount/ncount);
 	if ( avgpercol < 1 ) avgpercol = 1;
 
+	write_offset = 0;
+	internal_offset = 0;
+	last_cidx = 0;
+	stat_longrow = 0;
+	stat_shortrow = 0;
+	stat_padbytes = 0;
+
 	printf( "Average rows per column: %d\n", avgpercol );
 	int bfactor = 2;
 	uint64_t* rbuf = (uint64_t*)malloc(sizeof(uint64_t)*avgpercol*bfactor);
@@ -168,10 +233,19 @@ int main(int argc, char** argv) {
 		write_row(rbuf, cidx, rcount, scale);
 
 	}
-	printf( "Done!\n" );
+	while ( internal_offset > 0 ) {
+		uint32_t zero = 0;
+		fwrite(&zero, sizeof(uint32_t), 1 , ofile);
+		internal_offset = (internal_offset + sizeof(uint32_t))%(block_mbs*1024*1024);
+		stat_padbytes += 4;
+	}
+
+	printf( "stat_longrow : %ld\nstat_shortrow : %ld\n", stat_longrow, stat_shortrow );
+	printf( "stat_padbytes : %ld\n", stat_padbytes );
+	printf( "Done!\n");
 
 	fclose(ofile);
-	fclose(ifile);
+	//fclose(ifile);
 	exit(0);
 }
 

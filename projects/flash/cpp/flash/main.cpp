@@ -39,7 +39,7 @@ int main() {
 	int fd = fs->open("testfile1.txt");
 	int fd2 = fs->open("testfile2.txt");
 
-//#ifdef BLUESIM
+#ifdef BLUESIM
 	FILE* fsparse = fopen("mat.test", "rb");
 	if ( fsparse == NULL ) {
 		fprintf(stderr, "file not found!\n");
@@ -69,7 +69,20 @@ int main() {
 	}
 
 	fs->storeConfig();
-//#endif
+#endif
+				
+	//dma->sendWord(2, buf[idx], buf[idx+1], buf[idx+2], buf[idx+3]);
+#ifdef BLUESIM
+	int pages = 32;
+#else
+	int pages = 4*1024*1024/8;
+#endif
+	dma->sendWord(2, 5, pages, 0, 0); // tokens 5 vidx 32 pages
+	dma->sendWord(2, 1105, 0, 0, 1); // tokens 5 vidx 32 pages
+	dma->sendWord(2, 8682, 0, 0, 1); // tokens 5 vidx 32 pages
+	dma->sendWord(2, 9281, 0, 0, 1); // tokens 5 vidx 32 pages
+	dma->sendWord(2, 9514, 0, 0, 1); // tokens 5 vidx 32 pages
+	dma->sendWord(2, 11751, 0, 0, 1); // tokens 5 vidx 32 pages
 
 	fs->fileList();
 	int fdm2 = fs->open("mat.test");
@@ -77,20 +90,43 @@ int main() {
 	FILE* fread = fopen("fread.dat", "wb");
 
 	fflush(stdout);
+
+	timespec start, now;
+	clock_gettime(CLOCK_REALTIME, & start);
 	uint32_t* pageBufferR = (uint32_t*)malloc(8192*2);
-	//uint64_t read = fs->fread(fd2, pageBufferR, 128);
-	//printf("----%d\n", pageBufferR[0]);
-	while ( !fs->feof(fdm2) ) {
-		uint64_t read = fs->pread(fdm2, pageBufferR, 1,0,true);
-		//uint64_t read = fs->pread(fdm2, pageBufferR, 1,1,true);
-		fwrite(pageBufferR, FPAGE_SIZE, 1, fread);
-		/*
-		for ( int i = 0; i < 16;i++ ) {
-			printf("----%x\n", pageBufferR[i]);
-		}
-		*/
+	bool block = true;
+#ifndef BLUESIM
+	block = false;
+#endif
+	for ( int i = 0; i < pages && !fs->feof(fdm2); i++ ) {
+		uint64_t read = fs->pread(fdm2, NULL, 1,/*target*/1,block);
+
+		if ( i % 1000 == 0 ) printf( "Page %d\n", i );
 	}
+	clock_gettime(CLOCK_REALTIME, & now);
+	printf( "Elapsed: %f\n", timespec_diff_sec(start, now) );
+	printf( "scan done\n" );
+	fflush(stdout);
 	fclose(fread);
+	
+	dma->sendWord(2, 5, pages, 0, 0); // tokens 5 vidx 32 pages
+	dma->sendWord(2, 1105, 0, 0, 1); // tokens 5 vidx 32 pages
+	dma->sendWord(2, 8682, 0, 0, 1); // tokens 5 vidx 32 pages
+	dma->sendWord(2, 9281, 0, 0, 1); // tokens 5 vidx 32 pages
+	dma->sendWord(2, 9514, 0, 0, 1); // tokens 5 vidx 32 pages
+	dma->sendWord(2, 11751, 0, 0, 1); // tokens 5 vidx 32 pages
+
+	fs->fseek(fdm2, 0, File::FSEEK_SET);
+	//while ( !fs->feof(fdm2) ) {
+	for ( int i = 0; i < pages; i++ ) {
+		//uint64_t read = fs->pread(fdm2, pageBufferR, 1,0,true);
+		uint64_t read = fs->pread(fdm2, NULL, 1,1,true);
+	}
+	printf( "scan done\n" );
+	fflush(stdout);
+
+	exit(0);
+
 	FILE* fread1 = fopen("fread1.dat", "wb");
 	while ( !fs->feof(fd) ) {
 		uint64_t read = fs->pread(fd, pageBufferR, 1,0,true);
@@ -154,8 +190,6 @@ int main() {
 	*/
 
 	uint8_t stat = 0;
-	timespec start, now;
-	clock_gettime(CLOCK_REALTIME, & start);
 	//int rcount = 256;
 	int rcount = 1024*1024/2;
 	for ( int i = 0; i < rcount; i++ ) {

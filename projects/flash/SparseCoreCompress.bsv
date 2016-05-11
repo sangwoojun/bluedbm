@@ -10,62 +10,6 @@ import MergeN::*;
 import Split4Width::*;
 import AcceleratorReader::*;
 
-interface SteppingRegisterIfc#(numeric type sz, type itype);
-	method itype get;
-	method Action incr;
-	method Action init;
-	method Action set(Bit#(sz) addr, itype val);
-endinterface
-
-module mkSteppingRegister(SteppingRegisterIfc#(sz,itype))
-	provisos(
-		Bits#(itype, itypeSz)
-		);
-
-
-	BRAM2Port#(Bit#(sz), itype) regbuffer <- mkBRAM2Server(defaultValue); 
-	Reg#(Bit#(sz)) curoff <- mkReg(0);
-	
-	Reg#(Bit#(4)) epoch <- mkReg(0);
-	FIFO#(Bit#(4)) epochQ <- mkFIFO;
-
-	rule sendReadReq;
-		regbuffer.portA.request.put(BRAMRequest{
-			write:False, responseOnWrite:False,
-			address:curoff,
-			datain:?
-		});
-		epochQ.enq(epoch);
-	endrule
-
-	FIFO#(Tuple2#(Bit#(4), itype)) resQ <- mkFIFO;
-	rule getReadResp;
-		let d <- regbuffer.portA.response.get();
-		let e = epochQ.first;
-		epochQ.deq;
-	endrule
-
-	rule flushStaleRead ( tpl_1(resQ.first) != epoch );
-		resQ.deq;
-	endrule
-
-	method itype get if (tpl_1(resQ.first) == epoch);
-		return tpl_2(resQ.first);
-	endmethod
-	method Action incr;
-		resQ.deq;
-	endmethod
-	method Action init;
-		epoch <= epoch + 1;
-	endmethod
-	method Action set(Bit#(sz) addr, itype val);
-		regbuffer.portB.request.put(BRAMRequest{
-			write:True, responseOnWrite:False,
-			address: addr, datain:val
-		});
-	endmethod
-endmodule
-
 
 interface SparseDecoderIfc;
 	method Action enq(Bit#(128) data);
@@ -204,8 +148,6 @@ endinterface
 
 module mkSparseVectorMatrix ( SparseVectorMatrixIfc );
 	Reg#(Bit#(64)) matrixBytesRemain <- mkReg(0);
-	
-	SteppingRegisterIfc#(8, Tuple2#(Bit#(24),Bit#(8))) sreg <- mkSteppingRegister;
 
 	Split4WidthIfc#(128) split <- mkSplit4Width;
 	SparseDecoderIfc dataDecoder <- mkSparseDecoder;
@@ -397,8 +339,17 @@ module mkSparseVectorMatrix ( SparseVectorMatrixIfc );
 		$display("sc has data");
 	endrule
 
-	method Action vectorIn(Bit#(16) idx, Bit#(24) key, Bit#(8) val);
-		sreg.set(truncate(idx), tuple2(key,val));
+	method Action vectorIn(Bit#(64) idx, Bit#(64) val) if (vectorInRemain > 0);
+		vectorInRemain <= vectorInRemain - 1;
+		//vectorvector[vectorInTotal-vectorInRemain] <= idx;
+		vectorIdxQ.enq(idx);
+		$display( "Vector data received for %d %d", idx, val );
+	endmethod
+	method Action vectorToken(Bit#(64) len) if (vectorInReady == True && vectorInRemain == 0);
+		vectorInReady <= False;
+		vectorInRemain <= len;
+		vectorInTotal <= len;
+		$display( "Vector token received for %d", len );
 	endmethod
 
 	method Action matrixIn(Bit#(512) data);// if ( matrixBytesRemain > 0 );

@@ -26,33 +26,6 @@ double imat[2][2];
 FILE* ofile;
 //FILE* ifile;
 
-uint64_t kronecker_edge_generate(uint64_t& cv, int clim, int scale) {
-	uint64_t rv = 0;
-	cv = 0;
-	for ( int i = 0; i < scale; i++ ) {
-		double* im = imat[0];
-		if ( (1<<i) < clim ) {
-			int p1 = (imat[0][0] + imat[0][1])*10000;
-			int p2 = (imat[1][0] + imat[1][1])*10000;
-			int pt = p1 + p2;
-			int rn = rand()%pt;
-			if ( rn > p1 ) {
-				im = imat[1];
-				cv |= (1<<i);
-			}
-		}
-
-		int m1 = im[0]*10000;
-		int m2 = im[1]*10000;
-		int mt = m1+m2;
-		int rn = rand()%mt;
-		if ( rn >= m1 ) {
-			rv |= (1<<i);
-		}
-	}
-	return rv;
-}
-
 uint64_t kronecker_edge_generate(int coff, int scale) {
 	double* im = imat[coff&1];
 	uint64_t rv = 0;
@@ -70,62 +43,6 @@ uint64_t kronecker_edge_generate(int coff, int scale) {
 	}
 
 	return rv;
-}
-
-void swap(uint64_t* buf, int i, int j ) {
-	uint64_t tr = buf[i*2+1];
-	uint64_t tc = buf[i*2];
-
-	buf[i*2+1] = buf[j*2+1];
-	buf[i*2] = buf[j*2];
-
-	buf[j*2+1] = tr;
-	buf[j*2] = tc;
-}
-void cswap(uint64_t* buf, int i, int j ) {
-	if ( buf[i*2+1] > buf[j*2+1] ) {
-		swap(buf, i, j);
-	}
-}
-
-void edgepairs_qsort(uint64_t* buf, int count ) {
-	if ( count <= 1 ) return;
-	if ( count <= 2 ) {
-		cswap(buf, 0,1);
-	}
-	else {
-		//printf( "qsort with count %d\n", count );
-		uint64_t p = buf[1];
-		int lo = 1;
-		for ( int i = lo; i < count; i++ ) {
-			uint64_t row = buf[i*2+1];
-
-			if ( row < p ) {
-				swap(buf, lo, i);
-				lo++;
-			}
-		}
-		swap(buf, 0,lo-1);
-
-		edgepairs_qsort(buf, lo-1);
-		edgepairs_qsort(buf+((lo)*2), (count-lo));
-	}
-}
-void edgepairs_sort(uint64_t* buf, int count ) {
-	for ( int i = 0; i < count; i++ ) {
-		for ( int j = i; j < count; j++ ) {
-			if ( buf[i*2+1] > buf[j*2+1] ) {
-				uint64_t tr = buf[i*2+1];
-				uint64_t tc = buf[i*2];
-
-				buf[i*2+1] = buf[j*2+1];
-				buf[i*2] = buf[j*2];
-
-				buf[j*2+1] = tr;
-				buf[j*2] = tc;
-			}
-		}
-	}
 }
 
 void edge_sort(uint64_t* rbuf, int count) {
@@ -168,7 +85,6 @@ type: 2 bits
 size: 2 bits
 0000 is null (32 bits)
 0010 is 14(row) 14(data) // ShortHalf
-0001 is 14(col) 14(row) // ShortHalfC
 
 0100 is 28 bit col //ShortCol
 0110 is 60 bit col //LongCol
@@ -186,9 +102,6 @@ uint64_t stat_shortdouble = 0;
 uint64_t stat_shortrow = 0;
 uint64_t stat_longrow = 0;
 uint64_t stat_padbytes = 0;
-uint64_t stat_duplicate = 0;
-
-uint64_t stat_writebytes = 0;
 
 uint64_t last_cidx = 0;
 uint64_t write_offset = 0;
@@ -271,73 +184,6 @@ void write_row(uint64_t* rbuf, uint64_t cidx, int count, int scale) {
 	free(wbuf);
 }
 
-uint64_t stat_sameedge = 0;
-uint64_t stat_edgein64bytes = 0;
-
-//FIXME can't deal with col/rows beyond 2^28
-uint32_t* compresstile(uint64_t* rowbuf, uint64_t count, uint64_t coloffset, uint64_t &rbytes, int tilesize) {
-	uint64_t max14 = (1<<14)-1;
-
-	uint32_t* buf = (uint32_t*)malloc(sizeof(uint32_t)*count*2);
-	uint64_t lastcol = 0;
-	uint64_t lastrow = 0;
-	rbytes = 0;
-	uint64_t cnt = 0;
-	int* rcount = (int*)malloc(sizeof(int) * tilesize);
-	memset(rcount, 0, sizeof(int)*tilesize);
-
-	for ( uint64_t i = 0; i < count; i++ ) {
-			uint64_t col = rowbuf[i*2];
-			//uint64_t row = rowbuf[i*2+1];
-			rcount[col]++;
-	}
-	for ( uint64_t i = 0; i < count; i++ ) {
-		if ( rowbuf[i*2] != lastcol || rowbuf[i*2+1] != lastrow ) {
-			if ( lastrow > rowbuf[i*2+1] ) {
-				printf( "Wrong ordering !!!!!%lx > %lx\n", lastrow, rowbuf[i*2+1]);
-			}
-
-			uint64_t cur_idx = rowbuf[i*2+1]>>6;
-			uint64_t last_idx = lastrow>>6;
-			if (lastrow == rowbuf[i*2+1] ) {
-				stat_sameedge++;
-			}
-			else if (cur_idx == last_idx ) {
-				stat_edgein64bytes ++;
-			}
-			uint64_t col_ = rowbuf[i*2];
-			uint64_t col = col_ + coloffset;
-			uint64_t row = rowbuf[i*2+1];
-
-			buf[cnt*2] = (ShortCol<<headeroffset) | (uint32_t)col;
-			if ( row-lastrow < max14 ) {
-				buf[cnt*2+1] = (ShortHalf<<headeroffset) | ((uint32_t)(row-lastrow)<<14) | (128/rcount[col_]);
-			} else { 
-				printf( "Row diff > max14!\n" );
-			}
-
-			cnt ++;
-
-			rbytes += 8;
-			lastcol = col;
-			lastrow = row;
-		} else {
-			stat_duplicate++;
-		}
-	}
-
-	return buf;
-}
-
-void write_tile(uint64_t* rowbuf, uint64_t count, uint64_t coloffset, int scale, int tilesize) {
-	uint64_t rbytes = 0;
-	uint32_t* wbuf = compresstile(rowbuf, count, coloffset, rbytes, tilesize);
-	fwrite(wbuf, rbytes, 1 , ofile);
-	free(wbuf);
-	internal_offset = (internal_offset + rbytes)%(8*1024);
-	stat_writebytes += rbytes;
-}
-
 // usage: ./kronecker SCALE OUTPUT.dat
 int main(int argc, char** argv) {
 	if ( argc < 3 ) {
@@ -354,7 +200,7 @@ int main(int argc, char** argv) {
 	ofile = fopen(oname, "wb");
 
 	int avgrowcount = 0;
-	if ( argc > 3 ) {
+	if ( argc >= 3 ) {
 		avgrowcount = atoi(argv[3]);
 	}
 
@@ -399,42 +245,9 @@ int main(int argc, char** argv) {
 	stat_padbytes = 0;
 	stat_shorthalf = 0;
 	stat_shortdouble = 0;
-	stat_duplicate = 0;
 
 	printf( "Average rows per column: %d\n", avgpercol );
 	int bfactor = 2;
-	int tilesize = 256*1024; // 512*1024*4 = 1MB
-	int tilecount = ncount/tilesize;
-
-	uint64_t* rowbuf = (uint64_t*)malloc(sizeof(uint64_t)*avgpercol*bfactor*tilesize*2); // (col,row) pairs in tile
-	stat_writebytes = 0;
-	for ( int t = 0; t < tilecount; t++ ) {
-		printf( "Starting tile %d\n", t );
-		printf( "Tile %d offset %lx\n", t, stat_writebytes );
-		for ( uint64_t r = 0; r < tilesize*(uint64_t)avgpercol; r++ ) {
-			uint64_t cv = 0;
-			uint64_t rv = kronecker_edge_generate(cv, tilesize, scale);
-			rowbuf[r*2] = cv;
-			rowbuf[r*2+1] = rv;
-		}
-		printf( "Sorting started!\n" );
-		edgepairs_qsort(rowbuf, tilesize*avgpercol);
-		uint64_t coloffset = tilesize*t;
-		printf( "Writing started!\n" );
-		write_tile(rowbuf, tilesize*avgpercol, coloffset, scale, tilesize);
-		while ( internal_offset > 0 ) {
-			uint32_t zero = 0;
-			fwrite(&zero, sizeof(uint32_t), 1 , ofile);
-			internal_offset = (internal_offset + sizeof(uint32_t))%(8*1024);
-			stat_padbytes += 4;
-			stat_writebytes += 4;
-		}
-		fflush(stdout);
-	}
-
-
-
-/*
 	uint64_t* rbuf = (uint64_t*)malloc(sizeof(uint64_t)*avgpercol*bfactor);
 	for ( uint64_t cidx = 0; cidx < ncount; cidx++ ) {
 		int rcount = rand()%(avgpercol*bfactor);
@@ -454,14 +267,11 @@ int main(int argc, char** argv) {
 		internal_offset = (internal_offset + sizeof(uint32_t))%(block_mbs*1024*1024);
 		stat_padbytes += 4;
 	}
-	*/
 
 	printf( "stat_longrow : %ld\nstat_shortrow : %ld\n", stat_longrow, stat_shortrow );
 	printf( "stat_shorthalf: %ld\nstat_shortdouble: %ld\n", stat_shorthalf, stat_shortdouble );
 
 	printf( "stat_padbytes : %ld\n", stat_padbytes );
-	printf( "stat_duplicate: %ld\n", stat_duplicate );
-	printf( "stat_sameedge: %ld\nstat_edgein64bytes: %ld\n", stat_sameedge, stat_edgein64bytes);
 	printf( "Done!\n");
 
 	fclose(ofile);

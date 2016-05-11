@@ -252,7 +252,7 @@ module mkDRAMController(DRAMControllerIfc);
    
 endmodule
 
-typedef 64 MAX_OUTSTANDING_READS;
+typedef 128 MAX_OUTSTANDING_READS;
 
 instance Connectable#(DDR3Client, DDR3_User_VC707_1GB);
    module mkConnection#(DDR3Client cli, DDR3_User_VC707_1GB usr)(Empty);

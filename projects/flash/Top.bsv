@@ -120,7 +120,7 @@ module mkProjectTop #(
 
 
 ////////////////
-	HwMainIfc hwmain <- mkHwMain(pcie.ctrl.user, flashes, flashCtrl2.man, dramController.user, clocked_by uclk, reset_by urst);
+	HwMainIfc hwmain <- mkHwMain(pcie.ctrl.user, flashes, flashCtrl2.man, dramController.user, clk250, rst250, clocked_by uclk, reset_by urst);
 
 	//ReadOnly#(Bit#(4)) leddata <- mkNullCrossingWire(noClock, pcieCtrl.leds);
 
@@ -138,6 +138,7 @@ endmodule
 
 module mkProjectTop_bsim (Empty);
 	Clock curclk <- exposeCurrentClock;
+	Reset currst <- exposeCurrentReset;
 
 	PcieCtrlIfc pcieCtrl <- mkPcieCtrl_bsim;
 	FlashCtrlVirtexIfc flashCtrl1 <- mkFlashCtrlModel(curclk, curclk, curclk);
@@ -151,7 +152,7 @@ module mkProjectTop_bsim (Empty);
 	let ddr3_ctrl_user <- mkDDR3Simulator;
 	mkConnection(dramController.ddr3_cli, ddr3_ctrl_user);
 
-	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, flashes, flashCtrl2.man, dramController.user);
+	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, flashes, flashCtrl2.man, dramController.user, curclk, currst);
 	rule flushAlwaysEn;
 		flashCtrl1.aurora.rxn_in(1);
 		flashCtrl1.aurora.rxp_in(1);

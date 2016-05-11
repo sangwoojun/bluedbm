@@ -16,6 +16,53 @@ interface TagDestReorderIfc#(numeric type destCount);
 	method ActionValue#(Tuple2#(Bit#(8), Bit#(8))) tagDestReady;
 endinterface
 
+module mkTagDestReorderV (TagDestReorderIfc#(destCount));
+	Integer dcount = valueOf(destCount);
+	Vector#(256, Reg#(Bool)) tagReadyMap <- replicateM(mkReg(False));
+	Vector#(destCount, Reg#(Bit#(16))) destReadyUp <- replicateM(mkReg(0));
+	Vector#(destCount, Reg#(Bit#(16))) destReadyDown <- replicateM(mkReg(0));
+	Vector#(destCount, FIFOF#(Bit#(8))) tagReq <- replicateM(mkSizedBRAMFIFOF(256));
+
+	FIFO#(Tuple2#(Bit#(8), Bit#(8))) readyQ <- mkFIFO;
+
+	Reg#(Bit#(8)) curCheckDst <- mkReg(0);
+	rule checkReady;
+		if ( curCheckDst +1 >= fromInteger(dcount) ) begin
+			curCheckDst <= 0;
+		end else begin
+			curCheckDst <= curCheckDst + 1;
+		end
+
+		if ( tagReq[curCheckDst].notEmpty ) begin
+			let t = tagReq[curCheckDst].first;
+			if ( tagReadyMap[t] == True 
+				&& destReadyUp[curCheckDst]-destReadyDown[curCheckDst] > 0 ) begin
+				tagReq[curCheckDst].deq;
+				tagReadyMap[t] <= False;
+				readyQ.enq(tuple2(t,curCheckDst));
+				destReadyDown[curCheckDst] <= destReadyDown[curCheckDst] + 1;
+			end
+		end
+
+	endrule
+
+	method Action tagReady(Bit#(8) tag);
+		tagReadyMap[tag] <= True;
+	endmethod
+	method Action destReady(Bit#(8) dest);
+		destReadyUp[dest] <= destReadyUp[dest] + 1;
+	endmethod
+
+	method Action tagDestReq(Bit#(8) tag, Bit#(8) dest);
+		tagReq[dest].enq(tag);
+	endmethod
+
+	method ActionValue#(Tuple2#(Bit#(8), Bit#(8))) tagDestReady;
+		readyQ.deq;
+		return readyQ.first;
+	endmethod
+endmodule
+
 module mkTagDestReorder (TagDestReorderIfc#(destCount));
 	Integer dcount = valueOf(destCount);
 

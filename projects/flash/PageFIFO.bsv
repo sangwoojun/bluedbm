@@ -22,24 +22,6 @@ module mkPageFIFO#(Integer pages) (PageFIFOIfc);
 	Reg#(Bit#(16)) datain <- mkReg(0);
 	Reg#(Bit#(16)) dataout <- mkReg(0);
 
-/*
-	rule splitQ;
-		if ( splitcount == 0 ) begin
-			inQ.deq;
-			let d = inQ.first;
-
-			splitcount <= 3;
-			outQ.enq(d[511:384]);
-			splitbuf <= (d<<128);
-			
-			dataout <= dataout + 1;
-		end else begin
-			splitcount <= splitcount - 1;
-			outQ.enq(splitbuf[511:384]);
-			splitbuf <= (splitbuf<<128);
-		end
-	endrule
-	*/
 	rule relayq;
 		inQ.deq;
 		outQ.enq(inQ.first);

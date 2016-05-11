@@ -12,15 +12,12 @@ import FlashCtrlVirtex1::*;
 import FlashCtrlModel::*;
 
 import MergeN::*;
-/**
-IMPORTANT: tags need to be encoded in a certain way now:
-tag[2:0] tag
-tag[5:3] bus
-tag[6] board
-**/
 
-interface FlashDataIfc;
-	method Action writeWord(Bit#(8) tag, Bit#(128) word);
+typedef 16 BusCount; // 8 per card in hw, 2 per card in sim
+typedef 128 TagCount; // Has to be larger than the software setting
+
+interface FlashBusDataIfc;
+	method Action writeWord#(Bit#(8) tag, Bit#(128) word);
 	method ActionValue#(Tuple2#(Bit#(8), Bit#(128))) readWord;
 endinterface
 
@@ -33,9 +30,8 @@ typedef enum {
 } FlashStatus deriving (Bits, Eq);
 
 typedef struct {
-	FlashOp op;
-	
 	Bit#(8) tag;
+	FlashOp op;
 
 	Bit#(4) bus;
 	ChipT chip;
@@ -45,13 +41,13 @@ typedef struct {
 
 interface DualFlashManagerIfc;
 	method Action command(FlashManagerCmd cmd);
-	method ActionValue#(Tuple2#(Bit#(8), FlashStatus)) fevent;
-	interface Vector#(2, FlashDataIfc) ifc;
+	method ActionValue#(Tuple2#(Bit#(8), FlashStatus)) flashEvent;
+	Vector#(BusCount, FlashBusDataIfc) buses;
 endinterface
 
 module mkDualFlashManager#(Vector#(2,FlashCtrlUser) flashes) (DualFlashManagerIfc);
 
-	Merge2Ifc#(Tuple2#(Bit#(8), FlashStatus)) mstat <- mkMerge2;
+	Merge2#(Tuple2#(Bit#(8), FlashStatus)) mstat <- mkMerge2;
 	for (Integer i = 0; i < 2; i=i+1 ) begin
 		(* descending_urgency = "flashAck, writeReady" *)
 		rule flashAck;
@@ -64,57 +60,52 @@ module mkDualFlashManager#(Vector#(2,FlashCtrlUser) flashes) (DualFlashManagerIf
 				ERASE_DONE: stat = STATE_ERASE_DONE;
 				ERASE_ERROR: stat = STATE_ERASE_FAIL;
 			endcase
-			Bit#(8) mask = (fromInteger(i)<<7);
-			mstat.enq[i].enq(tuple2(tag|mask, stat));
+			mstat.enq[i].enq(tuple2(tag, stat));
 		endrule
 		rule writeReady;
 			TagT tag <- flashes[i].writeDataReq;
-			Bit#(8) mask = (fromInteger(i)<<7);
-			Bit#(8) ntag = zeroExtend(tag)|mask;
-			mstat.enq[i].enq(tuple2(ntag, STATE_WRITE_READY));
+			mstat.enq[i].enq(zeroExtend(tag), STATE_WRITE_READY);
 		endrule
 	end
 
-	Vector#(2, FlashDataIfc) ifc_;
-	for ( Integer i = 0; i < 2; i=i+1 ) begin
-		ifc_[i] = interface FlashDataIfc;
-			method Action writeWord(Bit#(8) tag, Bit#(128) word);
-				flashes[i].writeWord(tuple2(word, truncate(tag)));
+	//Tag translation
+	Vector#(BusCount, FIFO#(Tuple2#(Bit#(128),Bit#(8)))) dmaWriteQ <- replicateM(mkSizedFIFO#(32));
+
+	Vector#(BusCount, FlashBuDatasIfc) buses_;
+	for ( Integer i = 0; i < valueOf(BusCount); i=i+1 ) begin
+		buses_[i] = interface FlashBusDataIfc;
+			method Action writeWord#(Bit#(8) tag, Bit#(128) word);
 			endmethod
 			method ActionValue#(Tuple2#(Bit#(8), Bit#(128))) readWord;
-				let d <- flashes[i].readWord;
-				Bit#(8) mask = (fromInteger(i)<<7);
-				return tuple2(zeroExtend(tpl_2(d))|mask, tpl_1(d)) ;
+				return ?;
 			endmethod
-		endinterface: FlashDataIfc;
+		endinterface: FlashBusDataIfc;
 	end
 
 	method Action command(FlashManagerCmd cmd);
-		Bit#(3) bus = truncate(cmd.bus);
-		Bit#(7) tag = truncate(cmd.tag);
-		if ( cmd.bus[3] == 0 ) begin // board(1), bus(3)
+		if ( cmd.bus[0] == 0 ) begin
 			flashes[0].sendCmd(FlashCmd{
-				op:cmd.op,
-				tag: tag,
-				bus: bus,
+				op:cur_flashop,
+				tag:truncate(cmd.tag),
+				bus: truncate(cmd.bus>>1),
 				chip: cmd.chip,
 				block:cmd.block,
 				page:cmd.page
 				});
 		end else begin
 			flashes[1].sendCmd(FlashCmd{
-				op:cmd.op,
-				tag: tag,
-				bus: bus,
+				op:cur_flashop,
+				tag:truncate(cmd.tag),
+				bus: truncate(cmd.bus>>1),
 				chip: cmd.chip,
 				block:cmd.block,
 				page:cmd.page
 				});
 		end
 	endmethod
-	method ActionValue#(Tuple2#(Bit#(8), FlashStatus)) fevent;
+	method ActionValue#(Tuple2#(Bit#(8), FlashStatus)) flashEvent;
 		mstat.deq;
 		return mstat.first;
 	endmethod
-	interface ifc = ifc_;
+	interface buses = buses_;
 endmodule

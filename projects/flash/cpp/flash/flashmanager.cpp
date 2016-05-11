@@ -7,6 +7,8 @@
 #include "flashmanager.h"
 #include "dmasplitter.h"
 
+#include "proteinbench/proteinbench.h"
+
 double timespec_diff_sec( timespec start, timespec end ) {
 	double t = end.tv_sec - start.tv_sec;
 	t += ((double)(end.tv_nsec - start.tv_nsec)/1000000000L);
@@ -49,7 +51,7 @@ void procFlashEvent(uint8_t tag, uint8_t code) {
 			timespec now;
 			clock_gettime(CLOCK_REALTIME, & now);
 			double diff = timespec_diff_sec(flash->sentTime[tag], now);
-			//printf( "read done to tag %d > %d %f\n", tag, ++readcnt, diff); 
+			//if ( flash->readCount == 0 ) printf( "read done to tag %d > %d %f\n", tag, ++readcnt, diff); 
 			pthread_cond_broadcast(&(flash->flashCond));
 			pthread_mutex_unlock(&(flash->flashMutex));
 		}
@@ -90,7 +92,7 @@ void procFlashEvent(uint8_t tag, uint8_t code) {
 			uint32_t* buf = (uint32_t*)flash->storebuffer[tag];
 			for ( int i = 0; i < (1024*8)/16; i++ ) {
 				int idx = i*4;
-				dma->sendWord(1, buf[idx], buf[idx+1], buf[idx+2], buf[idx+3]);
+				dma->sendWord(255, buf[idx], buf[idx+1], buf[idx+2], buf[idx+3]);
 			}
 			pthread_cond_broadcast(&(flash->flashCond));
 			pthread_mutex_unlock(&(flash->flashMutex));
@@ -111,6 +113,9 @@ void* flashManagerThread(void* arg) {
 	void* dmabuffer = dma->dmaBuffer();
 	uint8_t* bdb = (uint8_t*)dmabuffer;
 
+	int nfcount = 0;
+	int fcount = 0;
+
 	while (1) {
 		PCIeWord w = dma->recvWord();
 		int rcount = 0;
@@ -125,6 +130,7 @@ void* flashManagerThread(void* arg) {
 				if ( code2 != 0xff ) {
 					procFlashEvent(tag2,code2);
 					rcount++;
+
 				} 
 				if ( code1 != 0xff ) {
 					procFlashEvent(tag1,code1);
@@ -132,14 +138,14 @@ void* flashManagerThread(void* arg) {
 				}
 			}
 		} 
-		else if ( w.header == 2 ) {
+		else {
 			uint64_t cidx = w.d[3];
 			cidx = (cidx<<32)|w.d[2];
 			uint64_t val = (((uint64_t)w.d[1])<<32)|w.d[0];
 			printf( "VM result %ld %ld\n", cidx, val );
 			fflush(stdout);
-		} else {
-			printf( "uncaught dma.enq %d\n", w.header );
+			//detailcalc(cidx);
+			//printf( "uncaught dma.enq %d\n", w.header );
 		}
 		//if ( rcount > 2 )
 		//printf( "rcount= %d\n", rcount );
@@ -205,6 +211,8 @@ void FlashManager::eraseBlock(int bus, int chip, int block, uint8_t* status) {
 }
 void FlashManager::writePage(int bus, int chip, int block, int page, void* buffer, uint8_t* status) {
 	DMASplitter* dma = DMASplitter::getInstance();
+	void* dmabuffer = dma->dmaBuffer();
+	uint8_t* bdb = (uint8_t*)dmabuffer;
 	
 	pthread_mutex_lock(&flashMutex);
 	int tag = getIdleTag(bus);
@@ -215,7 +223,9 @@ void FlashManager::writePage(int bus, int chip, int block, int page, void* buffe
 	}
 	tagBusy[tag] = true;
 	this->storebuffer[tag] = buffer;
+
 	this->statusbuffer[tag] = status;
+	memcpy(bdb+(1024*8*tag), buffer, (1024*8));
 	
 	//uint32_t blockpagetag = (block<<16) | (page<<8) | tag;
 	//uint32_t buschip = (bus<<8) | chip;
@@ -233,9 +243,6 @@ void FlashManager::readPage(int bus, int chip, int block, int page, void* buffer
 	DMASplitter* dma = DMASplitter::getInstance();
 	BdbmPcie* pcie = BdbmPcie::getInstance();
 
-	
-
-
 
 	pthread_mutex_lock(&flashMutex);
 	timespec start;
@@ -250,13 +257,12 @@ void FlashManager::readPage(int bus, int chip, int block, int page, void* buffer
 	this->storebuffer[tag] = buffer;
 	this->statusbuffer[tag] = status;
 	
-	void* dmabuffer = dma->dmaBuffer();
-	uint8_t* bdb = (uint8_t*)dmabuffer;
-	for ( int i = 0; i < 8192; i++ ) {
-		bdb[8192*tag+i] = 0xcc;
+
+	if ( buffer != NULL ) {
+		void* dmabuffer = dma->dmaBuffer();
+		uint8_t* bdb = (uint8_t*)dmabuffer;
+		memset(bdb+8192*tag,0xcc, 8192);
 	}
-
-
 	
 	uint32_t blockpagechip = (block<<16) | (page<<8) | chip;
 	uint32_t desttag = (target<<16) | tag;

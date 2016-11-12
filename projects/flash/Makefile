@@ -2,7 +2,7 @@ BSCFLAGS = -show-schedule -aggressive-conditions --wait-for-license
 
 BSCFLAGS_SYNTH = -bdir ./build/obj -vdir ./build/verilog/top -simdir ./build/obj -info-dir ./build -fdir ./build
 BSCFLAGS_BSIM = -bdir ./bsim/obj -vdir ./bsim/verilog/top -simdir ./bsim/obj -info-dir ./bsim -fdir ./bsim
-BSVPATH =../../bluespecpcie/src/:../../src/lib/:../../flash/src/common/:../../flash/src/model_virtex/:../../flash/src/hw_virtex/:../../flash/aurora_8b10b_fmc1/:../../flash/xilinx/:../../ddr3_v2_0/
+BSVPATH =../../bluespecpcie/src/:../../src/hwlib/:../../flash/src/common/:../../flash/src/model_virtex/:../../flash/src/hw_virtex/:../../flash/aurora_8b10b_fmc1/:../../flash/xilinx/:../../ddr3_v2_0/
 
 BSIM_CPPFILES =../../bluespecpcie/src/PcieBdpi.cpp \
 	../../bluespecpcie/src/ShmFifo.cpp

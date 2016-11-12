@@ -325,7 +325,7 @@ BSBFS::blockIdx(uint64_t page) {
 int
 BSBFS::feof(int fd) {
 	File* nf = files[fd];
-	if ( nf == NULL ) return 0;
+	if ( nf == NULL ) return 1;
 
 	if ( nf->seek >= nf->size ) return 1;
 

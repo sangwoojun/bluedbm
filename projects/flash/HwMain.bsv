@@ -171,7 +171,6 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 
 		let conf = d[127:96];
 		//if ( conf == 0 ) begin
-		let opcode = d[31:0];
 
 		let cur_blockpagechip = d[63:32];
 		let cur_bustag = d[95:64];
@@ -426,8 +425,10 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 
 ////// Start Accelerators
 	Vector#(AccelCount, AcceleratorReaderIfc) accelv;
-	accelv[0] <- mkTiledSparseMatrixAccel(drama.users[1]);
-	accelv[1] <- mkSparseCoreAccel;
+	//accelv[0] <- mkTiledSparseMatrixAccel(drama.users[1]);
+	accelv[0] <- mkNullAcceleratorReader;
+	
+	accelv[1] <- mkDocDistAccel;
 	//accelv[1] <- mkTiledSparseMatrixAccel(drama.users[2]);
 	accelv[2] <- mkDRAMWriterAccel(drama.users[3]);
 	/*

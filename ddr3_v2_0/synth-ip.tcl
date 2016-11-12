@@ -1,6 +1,11 @@
 set coredir "./core/"
 set corename "ddr3_v2_0"
 
+file mkdir $coredir
+if [file exists ./$coredir/$corename] {
+	file delete -force ./$coredir/$corename
+}
+
 create_project -name local_synthesized_ip -in_memory -part xc7vx485tffg1761-2
 set_property board_part xilinx.com:vc707:part0:1.0 [current_project]
 create_ip -name mig_7series -version 2.* -vendor xilinx.com -library ip -module_name $corename -dir ./$coredir

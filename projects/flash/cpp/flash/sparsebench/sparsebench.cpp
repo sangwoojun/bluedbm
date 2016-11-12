@@ -12,10 +12,10 @@ void loadFiles()
 	BSBFS* fs = BSBFS::getInstance();
 
 
-	int fdm = fs->open("mat.23tiled");
+	int fdm = fs->open("mat.tiled");
 	if ( fdm < 0 ) {
-		fs->createFile("mat.23tiled");
-		int fdm = fs->open("mat.23tiled");
+		fs->createFile("mat.tiled");
+		int fdm = fs->open("mat.tiled");
 		uint8_t* bdb = (uint8_t*)dma->dmaBuffer();
 		//memset(bdb,0xaa, 8192*256);
 		
@@ -60,22 +60,16 @@ void sparsebench(int accelcount, int pages, int vlen, int* vector)
 #endif
 	
 
+	printf( "Starting read\n" );
+	fflush(stdout);
 	
 	int fd = fs->open("mat.tiled");
 	fs->fseek(fd, 0, File::FSEEK_SET);
 
-	int fdt = fs->open("testfile1.txt");
-	FILE* fout = fopen("dump.dat", "wb");
-	for ( int i = 0; !fs->feof(fdt); i++ ) {
-		uint64_t read = fs->pread(fdt, pageBufferR, 1, 0,true);
-		if ( read > 0 ) {
-			fwrite(pageBufferR, FPAGE_SIZE, 1, fout);
-		}
-	}
-	fclose(fout);
 
 	timespec start, now;
 	clock_gettime(CLOCK_REALTIME, & start);
+
 
 	for ( int iter = 0; iter < 128; iter ++ ) {
 		printf( "Sending init msg\n" );

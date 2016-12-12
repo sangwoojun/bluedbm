@@ -21,7 +21,12 @@ uint64_t llrand() {
 std::map<uint64_t, uint64_t> visited;
 std::list<uint64_t> next;
 std::map<uint64_t, int> frontier;
-void traverse_node(uint64_t node, FILE* fidx, FILE* fmat) {
+
+uint64_t last_idx_page = 0;
+uint64_t idx_page_cnt = 0;
+uint64_t last_mat_page = 0;
+uint64_t mat_page_cnt = 0;
+void traverse_node(uint64_t node, FILE* fidx, FILE* fmat, int perword) {
 	uint64_t idxoff = node*sizeof(uint64_t);
 	fseek(fidx, idxoff, SEEK_SET);
 	uint64_t matoffv[2] = {LLU_MAX,LLU_MAX};
@@ -29,16 +34,48 @@ void traverse_node(uint64_t node, FILE* fidx, FILE* fmat) {
 	uint64_t matoff =matoffv[0];
 	uint64_t bytecount = matoffv[1]-matoffv[0];
 
+	uint64_t idxpoff = (idxoff>>13);
+	if ( idxpoff != last_idx_page ) {
+		last_idx_page = idxpoff;
+		idx_page_cnt++;
+	}
+	idxpoff = ((idxoff+8)>>13);
+	if ( idxpoff != last_idx_page ) {
+		last_idx_page = idxpoff;
+		idx_page_cnt++;
+	}
+
 		
+	uint64_t last_edge = 0;
 	fseek(fmat, matoff, SEEK_SET);
+
+	uint64_t matpoff = (matoff*4/perword)>>13;
+	uint64_t matpoff2 = ((matoff+bytecount)*4/perword)>>13;
+	for ( uint64_t mio = matpoff; mio <= matpoff2; mio++ ) {
+		if ( last_mat_page != mio ) {
+			last_mat_page = mio;
+			mat_page_cnt++;
+		}
+	}
+
 	for ( uint64_t i = 0; i < bytecount/sizeof(uint64_t); i++ ) {
 		uint64_t edge = 0;
 		if ( fread(&edge, sizeof(uint64_t), 1, fmat) == 0 ) break;
 
 		if ( visited.find(edge) != visited.end() ) continue;
 		
-		if ( frontier.find(edge) == frontier.end() ) frontier[edge] = 1;
-		else frontier[edge] = frontier[edge]+1;
+		if ( frontier.count(edge) > 0 ) {
+			frontier[edge] = frontier[edge]+1;
+			printf( "jj!\n" ); fflush(stdout);
+		}
+		else frontier[edge] = 1;
+		if ( edge < last_edge ) {
+			printf( "%ld smaller than last %ld!\n", edge, last_edge );
+			fflush(stdout);
+		}
+
+		//if ( frontier.find(edge) == frontier.end() ) frontier[edge] = 1;
+		//else frontier[edge] = frontier[edge]+1;
 		visited[edge] = node;
 	} 
 }
@@ -49,9 +86,15 @@ int main(int argc, char** argv) {
 		exit(1);
 	}
 
+	int perword = 8;
+
 	FILE* fidx = fopen(argv[1], "rb");
 	FILE* fmat = fopen(argv[2], "rb");
 	uint64_t scale = atoi(argv[3]);
+	if ( argc >=5 ) {
+		perword = atoi(argv[4]);
+		printf( "Packing %d per word\n", perword );
+	}
 	uint64_t nmax = (1<<(scale));
 	uint64_t nmask = nmax-1;
 	if ( fidx == NULL ) {
@@ -64,13 +107,13 @@ int main(int argc, char** argv) {
 	}
 	int rcount = 30;
 	
-	srand(time(0));
+	srand(time(NULL));
 
 	for ( int r = 0; r < rcount; r++ ) {
 		uint64_t src = llrand() & nmask;
 		uint64_t dst = llrand() & nmask;
 
-		printf("Starting bfs\nSrc: %ld Dst: %ld\n", src,dst);
+		printf("Starting bfs\nSrc: %lu Dst: %lu\n", src,dst);
 		visited.clear();
 		frontier.clear();
 		frontier[src] = 1;
@@ -81,6 +124,11 @@ int main(int argc, char** argv) {
 		std::list<uint64_t> current;
 
 		while (!frontier.empty() && found == false) {
+			last_idx_page = -1;
+			idx_page_cnt = 0;
+			last_mat_page = -1;
+			mat_page_cnt = 0;
+
 			// loop through frontier
 			uint64_t travtotal = 0;
 			uint64_t travnodes = 0;
@@ -96,18 +144,20 @@ int main(int argc, char** argv) {
 				travnodes += 1;
 			}
 			frontier.clear();
+
 			double rat = ((double)travtotal)/((double)travnodes);
 			printf( "Iterated -- %ld %ld [%ld/%ld](%f)\n", current.size(), visited.size(), travtotal, travnodes, rat );
 			fflush(stdout);
-
 			for ( std::list<uint64_t>::iterator it = current.begin();
 				it != current.end(); it++ ) {
-				traverse_node(*it, fidx, fmat);
+				traverse_node(*it, fidx, fmat, perword);
 			}
+			printf( "Pages -- %ld + %ld = %ld  %ld\n", idx_page_cnt, mat_page_cnt, idx_page_cnt+mat_page_cnt, current.size() );
+			fflush(stdout);
 			current.clear();
 		}
 		
-		printf("%s %ld\n", found?"Discovered":"Not discovered", dst);
+		printf("%s %lu\n", found?"Discovered":"Not discovered", dst);
 		if ( found ) {
 			uint64_t back = visited[dst];
 			while (visited[back] != back) {

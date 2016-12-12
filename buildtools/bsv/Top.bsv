@@ -41,11 +41,13 @@ interface TopIfc;
 	interface PcieImportPins pcie_pins;
 	(* always_ready *)
 	method Bit#(4) led;
-	
+
+`ifdef USE_FLASH
 	(* always_ready *)
 	interface Aurora_Pins#(4) aurora_fmc1;
 	(* always_ready *)
 	interface Aurora_Pins#(4) aurora_fmc2;
+`endif
 
 `ifdef USE_DRAM
 	interface DDR3_Pins_VC707_1GB pins_ddr3;
@@ -91,11 +93,18 @@ module mkProjectTop #(
 	Clock uclk = clk125;
 	Reset urst = rst125;
 	
+`ifdef USE_FLASH
 	FlashCtrlVirtexIfc flashCtrl1 <- mkFlashCtrlVirtex1(aurora_clk_fmc1_gtx_clk_p_v, aurora_clk_fmc1_gtx_clk_n_v, clk250, clocked_by uclk, reset_by urst);
 	FlashCtrlVirtexIfc flashCtrl2 <- mkFlashCtrlVirtex2(aurora_clk_fmc2_gtx_clk_p_v, aurora_clk_fmc2_gtx_clk_n_v, clk250, clocked_by uclk, reset_by urst);
 	Vector#(2,FlashCtrlUser) flashes;
 	flashes[0] = flashCtrl1.user;
 	flashes[1] = flashCtrl2.user;
+`eldr
+	Vector#(2,FlashCtrlUser) flashes;
+	flashes[0] <- mkNullFlashCtrlUser;
+	flashes[1] <- mkNullFlashCtrlUser;
+`endif
+
    
 ////////// DDR3
 	DRAMControllerIfc dramController <- mkDRAMController(clocked_by uclk, reset_by urst);
@@ -123,8 +132,10 @@ module mkProjectTop #(
 
 	// Interfaces ////
 	interface PcieImportPins pcie_pins = pcie.pins;
+`ifdef USE_FLASH
 	interface Aurora_Pins aurora_fmc1 = flashCtrl1.aurora;
 	interface Aurora_Pins aurora_fmc2 = flashCtrl2.aurora;
+`endif
 
 `ifdef USE_DRAM
 	interface DDR3_Pins_VC707_1GB pins_ddr3 = ddr3_ctrl.ddr3;

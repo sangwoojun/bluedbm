@@ -7,6 +7,7 @@ set_param general.maxThreads 8
 set pciedir ../../../../bluespecpcie/
 set flashdir ../../../../flash/
 set ddr3dir ../../../../ddr3_v2_0/
+set floatdir ../../../../floatingpoint/
 
 set outputDir ./hw
 file mkdir $outputDir
@@ -20,6 +21,10 @@ set partname {xc7vx485tffg1761-2}
 read_verilog [ glob {verilog/top/*.v} ]
 
 set_property part $partname [current_project]
+
+############# Float Stuff
+read_ip $floatdir/core/fp_mult32/fp_mult32.xci
+############# end Float Stuff
 
 ############# Pcie Stuff
 read_ip $pciedir/core/pcie_7x_0/pcie_7x_0.xci

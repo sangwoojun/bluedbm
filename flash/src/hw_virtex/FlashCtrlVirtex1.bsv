@@ -57,6 +57,25 @@ interface FlashCtrlVirtexIfc;
 	interface FlashManagerIfc man;
 endinterface
 
+module mkNullFlashCtrlUser (FlashCtrlUser);
+		method Action sendCmd (FlashCmd cmd); 
+		endmethod
+		method Action writeWord (Tuple2#(Bit#(128), TagT) taggedData);
+		endmethod
+		method ActionValue#(Tuple2#(Bit#(128), TagT)) readWord ();
+			return ?;
+		endmethod
+		method ActionValue#(TagT) writeDataReq();
+			return ?;
+		endmethod
+
+		method ActionValue#(Tuple2#(TagT, StatusT)) ackStatus ();
+			return ?;
+		endmethod
+		
+		method Bit#(1) channel_up = 0;
+endmodule
+
 (* synthesize *)
 module mkFlashCtrlVirtex1#(
 	Clock gtx_clk_p, Clock gtx_clk_n, Clock clk250) (FlashCtrlVirtexIfc);

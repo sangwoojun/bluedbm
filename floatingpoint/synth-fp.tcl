@@ -20,3 +20,6 @@ proc genFPCore {corename propertyList} {
 
 genFPCore "fp_mult32" [list CONFIG.Operation_Type {Multiply} CONFIG.C_Mult_Usage {Max_Usage} CONFIG.Flow_Control {Blocking} CONFIG.A_Precision_Type {Single} CONFIG.C_A_Exponent_Width {8} CONFIG.C_A_Fraction_Width {24} CONFIG.Result_Precision_Type {Single} CONFIG.C_Result_Exponent_Width {8} CONFIG.C_Result_Fraction_Width {24} CONFIG.Has_RESULT_TREADY {true} CONFIG.C_Latency {7} CONFIG.C_Rate {1}]
 
+genFPCore "fp_add32" [list CONFIG.Operation_Type {Add_Subtract} CONFIG.Add_Sub_Value {Add} CONFIG.A_Precision_Type {Single} CONFIG.C_A_Exponent_Width {8} CONFIG.C_A_Fraction_Width {24} CONFIG.Result_Precision_Type {Single} CONFIG.C_Result_Exponent_Width {8} CONFIG.C_Result_Fraction_Width {24} CONFIG.C_Mult_Usage {Full_Usage} CONFIG.C_Latency {12} CONFIG.C_Rate {1}]
+
+genFPCore "fp_sub32" [list CONFIG.Operation_Type {Add_Subtract} CONFIG.Add_Sub_Value {Subtract} CONFIG.A_Precision_Type {Single} CONFIG.C_A_Exponent_Width {8} CONFIG.C_A_Fraction_Width {24} CONFIG.Result_Precision_Type {Single} CONFIG.C_Result_Exponent_Width {8} CONFIG.C_Result_Fraction_Width {24} CONFIG.C_Mult_Usage {Full_Usage} CONFIG.C_Latency {12} CONFIG.C_Rate {1}]

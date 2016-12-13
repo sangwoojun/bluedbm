@@ -24,6 +24,8 @@ set_property part $partname [current_project]
 
 ############# Float Stuff
 read_ip $floatdir/core/fp_mult32/fp_mult32.xci
+read_ip $floatdir/core/fp_add32/fp_add32.xci
+read_ip $floatdir/core/fp_sub32/fp_sub32.xci
 ############# end Float Stuff
 
 ############# Pcie Stuff

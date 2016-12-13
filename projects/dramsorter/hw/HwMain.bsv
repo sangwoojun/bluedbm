@@ -26,7 +26,7 @@ import PageSorter::*;
 import SortingNetwork::*;
 import MergeSorter::*;
 
-import FpMult32::*;
+import Float32::*;
 
 typedef 8 BusCount; // 8 per card in hw, 2 per card in sim
 typedef TMul#(2,BusCount) BBusCount; //Board*bus
@@ -39,7 +39,8 @@ typedef TAdd#(AccelCount,1) DestCount; // 0 is always host DRAM
 interface HwMainIfc;
 endinterface
 
-module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManagerIfc flashMan, 
+module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes
+	//, FlashManagerIfc flashMan, 
 		DRAMUserIfc dram,
 		Clock clk250,
 		Reset rst250
@@ -55,8 +56,6 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes, FlashManage
 	DRAMArbiterIfc#(2) drama <- mkDRAMArbiter(dram);
 	//DMACircularQueueIfc#(22) dma <- mkDMACircularQueue(pcie); // 4MB
 	DualFlashManagerIfc flashman <- mkDualFlashManager(flashes);
-
-	FpMultIfc32 fp_mult32 <- mkFpMult32(curClk, curRst);
 
 
 	LinearCongruentialIfc#(34) prng1 <- mkLinearCongruential;

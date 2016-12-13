@@ -90,17 +90,16 @@ module mkProjectTop #(
 	Reset rst125 <- mkAsyncReset( 8, sys_rst_n_buf, clk125);
 	//Reset rst125 <- mkSyncReset( 4, rst125a, clk125);
 
-	Clock uclk = clk125;
-	Reset urst = rst125;
+	Clock uclk = clk250;// clk125;
+	Reset urst = rst250;// ust125;
 	
+	Vector#(2,FlashCtrlUser) flashes;
 `ifdef USE_FLASH
 	FlashCtrlVirtexIfc flashCtrl1 <- mkFlashCtrlVirtex1(aurora_clk_fmc1_gtx_clk_p_v, aurora_clk_fmc1_gtx_clk_n_v, clk250, clocked_by uclk, reset_by urst);
 	FlashCtrlVirtexIfc flashCtrl2 <- mkFlashCtrlVirtex2(aurora_clk_fmc2_gtx_clk_p_v, aurora_clk_fmc2_gtx_clk_n_v, clk250, clocked_by uclk, reset_by urst);
-	Vector#(2,FlashCtrlUser) flashes;
 	flashes[0] = flashCtrl1.user;
 	flashes[1] = flashCtrl2.user;
-`eldr
-	Vector#(2,FlashCtrlUser) flashes;
+`else
 	flashes[0] <- mkNullFlashCtrlUser;
 	flashes[1] <- mkNullFlashCtrlUser;
 `endif
@@ -126,7 +125,7 @@ module mkProjectTop #(
 
 
 ////////////////
-	HwMainIfc hwmain <- mkHwMain(pcie.ctrl.user, flashes, flashCtrl2.man, dramController.user, clk250, rst250, clocked_by uclk, reset_by urst);
+	HwMainIfc hwmain <- mkHwMain(pcie.ctrl.user, flashes,/* flashCtrl2.man,*/ dramController.user, clk250, rst250, clocked_by uclk, reset_by urst);
 
 	//ReadOnly#(Bit#(4)) leddata <- mkNullCrossingWire(noClock, pcieCtrl.leds);
 
@@ -163,7 +162,7 @@ module mkProjectTop_bsim (Empty);
 	let ddr3_ctrl_user <- mkDDR3Simulator;
 	mkConnection(dramController.ddr3_cli, ddr3_ctrl_user);
 
-	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, flashes, flashCtrl2.man, dramController.user, curclk, currst);
+	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, flashes, /*flashCtrl2.man,*/ dramController.user, curclk, currst);
 	rule flushAlwaysEn;
 		flashCtrl1.aurora.rxn_in(1);
 		flashCtrl1.aurora.rxp_in(1);

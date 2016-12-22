@@ -6,18 +6,22 @@ import Vector::*;
 import BRAM::*;
 import BRAMFIFO::*;
 
-interface SingleMergerIfc#(type inType);
+
+/**
+**/
+
+interface SingleMergerIfc#(type inType, numeric type cntSz);
 	method Action enq1(inType data);
 	method Action enq2(inType data);
-	method Action runMerge(Bit#(16) count);
+	method Action runMerge(Bit#(cntSz) count);
 	method ActionValue#(inType) get;
 endinterface
 
-module mkSingleMerger#(Bool descending) (SingleMergerIfc#(inType))
+module mkSingleMerger#(Bool descending) (SingleMergerIfc#(inType, cntSz))
 	provisos(Bits#(inType,inTypeSz), Ord#(inType), Add#(1,a__,inTypeSz));
-	Reg#(Bit#(16)) mCountTotal <- mkReg(0);
-	Reg#(Bit#(16)) mCount1 <- mkReg(0);
-	Reg#(Bit#(16)) mCount2 <- mkReg(0);
+	Reg#(Bit#(cntSz)) mCountTotal <- mkReg(0);
+	Reg#(Bit#(cntSz)) mCount1 <- mkReg(0);
+	Reg#(Bit#(cntSz)) mCount2 <- mkReg(0);
 
 	FIFO#(inType) inQ1 <- mkFIFO;
 	FIFO#(inType) inQ2 <- mkFIFO;
@@ -69,7 +73,7 @@ module mkSingleMerger#(Bool descending) (SingleMergerIfc#(inType))
 	method Action enq2(inType data);
 		inQ2.enq(data);
 	endmethod
-	method Action runMerge(Bit#(16) count) if (mCountTotal == 0);
+	method Action runMerge(Bit#(cntSz) count) if (mCountTotal == 0);
 		mCountTotal <= count * 2;
 		mCount1 <= count;
 		mCount2 <= count;
@@ -99,7 +103,7 @@ module mkPageSorter#(Bool descending) (PageSorterIfc#(inType, tupleCount, pageSz
 	Integer pageSize = 2**iPageSz;
 	Integer iTupleCount = valueOf(tupleCount);
 
-	SingleMergerIfc#(inType) merger <- mkSingleMerger(descending);
+	SingleMergerIfc#(inType,16) merger <- mkSingleMerger(descending);
 
 	Vector#(2,FIFO#(Vector#(tupleCount,inType))) buffers <- replicateM(mkSizedBRAMFIFO(pageSize/2));
 	//Vector#(2, Reg#(Bit#(32))) bufferCntUp <- replicateM(mkReg(0));
@@ -202,9 +206,6 @@ module mkPageSorter#(Bool descending) (PageSorterIfc#(inType, tupleCount, pageSz
 			outQ.enq(d);
 		end else begin
 			buffers[insStrideCount[0]].enq(d);
-			//bufferCntUp[insStrideCount[0]] <= bufferCntUp[insStrideCount[0]] + 1;
-			//let cv = bufferCntUp[insStrideCount[0]]-bufferCntDown[insStrideCount[0]];
-			//$display( "Read tuple %d to %d(%d) (%d) %d %d %d", totalReadCount, insStrideCount[0], cv, curInsStride, d[0], d[1], d[2]);
 		end
 
 

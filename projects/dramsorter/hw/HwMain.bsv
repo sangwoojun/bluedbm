@@ -24,7 +24,11 @@ import DRAMArbiter::*;
 import LinearCongruential::*;
 import PageSorter::*;
 import SortingNetwork::*;
-import MergeSorter::*;
+
+import DRAMMultiFIFO::*;
+import SortMerger::*;
+
+import GraphOperator::*;
 
 import Float32::*;
 
@@ -36,14 +40,15 @@ typedef 4 DMAEngineCount;
 typedef 3 AccelCount;
 typedef TAdd#(AccelCount,1) DestCount; // 0 is always host DRAM
 
+
 interface HwMainIfc;
 endinterface
 
 module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes
 	//, FlashManagerIfc flashMan, 
-		DRAMUserIfc dram,
-		Clock clk250,
-		Reset rst250
+		, DRAMUserIfc dram
+		, Clock clk250 
+		, Reset rst250
 	) 
 	(HwMainIfc);
 
@@ -105,6 +110,27 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes
 		$display( ">>> %x %x %x", v[0], v[1], v[2] );
 	endrule
 
+
+	MultOperatorIfc#(Bit#(32), Bit#(32), Bool) bfsmult <- mkBFSMult;
+	AddOperatorIfc#(Bool) bfsadd <- mkBFSAdd;
+
+	rule givemult;
+		bfsmult.enq(0, 123);
+	endrule
+	rule giveadd;
+		bfsmult.deq;
+		let r = bfsmult.first;
+		
+		bfsadd.enq(r, False);
+	endrule
+	rule getr;
+		bfsadd.deq;
+		let r = bfsadd.first;
+	endrule
+
+
+	DRAMMultiFIFOIfc#(16, 1) drammfifo <- mkDRAMMultiFIFO(drama.users[0]);
+	SortMergerIfc#(16,Bit#(68),3) smer <- mkSortMerger16(drammfifo.endpoints, drammfifo.sources, False);
 
 endmodule
 

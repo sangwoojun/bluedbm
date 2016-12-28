@@ -123,6 +123,7 @@ endmodule
 module mkSortMerger16#(Vector#(16, DRAMMultiFIFOEpIfc) fifos, Vector#(1, DRAMMultiFIFOSrcIfc) outs, Bool descending) (SortMergerIfc#(16, 1, dtype, packcnt))
 	provisos(Bits#(dtype,dtypeSz)
 	, Ord#(dtype)
+	, Literal#(dtype)
 	, Add#(1, a__, dtypeSz)
 	, Add#(b__, dtypeSz, 512));
 
@@ -188,9 +189,22 @@ module mkSortMerger16#(Vector#(16, DRAMMultiFIFOEpIfc) fifos, Vector#(1, DRAMMul
 	rule flushcnt;
 		let d <- mlayer4[0].tcnt;
 	endrule
+	VectorDeserializerIfc#(packcnt,dtype) des <- mkVectorDeserializer;
 	rule getmerged;
 		mlayer4[0].deq;
 		let md = mlayer4[0].first;
+		des.enq(md);
+	endrule
+	VectorPackerIfc#(packcnt,dtype,512) packer <- mkVectorPacker;
+	rule getdes;
+		des.deq;
+		let d = des.first;
+		packer.enq(d);
+	endrule
+	rule senddramw;
+		packer.deq;
+		let d = packer.first;
+		outs[0].write(d);
 	endrule
 
 	method Action cmdsrc(Bit#(TLog#(16)) src, Bit#(32) cnt);

@@ -9,6 +9,7 @@ import BRAMFIFO::*;
 import MergeN::*;
 
 import PcieCtrl::*;
+import PcieSharedBuffer::*;
 
 //import DMACircularQueue::*;
 
@@ -19,11 +20,12 @@ import FlashCtrlModel::*;
 import DualFlashManager::*;
 
 import DRAMController::*;
-import DRAMArbiter::*;
+import DRAMArbiterPage::*;
 
 import LinearCongruential::*;
 import PageSorter::*;
 import SortingNetwork::*;
+import SortingNetwork8::*;
 
 import DRAMMultiFIFO::*;
 import SortMerger::*;
@@ -35,11 +37,6 @@ import Float32::*;
 typedef 8 BusCount; // 8 per card in hw, 2 per card in sim
 typedef TMul#(2,BusCount) BBusCount; //Board*bus
 //typedef 64 TagCount; // Has to be larger than the software setting
-typedef 4 DMAEngineCount;
-
-typedef 3 AccelCount;
-typedef TAdd#(AccelCount,1) DestCount; // 0 is always host DRAM
-
 
 interface HwMainIfc;
 endinterface
@@ -58,8 +55,9 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes
 	Clock pcieclk = pcie.user_clk;
 	Reset pcierst = pcie.user_rst;
 
-	DRAMArbiterIfc#(2) drama <- mkDRAMArbiter(dram);
+	DRAMArbiterPageIfc#(2) drama <- mkDRAMArbiterPage(dram);
 	//DMACircularQueueIfc#(22) dma <- mkDMACircularQueue(pcie); // 4MB
+	PcieSharedBufferIfc#(19) pciea <- mkPcieSharedBuffer(pcie);
 	DualFlashManagerIfc flashman <- mkDualFlashManager(flashes);
 
 
@@ -75,6 +73,8 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes
 
 	PageSorterIfc#(Bit#(68), 3, 8) pageSorter <- mkPageSorter(False);
 	SortingNetworkIfc#(Bit#(68), 3) wordSorter <- mkSortingNetwork3(False);
+
+	SortingNetworkIfc#(Bit#(32), 8) sorter8 <- mkSortingNetwork8(False);
 
 	rule genPage (genCount>0);
 		genCount <= genCount - 1;
@@ -111,6 +111,7 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes
 	endrule
 
 
+/*
 	MultOperatorIfc#(Bit#(32), Bit#(32), Bool) bfsmult <- mkBFSMult;
 	AddOperatorIfc#(Bool) bfsadd <- mkBFSAdd;
 
@@ -127,10 +128,11 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes
 		bfsadd.deq;
 		let r = bfsadd.first;
 	endrule
+*/
 
 
 	DRAMMultiFIFOIfc#(16, 1) drammfifo <- mkDRAMMultiFIFO(drama.users[0]);
-	SortMergerIfc#(16,Bit#(68),3) smer <- mkSortMerger16(drammfifo.endpoints, drammfifo.sources, False);
+	SortMergerIfc#(16,1,Bit#(68),3) smer <- mkSortMerger16(drammfifo.endpoints, drammfifo.sources, False);
 
 endmodule
 

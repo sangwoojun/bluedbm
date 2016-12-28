@@ -3,9 +3,44 @@ import FIFOF::*;
 import Clocks::*;
 import Vector::*;
 
+interface OptCompareAndSwapIfc#(type inType);
+	method Action put(Tuple2#(inType,inType) in);
+	method ActionValue#(Tuple2#(inType,inType)) get;
+endinterface
+
+module mkOptCompareAndSwap#(Bool descending) (OptCompareAndSwapIfc#(inType))
+	provisos(
+	Bits#(inType, inTypeSz)
+	, Ord#(inType)
+	);
+	FIFO#(Tuple2#(inType,inType)) outQ <- mkFIFO;
+	method Action put(Tuple2#(inType,inType) in);
+		let a = tpl_1(in);
+		let b = tpl_2(in);
+		if ( descending ) begin
+			if ( a >= b ) begin
+				outQ.enq(tuple2(a,b));
+			end else begin
+				outQ.enq(tuple2(b,a));
+			end
+		end else begin
+			if ( b >= a ) begin
+				outQ.enq(tuple2(a,b));
+			end else begin
+				outQ.enq(tuple2(b,a));
+			end
+		end
+	endmethod
+	method ActionValue#(Tuple2#(inType,inType)) get;
+		outQ.deq;
+		return outQ.first;
+	endmethod
+endmodule
+
 interface CompareAndSwapIfc#(type inType);
 	interface Vector#(2,FIFO#(inType)) ifc;
 endinterface
+
 module mkCompareAndSwap#(Bool descending) (CompareAndSwapIfc#(inType))
 	provisos(
 	Bits#(inType, inTypeSz)

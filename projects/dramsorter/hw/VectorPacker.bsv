@@ -3,22 +3,39 @@ import FIFOF::*;
 import Clocks::*;
 import Vector::*;
 
-interface VectorPackerIfc#(numeric type scnt, type stype, type dtype);
+interface VectorPackerIfc#(numeric type scnt, type stype, numeric type dtypeSz);
 	method Action enq(Vector#(scnt, stype) dat);
-	method dtype first;
+	method Bit#(dtypeSz) first;
 	method Action deq;
 endinterface
 
-module mkVectorPacker (VectorPackerIfc#(scnt, stype, dtype));
+module mkVectorPacker (VectorPackerIfc#(scnt, stype, dtypeSz))
+	provisos(
+	Bits#(stype, stypeSz)
+	,Add#(a__, stypeSz, dtypeSz)
+	);
+	FIFO#(Vector#(scnt,stype)) inQ <- mkFIFO;
+	FIFO#(Bit#(dtypeSz)) outQ <- mkFIFO;
 
-	
+	rule packr;
+		inQ.deq;
+		let v = inQ.first;
+		Bit#(dtypeSz) dstv = 0;
+		for ( Integer i = 0; i < valueOf(scnt); i=i+1 ) begin
+			dstv = dstv | zeroExtend(pack(v[i]))<<(valueOf(stypeSz)*i);
+		end
+
+		outQ.enq(dstv);
+	endrule
 
 	method Action enq(Vector#(scnt, stype) dat);
+		inQ.enq(dat);
 	endmethod
-	method dtype first;
-		return ?;
+	method Bit#(dtypeSz) first;
+		return outQ.first;
 	endmethod
 	method Action deq;
+		outQ.deq;
 	endmethod
 endmodule
 
@@ -67,7 +84,7 @@ endinterface
 
 module mkVectorSerializer (VectorSerializerIfc#(cnt,dtype))
 	provisos(
-		Bits#(dtype, stypeSz)
+		Bits#(dtype, dtypeSz)
 		, Bits#(Vector#(cnt, dtype), b__)
 	);
 	Integer count = valueOf(cnt);
@@ -90,4 +107,46 @@ module mkVectorSerializer (VectorSerializerIfc#(cnt,dtype))
 	method dtype first;
 		return outQ.first;
 	endmethod
+endmodule
+
+interface VectorDeserializerIfc#(numeric type cnt, type dtype);
+	method Action enq(dtype in);
+	method Action deq;
+	method Vector#(cnt, dtype) first;
+endinterface
+
+module mkVectorDeserializer ( VectorDeserializerIfc#(cnt,dtype) )
+	provisos(
+		Bits#(dtype, dtypeSz)
+		, Bits#(Vector#(cnt, dtype), b__)
+		, Literal#(dtype)
+	);
+	Integer count = valueOf(cnt);
+
+	FIFO#(dtype) inQ <- mkFIFO;
+	FIFO#(Vector#(cnt, dtype)) outQ <- mkFIFO;
+	Reg#(Bit#(TAdd#(1,TLog#(cnt)))) curoff <- mkReg(0);
+	Vector#(cnt, Reg#(dtype)) upbuf <- replicateM(mkReg(0));
+	rule fillIn;
+		upbuf[curoff] <= inQ.first;
+		inQ.deq;
+		if ( curoff + 1 >= fromInteger(count) ) begin
+			Vector#(cnt,dtype) ded;
+			for ( Integer i = 0; i < count-1; i=i+1 ) begin
+				ded[i] = upbuf[i];
+			end
+			ded[count-1] = inQ.first;
+			outQ.enq(ded);
+		end
+	endrule
+
+	method Action enq(dtype in);
+		inQ.enq(in);
+	endmethod 
+	method Action deq;
+		outQ.deq;
+	endmethod 
+	method Vector#(cnt, dtype) first;
+		return outQ.first;
+	endmethod 
 endmodule

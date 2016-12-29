@@ -30,9 +30,7 @@ import SortingNetwork8::*;
 import DRAMMultiFIFO::*;
 import SortMerger::*;
 
-import GraphOperator::*;
-
-import Float32::*;
+import VectorPacker::*;
 
 typedef 8 BusCount; // 8 per card in hw, 2 per card in sim
 typedef TMul#(2,BusCount) BBusCount; //Board*bus
@@ -61,12 +59,35 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes
 	DualFlashManagerIfc flashman <- mkDualFlashManager(flashes);
 
 
-	LinearCongruentialIfc#(34) prng1 <- mkLinearCongruential;
-	LinearCongruentialIfc#(34) prng2 <- mkLinearCongruential;
-	LinearCongruentialIfc#(34) prng3 <- mkLinearCongruential;
-	LinearCongruentialIfc#(34) prng4 <- mkLinearCongruential;
-	LinearCongruentialIfc#(34) prng5 <- mkLinearCongruential;
-	LinearCongruentialIfc#(34) prng6 <- mkLinearCongruential;
+	LinearCongruentialIfc#(32) prng1 <- mkLinearCongruential;
+	VectorDeserializerIfc#(8, Bit#(32)) vdes <- mkVectorDeserializer;
+	SortingNetworkIfc#(Bit#(32), 8) sorter8 <- mkSortingNetwork8(False);
+	Reg#(Bit#(8)) vdcnt <- mkReg(128);
+	rule vdcr (vdcnt >0);
+		vdcnt <= vdcnt-1;
+		let v <- prng1.next;
+		vdes.enq(v);
+		$display("gen %x",v);
+	endrule
+	rule vdcg;
+		vdes.deq;
+		let v = vdes.first;
+		sorter8.enq(v);
+		$display("vectorized %x ... ",v[0]);
+	endrule
+	rule vget;
+		let v <- sorter8.get;
+		$display( ">>>\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d",
+			v[0],
+			v[1],
+			v[2],
+			v[3],
+			v[4],
+			v[5],
+			v[6],
+			v[7]
+		);
+	endrule
 
 	
 	Reg#(Bit#(32)) genCount <- mkReg(256*4);
@@ -74,61 +95,6 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes
 	PageSorterIfc#(Bit#(68), 3, 8) pageSorter <- mkPageSorter(False);
 	SortingNetworkIfc#(Bit#(68), 3) wordSorter <- mkSortingNetwork3(False);
 
-	SortingNetworkIfc#(Bit#(32), 8) sorter8 <- mkSortingNetwork8(False);
-
-	rule genPage (genCount>0);
-		genCount <= genCount - 1;
-		Bit#(34) v1_ <- prng1.next;
-		Bit#(34) v1__ <- prng2.next;
-
-		Bit#(34) v2_ <- prng3.next;
-		Bit#(34) v2__ <- prng4.next;
-		Bit#(34) v3_ <- prng5.next;
-		Bit#(34) v3__ <- prng6.next;
-
-		Bit#(68) v1 = {v1_,v1__};
-		Bit#(68) v2 = {0,v2_};
-		Bit#(68) v3 = {v3_,0};
-
-		Vector#(3,Bit#(68)) iv;
-		iv[0] = v1;
-		iv[1] = v2;
-		iv[2] = v3;
-		wordSorter.enq(iv);
-		//pageSorter.enq(iv);
-		//$display("--- %x %x %x", iv[0], iv[1], iv[2]);
-	endrule
-	rule sortPage;
-		let iv <- wordSorter.get;
-		pageSorter.enq(iv);
-		//$display("+++ %x %x %x", iv[0], iv[1], iv[2]);
-	endrule
-
-	rule readSorted;
-		let v <- pageSorter.get;
-		//dma.enq({0,v[0],v[1],v[2]});
-		$display( ">>> %x %x %x", v[0], v[1], v[2] );
-	endrule
-
-
-/*
-	MultOperatorIfc#(Bit#(32), Bit#(32), Bool) bfsmult <- mkBFSMult;
-	AddOperatorIfc#(Bool) bfsadd <- mkBFSAdd;
-
-	rule givemult;
-		bfsmult.enq(0, 123);
-	endrule
-	rule giveadd;
-		bfsmult.deq;
-		let r = bfsmult.first;
-		
-		bfsadd.enq(r, False);
-	endrule
-	rule getr;
-		bfsadd.deq;
-		let r = bfsadd.first;
-	endrule
-*/
 
 
 	DRAMMultiFIFOIfc#(16, 1) drammfifo <- mkDRAMMultiFIFO(drama.users[0]);

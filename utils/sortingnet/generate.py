@@ -131,6 +131,7 @@ def main(ways):
 	method ActionValue#(Vector#("""+str(ways)+""", inType)) get;
 		Vector#("""+str(ways)+""",inType) outd;""";
 
+	s = stage;
 	for i in xrange(ways):
 		if stagesrc[i][0] == True:
 			qname = "st"+str(s)+"Q["+str(stagesrc[i][1])+"]";

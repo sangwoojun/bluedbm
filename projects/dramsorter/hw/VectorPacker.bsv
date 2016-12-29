@@ -137,6 +137,9 @@ module mkVectorDeserializer ( VectorDeserializerIfc#(cnt,dtype) )
 			end
 			ded[count-1] = inQ.first;
 			outQ.enq(ded);
+			curoff <= 0;
+		end else begin
+			curoff <= curoff+1;
 		end
 	endrule
 

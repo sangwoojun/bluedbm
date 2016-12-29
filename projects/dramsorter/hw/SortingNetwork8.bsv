@@ -151,27 +151,27 @@ module mkSortingNetwork8#(Bool descending) (SortingNetworkIfc#(inType, 8))
 	endmethod
 	method ActionValue#(Vector#(8, inType)) get;
 		Vector#(8,inType) outd;
-		let td0 = st5Q[0].first;
-		st5Q[0].deq;
+		let td0 = st6Q[0].first;
+		st6Q[0].deq;
 		outd[0] = td0;
-		let td1 = st5Q[1].first;
-		st5Q[1].deq;
+		let td1 = st6Q[1].first;
+		st6Q[1].deq;
 		outd[1] = td1;
-		let casd0 <- cas5[0].get;
+		let casd0 <- cas6[0].get;
 		let td2 = tpl_1(casd0);
 		outd[2] = td2;
 		let td3 = tpl_2(casd0);
 		outd[3] = td3;
-		let casd1 <- cas5[1].get;
+		let casd1 <- cas6[1].get;
 		let td4 = tpl_1(casd1);
 		outd[4] = td4;
 		let td5 = tpl_2(casd1);
 		outd[5] = td5;
-		let td6 = st5Q[2].first;
-		st5Q[2].deq;
+		let td6 = st6Q[2].first;
+		st6Q[2].deq;
 		outd[6] = td6;
-		let td7 = st5Q[3].first;
-		st5Q[3].deq;
+		let td7 = st6Q[3].first;
+		st6Q[3].deq;
 		outd[7] = td7;
 		return outd;
 	endmethod

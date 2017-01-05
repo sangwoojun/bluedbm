@@ -3,6 +3,129 @@ import FIFOF::*;
 import Clocks::*;
 import Vector::*;
 
+function Tuple2#(itype,itype) compareAndSwap(itype a, itype b, Bool descending)
+	provisos(
+		Ord#(itype)
+	);
+	if ( descending ) begin
+		if ( a > b ) begin
+			return tuple2(a,b);
+		end else begin
+			return tuple2(b,a);
+		end
+	end else begin
+		if ( b > a ) begin
+			return tuple2(a,b);
+		end else begin
+			return tuple2(b,a);
+		end
+	end
+endfunction
+
+function Vector#(vcnt, itype) sortBitonic8(Vector#(vcnt, itype) in, Bool descending)
+	provisos(
+		Ord#(itype)
+	);
+
+	Vector#(vcnt, itype) rvec = in;
+	for ( Integer i = 0; i < 4; i=i+1 ) begin
+		itype a = in[i];
+		itype b = in[i+4];
+		let r = compareAndSwap(a,b,descending);
+		rvec[i] = tpl_1(r);
+		rvec[i+4] = tpl_2(r);
+	end
+	
+	for ( Integer i = 0; i < 2; i=i+1 ) begin
+		itype a1 = rvec[i];
+		itype b1 = rvec[i+2];
+		let r1 = compareAndSwap(a1,b1,descending);
+		rvec[i] = tpl_1(r1);
+		rvec[i+2] = tpl_2(r1);
+		
+		itype a2 = rvec[i+4];
+		itype b2 = rvec[i+6];
+		let r2 = compareAndSwap(a2,b2,descending);
+		rvec[i+4] = tpl_1(r2);
+		rvec[i+6] = tpl_2(r2);
+	end
+	for ( Integer i = 0; i < 4; i=i+1 ) begin
+		itype a = rvec[i*2];
+		itype b = rvec[i*2+1];
+		let r = compareAndSwap(a,b,descending);
+		rvec[i*2] = tpl_1(r);
+		rvec[i*2+1] = tpl_2(r);
+	end
+
+	return rvec;
+
+endfunction
+
+function Vector#(vcnt, itype) sortBitonic(Vector#(vcnt, itype) in, Bool descending)
+	provisos(
+		Ord#(itype)
+	);
+
+	if ( valueOf(vcnt) == 8 ) begin
+		return sortBitonic8(in, descending);
+	end else begin
+		// UNCAUGHT!!
+		return in;
+	end
+
+endfunction
+
+function Tuple2#(Vector#(vcnt, itype), Vector#(vcnt, itype)) halfClean(Vector#(vcnt, itype) in1, Vector#(vcnt, itype) in2, Bool descending)
+	provisos(
+		Ord#(itype)
+	);
+	Vector#(vcnt, itype) top;
+	Vector#(vcnt, itype) bot;
+
+	for ( Integer i = 0; i < valueOf(vcnt); i=i+1 ) begin
+		let a = in1[i];
+		let b = in2[valueOf(vcnt)-i-1];
+		if ( descending ) begin
+			if ( a >= b ) begin
+				top[i] = a;
+				bot[i] = b;
+			end else begin
+				top[i] = b;
+				bot[i] = a;
+			end
+		end else begin
+			if ( b >= a ) begin
+				top[i] = a;
+				bot[i] = b;
+			end else begin
+				top[i] = b;
+				bot[i] = a;
+			end
+		end
+	end
+
+	return tuple2(top,bot);
+endfunction
+/*
+interface HalfCleanerIfc#(numeric type vcnt, type itype);
+	method Action put(Vector#(vcnt, itype) in1,Vector#(vcnt, itype) in2);
+	method ActionValue#(Tuple2#(Vector#(vcnt, itype),Vector#(vcnt, itype))) get;
+endinterface
+
+module mkHalfCleaner#(Bool descending) (HalfCleanerIfc#(vcnt,itype))
+	provisos(
+	Bits#(itype, itypeSz)
+	, Ord#(itype)
+	);
+
+	method Action put(Vector#(vcnt, itype) in1,Vector#(vcnt, itype) in2);
+	endmethod
+	method ActionValue#(Tuple2#(Vector#(vcnt, itype),Vector#(vcnt, itype))) get;
+		return ?;
+	endmethod
+endmodule
+*/
+
 interface OptCompareAndSwapIfc#(type inType);
 	method Action put(Tuple2#(inType,inType) in);
 	method ActionValue#(Tuple2#(inType,inType)) get;

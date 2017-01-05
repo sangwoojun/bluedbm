@@ -7,6 +7,7 @@ import BRAM::*;
 import BRAMFIFO::*;
 
 import MergeN::*;
+import ScatterN::*;
 
 import DRAMController::*;
 import DRAMArbiterPage::*;
@@ -100,6 +101,7 @@ module mkDRAMMultiFIFO#(DRAMPageUserIfc dram) (DRAMMultiFIFOIfc#(dstCnt, srcCnt)
 		reqSrcQ.enq(tuple2(curReqDst, truncate(curReqCnt)));
 	endrule
 
+	ScatterNIfc#(dstCnt, Bit#(512)) scin <- mkScatterN;
 	Reg#(Bit#(8)) dramReadCnt <- mkReg(0);
 	rule dramReadResp;
 		let d <- dram.read;
@@ -113,8 +115,14 @@ module mkDRAMMultiFIFO#(DRAMPageUserIfc dram) (DRAMMultiFIFOIfc#(dstCnt, srcCnt)
 			dramReadCnt <= dramReadCnt + 1;
 		end
 
-		inQ[src].enq(d);
+		scin.enq(d,src);
 	endrule
+	for ( Integer i = 0; i < dstCount; i=i+1 ) begin
+		rule relin;
+			let d <- scin.get[i].get;
+			inQ[i].enq(d);
+		endrule
+	end
 
 
 	// Write stuff

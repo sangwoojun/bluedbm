@@ -9,5 +9,8 @@ set_clock_groups -asynchronous -group {clk_gen_pll_CLKOUT2} -group {ddr3_usrclk}
 set_clock_groups -asynchronous -group {clk_gen_pll_CLKOUT2} -group {ddr3_refclk}
 set_clock_groups -asynchronous -group {clk_gen_pll_CLKOUT2} -group {clk_pll_i}
 
+set_clock_groups -asynchronous -group {clk_gen_pll_CLKOUT2} -group {clk_gen_pll_CLKOUT0}
+
 set_false_path -from [get_pins -of_objects [get_cells -hier -filter {NAME =~ *ddr3_ctrl_user_reset_n/*}] -hier -filter {NAME=~ *C}]
 set_false_path -from [get_pins -of_objects [get_cells -hier -filter {NAME =~ *ddr3_ctrl_user_reset_n/*}] -hier -filter {NAME=~ *C}]
+set_false_path -from [get_pins -of_objects [get_cells -hier -filter {NAME =~ *ddr3ref_rst_n/*}] -hier -filter {NAME=~ *CLR}]

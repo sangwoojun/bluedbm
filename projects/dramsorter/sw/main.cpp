@@ -2,10 +2,11 @@
 #include <unistd.h>
 
 #include <string>
+#include <time.h>
 
 #include "bdbmpcie.h"
-#include "flashmanager.h"
-#include "bsbfs.h"
+//#include "flashmanager.h"
+//#include "bsbfs.h"
 
 
 
@@ -26,7 +27,9 @@ extern double timespec_diff_sec( timespec start, timespec end );
 int main(int argc, char** argv) {
 	BdbmPcie* pcie = BdbmPcie::getInstance();
 	//DMASplitter* dma = DMASplitter::getInstance();
-	FlashManager* flash = FlashManager::getInstance();
+	//FlashManager* flash = FlashManager::getInstance();
+
+	srand(time(NULL));
 
 	//void* dmabuffer = pcie->dmaBuffer();
 	//unsigned int* ubuf = (unsigned int*)dmabuffer;
@@ -35,6 +38,14 @@ int main(int argc, char** argv) {
 	printf( "Magic: %x\n", d );
 	printf( "All Init Done\n" );
 	fflush(stdout);
+
+	pcie->writeWord((1024*16)+12,rand());
+	pcie->writeWord((1024*16)+8,rand());
+	pcie->writeWord((1024*16)+4,rand());
+	pcie->writeWord((1024*16)+0,rand());
+	
+	pcie->writeWord((1024*16)+12,8);
+	pcie->writeWord((1024*16)+0,256*64);
 
 
 	// src, dst {DRAM/addr, Flash/addr, accel, SW}
@@ -45,5 +56,11 @@ int main(int argc, char** argv) {
 	// feed 8KB 8KB to sorter 
 
 	//BSBFS* fs = BSBFS::getInstance();
+	while (1) {
+		sleep(1);
+		uint32_t tot = pcie->readWord((1024*16)+8*4);
+		printf( "Total: %d\n", tot );
+		fflush(stdout);
+	}
 	
 }

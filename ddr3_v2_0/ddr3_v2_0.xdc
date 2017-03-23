@@ -14,3 +14,4 @@ set_clock_groups -asynchronous -group {clk_gen_pll_CLKOUT2} -group {clk_gen_pll_
 set_false_path -from [get_pins -of_objects [get_cells -hier -filter {NAME =~ *ddr3_ctrl_user_reset_n/*}] -hier -filter {NAME=~ *C}]
 set_false_path -from [get_pins -of_objects [get_cells -hier -filter {NAME =~ *ddr3_ctrl_user_reset_n/*}] -hier -filter {NAME=~ *C}]
 set_false_path -from [get_pins -of_objects [get_cells -hier -filter {NAME =~ *ddr3ref_rst_n/*}] -hier -filter {NAME=~ *CLR}]
+set_false_path -from [get_pins -of_objects [get_cells -hier -filter {NAME =~ *ddr_cli_200Mhz_reqs/*}] -hier -filter {NAME=~ *CLR}]

@@ -22,12 +22,12 @@ function Tuple2#(itype,itype) compareAndSwap(itype a, itype b, Bool descending)
 	end
 endfunction
 
-function Vector#(vcnt, itype) sortBitonic8(Vector#(vcnt, itype) in, Bool descending)
+function Vector#(vcnt, itype) sortBitonic8_1(Vector#(vcnt, itype) in, Bool descending)
 	provisos(
 		Ord#(itype)
 	);
 
-	Vector#(vcnt, itype) rvec = in;
+	Vector#(vcnt, itype) rvec;
 	for ( Integer i = 0; i < 4; i=i+1 ) begin
 		itype a = in[i];
 		itype b = in[i+4];
@@ -36,28 +36,80 @@ function Vector#(vcnt, itype) sortBitonic8(Vector#(vcnt, itype) in, Bool descend
 		rvec[i+4] = tpl_2(r);
 	end
 	
+	return rvec;
+
+endfunction
+function Vector#(vcnt, itype) sortBitonic8_2(Vector#(vcnt, itype) in, Bool descending)
+	provisos(
+		Ord#(itype)
+	);
+
+	Vector#(vcnt, itype) rvec = in;
+	Vector#(vcnt, itype) rvec2;
 	for ( Integer i = 0; i < 2; i=i+1 ) begin
 		itype a1 = rvec[i];
 		itype b1 = rvec[i+2];
 		let r1 = compareAndSwap(a1,b1,descending);
-		rvec[i] = tpl_1(r1);
-		rvec[i+2] = tpl_2(r1);
+		rvec2[i] = tpl_1(r1);
+		rvec2[i+2] = tpl_2(r1);
 		
 		itype a2 = rvec[i+4];
 		itype b2 = rvec[i+6];
 		let r2 = compareAndSwap(a2,b2,descending);
-		rvec[i+4] = tpl_1(r2);
-		rvec[i+6] = tpl_2(r2);
+		rvec2[i+4] = tpl_1(r2);
+		rvec2[i+6] = tpl_2(r2);
 	end
+	Vector#(vcnt, itype) rvec3;
 	for ( Integer i = 0; i < 4; i=i+1 ) begin
-		itype a = rvec[i*2];
-		itype b = rvec[i*2+1];
+		itype a = rvec2[i*2];
+		itype b = rvec2[i*2+1];
 		let r = compareAndSwap(a,b,descending);
-		rvec[i*2] = tpl_1(r);
-		rvec[i*2+1] = tpl_2(r);
+		rvec3[i*2] = tpl_1(r);
+		rvec3[i*2+1] = tpl_2(r);
 	end
 
-	return rvec;
+	return rvec3;
+
+endfunction
+
+function Vector#(vcnt, itype) sortBitonic8(Vector#(vcnt, itype) in, Bool descending)
+	provisos(
+		Ord#(itype)
+	);
+
+	Vector#(vcnt, itype) rvec;
+	for ( Integer i = 0; i < 4; i=i+1 ) begin
+		itype a = in[i];
+		itype b = in[i+4];
+		let r = compareAndSwap(a,b,descending);
+		rvec[i] = tpl_1(r);
+		rvec[i+4] = tpl_2(r);
+	end
+
+	Vector#(vcnt, itype) rvec2;
+	for ( Integer i = 0; i < 2; i=i+1 ) begin
+		itype a1 = rvec[i];
+		itype b1 = rvec[i+2];
+		let r1 = compareAndSwap(a1,b1,descending);
+		rvec2[i] = tpl_1(r1);
+		rvec2[i+2] = tpl_2(r1);
+		
+		itype a2 = rvec[i+4];
+		itype b2 = rvec[i+6];
+		let r2 = compareAndSwap(a2,b2,descending);
+		rvec2[i+4] = tpl_1(r2);
+		rvec2[i+6] = tpl_2(r2);
+	end
+	Vector#(vcnt, itype) rvec3;
+	for ( Integer i = 0; i < 4; i=i+1 ) begin
+		itype a = rvec2[i*2];
+		itype b = rvec2[i*2+1];
+		let r = compareAndSwap(a,b,descending);
+		rvec3[i*2] = tpl_1(r);
+		rvec3[i*2+1] = tpl_2(r);
+	end
+
+	return rvec3;
 
 endfunction
 

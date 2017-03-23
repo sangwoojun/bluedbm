@@ -38,15 +38,43 @@ int main(int argc, char** argv) {
 	printf( "Magic: %x\n", d );
 	printf( "All Init Done\n" );
 	fflush(stdout);
-
-	pcie->writeWord((1024*16)+12,rand());
-	pcie->writeWord((1024*16)+8,rand());
-	pcie->writeWord((1024*16)+4,rand());
-	pcie->writeWord((1024*16)+0,rand());
 	
-	pcie->writeWord((1024*16)+12,8);
-	pcie->writeWord((1024*16)+0,256*64);
 
+/*
+	pcie->userWriteWord(12,4); // merger test cmd
+	pcie->userWriteWord(8,rand());
+	pcie->userWriteWord(4,rand());
+	pcie->userWriteWord(0,256*1024*1024);;
+	for ( int i = 0; i < 16; i++ ) {
+		sleep(1);
+		uint32_t tot = pcie->userReadWord(9*4);
+		uint32_t test = pcie->userReadWord(64);
+		printf( "Total: %d  %x\n", tot, test );
+		fflush(stdout);
+		pcie->userWriteWord(12,4); // merger test cmd
+		pcie->userWriteWord(8,rand());
+		pcie->userWriteWord(4,rand());
+		pcie->userWriteWord(0,256*1024*1024);;
+	}
+
+	exit(0);
+*/
+
+
+		
+	uint32_t tot = pcie->userReadWord(8*4);
+	printf( "Total: %d\n", tot );
+
+
+	pcie->userWriteWord(12,rand());
+	pcie->userWriteWord(8,rand());
+	pcie->userWriteWord(4,rand());
+	pcie->userWriteWord(0,rand());
+	
+	pcie->userWriteWord(12,8);
+	pcie->userWriteWord(0,256*1024*1024);
+	
+	pcie->userWriteWord(64, 0xdeadbeef);
 
 	// src, dst {DRAM/addr, Flash/addr, accel, SW}
 
@@ -58,9 +86,12 @@ int main(int argc, char** argv) {
 	//BSBFS* fs = BSBFS::getInstance();
 	while (1) {
 		sleep(1);
-		uint32_t tot = pcie->readWord((1024*16)+8*4);
-		printf( "Total: %d\n", tot );
+		uint32_t tot = pcie->userReadWord(8*4);
+		uint32_t test = pcie->userReadWord(64);
+		printf( "Total: %d  %x\n", tot, test );
 		fflush(stdout);
+		pcie->userWriteWord(12,8);
+		pcie->userWriteWord(0,256*1024*1024);
 	}
 	
 }

@@ -90,8 +90,8 @@ module mkProjectTop #(
 	Reset rst125 <- mkAsyncReset( 8, sys_rst_n_buf, clk125);
 	//Reset rst125 <- mkSyncReset( 4, rst125a, clk125);
 
-	Clock uclk = clk250;// clk125;
-	Reset urst = rst250;// ust125;
+	Clock uclk = clk125;
+	Reset urst = rst125;
 	
 	Vector#(2,FlashCtrlUser) flashes;
 `ifdef USE_FLASH

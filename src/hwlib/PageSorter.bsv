@@ -6,7 +6,21 @@ import Vector::*;
 import BRAM::*;
 import BRAMFIFO::*;
 
+import ScatterN::*;
+
 import SortingNetwork::*;
+
+interface BitonicSorterIfc#(numeric type vcnt, type inType);
+	method Vector#(vcnt, inType) sort(Vector#(vcnt, inType) data);
+endinterface
+
+module mkBitonicSorter#(Bool descending) ( BitonicSorterIfc#(vcnt, inType) )
+	provisos(Bits#(inType,inTypeSz), Ord#(inType), Add#(1,a__,inTypeSz));
+
+	method Vector#(vcnt, inType) sort(Vector#(vcnt, inType) data);
+		return sortBitonic(data, descending);
+	endmethod
+endmodule
 
 
 /**
@@ -18,6 +32,167 @@ interface VectorMergerIfc#(numeric type vcnt, type inType, numeric type cntSz);
 	method Action runMerge(Bit#(cntSz) count);
 	method ActionValue#(Vector#(vcnt,inType)) get;
 endinterface
+
+module mkVectorMerger_#(Bool descending) (VectorMergerIfc#(vcnt, inType, cntSz))
+	provisos(Bits#(inType,inTypeSz), Ord#(inType), Add#(1,a__,inTypeSz));
+
+	BitonicSorterIfc#(vcnt, inType) bsort <- mkBitonicSorter(descending);
+	
+	Reg#(Bit#(cntSz)) mCountTotal <- mkReg(0);
+	Reg#(Bit#(cntSz)) mCount1 <- mkReg(0);
+	Reg#(Bit#(cntSz)) mCount2 <- mkReg(0);
+
+	FIFO#(Vector#(vcnt,inType)) inQ1 <- mkFIFO;
+	FIFO#(Vector#(vcnt,inType)) inQ2 <- mkFIFO;
+	FIFO#(Vector#(vcnt,inType)) outQ <- mkFIFO;
+
+	Reg#(Vector#(vcnt,inType)) abuf <- mkReg(?);
+	FIFO#(Tuple2#(Bool,Vector#(vcnt,inType))) cmpQ <- mkFIFO;
+	Reg#(Bool) append1 <- mkReg(False);
+	
+	rule ffa (mCount1 == 0 && mCount2 == 0 && mCountTotal > 0);
+		//abuf <= tagged Invalid;
+		outQ.enq(abuf);
+		mCountTotal <= 0;
+	endrule
+	
+	rule ff1 (mCount1 > 0 && mCount2 == 0 );
+		let db = abuf;
+		let dq = inQ1.first;
+		let cleaned = halfClean(db,dq,descending);
+		inQ1.deq;
+	
+		let top = tpl_1(cleaned);
+		let bot = tpl_2(cleaned);
+		//abuf <= sortBitonic(bot,descending);
+		abuf <= bsort.sort(bot);
+
+		outQ.enq(top);
+		mCountTotal <= mCountTotal - 1;
+		mCount1 <= mCount1 - 1;
+		//$display( "1! %d %d == %d", mCount1, mCount2, mCountTotal );
+	endrule
+	rule ff2 (mCount1 == 0 && mCount2 > 0);
+		let db = abuf;
+		let dq = inQ2.first;
+		let cleaned = halfClean(db,dq,descending);
+		inQ2.deq;
+	
+		let top = tpl_1(cleaned);
+		let bot = tpl_2(cleaned);
+		//abuf <= sortBitonic(bot,descending);
+		abuf <= bsort.sort(bot);
+
+		outQ.enq(top);
+		mCountTotal <= mCountTotal - 1;
+		mCount2 <= mCount2 - 1;
+		//$display( "2! %d %d == %d", mCount1, mCount2, mCountTotal );
+	endrule
+	
+	
+	
+	rule doMerge (mCount1 > 0 && mCount2 > 0);
+		Integer count = valueOf(vcnt);
+
+		Vector#(vcnt,inType) dq;
+		if ( append1 == True ) begin
+			dq = inQ1.first;
+			inQ1.deq;
+			mCount1 <= mCount1 - 1;
+		end else begin
+			dq = inQ2.first;
+			inQ2.deq;
+			mCount2 <= mCount2 - 1;
+		end
+		let db = abuf;
+
+		let tailq = dq[count-1];
+		let tailb = db[count-1];
+
+		let cleaned = halfClean(dq,db,descending);
+
+		let top = tpl_1(cleaned);
+		let bot = tpl_2(cleaned);
+
+		//abuf <= sortBitonic(bot, descending);
+		abuf <= bsort.sort(bot);
+
+		if ( descending ) begin
+			if ( tailq < tailb ) begin
+				//change source q
+				append1 <= !append1;
+			end else begin
+			end
+		end else begin
+			if ( tailq > tailb ) begin
+				//change source q
+				append1 <= !append1;
+			end else begin
+			end
+		end
+		mCountTotal <= mCountTotal - 1;
+
+		//TODO outQ must be pushed through a sorting network
+		outQ.enq(top);
+		//$display( "%d %d == %d", mCount1, mCount2, mCountTotal );
+	endrule
+
+	FIFO#(Bit#(cntSz)) runCmdQ <- mkFIFO;
+
+	rule applyRunCmd ( mCountTotal == 0 );
+		Integer count = valueOf(vcnt);
+
+		let mcount = runCmdQ.first;
+		runCmdQ.deq;
+
+		let d1 = inQ1.first;
+		let d2 = inQ2.first;
+		inQ1.deq;
+		inQ2.deq;
+
+		let cleaned = halfClean(d1,d2,descending);
+		let top = tpl_1(cleaned);
+		let bot = tpl_2(cleaned);
+		outQ.enq(top);
+		//abuf <= sortBitonic(bot,descending);
+		abuf <= bsort.sort(bot);
+
+		let tail1 = d1[count-1];
+		let tail2 = d2[count-1];
+		if ( descending ) begin
+			if ( tail1 >= tail2 ) begin
+				append1 <= True;
+			end else begin
+				append1 <= False;
+			end
+		end else begin
+			if ( tail2 >= tail1 ) begin
+				append1 <= True;
+			end else begin
+				append1 <= False;
+			end
+		end
+		mCountTotal <= (mcount<<1)-1;
+		mCount1 <= mcount - 1;
+		mCount2 <= mcount - 1;
+
+		//$display ( "Starting command %d", mcount );
+	endrule
+
+	method Action enq1(Vector#(vcnt,inType) data);
+		inQ1.enq(data);
+	endmethod
+	method Action enq2(Vector#(vcnt,inType) data);
+		inQ2.enq(data);
+	endmethod
+	method Action runMerge(Bit#(cntSz) count); 
+		runCmdQ.enq(count);
+	endmethod
+	method ActionValue#(Vector#(vcnt,inType)) get;
+		outQ.deq;
+		return outQ.first;
+	endmethod
+endmodule
 
 module mkVectorMerger#(Bool descending) (VectorMergerIfc#(vcnt, inType, cntSz))
 	provisos(Bits#(inType,inTypeSz), Ord#(inType), Add#(1,a__,inTypeSz));
@@ -59,7 +234,13 @@ module mkVectorMerger#(Bool descending) (VectorMergerIfc#(vcnt, inType, cntSz))
 		mCount2 <= mCount2 - 1;
 	endrule
 
-	rule doMerge (mCount1 > 0 && mCount2 > 0 );
+	Reg#(Vector#(vcnt,inType)) topReg <- mkReg(?);
+	Reg#(Vector#(vcnt,inType)) botReg <- mkReg(?);
+	Reg#(inType) tailReg1 <- mkReg(?);
+	Reg#(inType) tailReg2 <- mkReg(?);
+	Reg#(Bit#(1)) mergestate <- mkReg(0);
+
+	rule doMerge (mCount1 > 0 && mCount2 > 0 && mergestate == 0 );
 		Integer count = valueOf(vcnt);
 
 		let d1 = inQ1.first;
@@ -86,18 +267,18 @@ module mkVectorMerger#(Bool descending) (VectorMergerIfc#(vcnt, inType, cntSz))
 
 		let cleaned = halfClean(d1,d2,descending);
 
-		let top = tpl_1(cleaned);
-		let bot = sortBitonic(tpl_2(cleaned), descending);
+		topReg <= tpl_1(cleaned);
+		botReg <= tpl_2(cleaned);
+		tailReg1 <= tail1;
+		tailReg2 <= tail2;
+		mergestate <= 1;
+	endrule
 
-		/*
-		$display( "<<<< %d %d %d %d %d %d %d %d", d1[0], d1[1], d1[2], d1[3], d1[4], d1[5], d1[6], d1[7] );
-		$display( ">>>> %d %d %d %d %d %d %d %d", d2[0], d2[1], d2[2], d2[3], d2[4], d2[5], d2[6], d2[7] );
-		$display( "t1 %d t2 %d", tail1, tail2 );
-		$display( "---- %d %d %d %d %d %d %d %d", top[0], top[1], top[2], top[3], top[4], top[5], top[6], top[7] );
-		$display( "++++ %d %d %d %d %d %d %d %d", bot[0], bot[1], bot[2], bot[3], bot[4], bot[5], bot[6], bot[7] );
-		*/
+	rule domerge2(mergestate == 1);
+		abuf <= sortBitonic(botReg, descending);
+		let tail1 = tailReg1;
+		let tail2 = tailReg2;
 
-		abuf <= bot;
 		if ( descending ) begin
 			if ( tail1 >= tail2 ) begin
 				append1 <= tagged Valid False;
@@ -122,7 +303,8 @@ module mkVectorMerger#(Bool descending) (VectorMergerIfc#(vcnt, inType, cntSz))
 		mCountTotal <= mCountTotal - 1;
 
 		//TODO outQ must be pushed through a sorting network
-		outQ.enq(top);
+		outQ.enq(topReg);
+		mergestate <= 0;
 	endrule
 
 
@@ -396,7 +578,7 @@ interface MultiPageSorterIfc#(numeric type ways, type inType, numeric type tuple
 endinterface
 
 
-module mkMultiPageSorter#(Vector#(ways, SortingNetworkIfc#(inType, tupleCount)) snets, Bool descending) (MultiPageSorterIfc#(ways, inType, tupleCount, pageSz))
+module mkMultiPageSorter#( Bool descending) (MultiPageSorterIfc#(ways, inType, tupleCount, pageSz))
 	provisos(
 	Bits#(Vector::Vector#(tupleCount, inType), inVSz)
 	, Add#(1,a__,ways)
@@ -414,7 +596,7 @@ module mkMultiPageSorter#(Vector#(ways, SortingNetworkIfc#(inType, tupleCount)) 
 
 	Vector#(ways, PageSorterIfc#(inType,tupleCount,pageSz)) sorters;
 	for ( Integer i = 0; i < iWays; i=i+1 ) begin
-		sorters[i] <- mkPageSorterV(snets[i], descending);
+		sorters[i] <- mkPageSorterV(descending);
 	end
 	//Vector#(ways, Reg#(Bit#(pageSz))) inCntUp <- replicateM(mkReg(0));
 	//Vector#(ways, Reg#(Bit#(pageSz))) inCntDown <- replicateM(mkReg(0));
@@ -434,6 +616,9 @@ module mkMultiPageSorter#(Vector#(ways, SortingNetworkIfc#(inType, tupleCount)) 
 	FIFO#(Vector#(tupleCount,inType)) enqQ <- mkFIFO;
 	FIFO#(Vector#(tupleCount,inType)) deqQ <- mkFIFO;
 
+	FIFO#(Tuple2#(Bit#(TLog#(ways)),Vector#(tupleCount,inType))) enqdQ <- mkFIFO;
+	ScatterNIfc#(ways,Vector#(tupleCount,inType)) sdin <- mkScatterN;
+
 	rule enqdata;
 		let target = curenq;
 		if ( enqoff == 0 ) begin
@@ -449,9 +634,25 @@ module mkMultiPageSorter#(Vector#(ways, SortingNetworkIfc#(inType, tupleCount)) 
 			enqoff <= enqoff + 1;
 		end
 
-		sorters[target].enq(enqQ.first);
+		//enqdQ.enq(tuple2(target,enqQ.first));
+		sdin.enq(enqQ.first,target);
 		enqQ.deq;
 	endrule
+	
+	for ( Integer i = 0; i < iWays; i=i+1 ) begin
+		rule sorterenqdata;
+			let d <- sdin.get[i].get;
+			sorters[i].enq(d);
+		endrule
+	end
+	
+	/*
+	rule sorterenqdata;
+		enqdQ.deq;
+		let d = enqdQ.first;
+		sorters[tpl_1(d)].enq(tpl_2(d));
+	endrule
+	*/
 
 	rule deqdata;
 		let src = curdeq;
@@ -483,7 +684,7 @@ module mkMultiPageSorter#(Vector#(ways, SortingNetworkIfc#(inType, tupleCount)) 
 	endmethod
 endmodule
 
-module mkMultiPageSorterCC#(Vector#(ways, SortingNetworkIfc#(inType, tupleCount)) snets, Clock fastclk, Reset fastrst, Bool descending) (MultiPageSorterIfc#(ways, inType, tupleCount, pageSz))
+module mkMultiPageSorterCC#(Clock fastclk, Reset fastrst, Bool descending) (MultiPageSorterIfc#(ways, inType, tupleCount, pageSz))
 	provisos(
 	Bits#(Vector::Vector#(tupleCount, inType), inVSz)
 	, Add#(1,a__,ways)
@@ -494,7 +695,7 @@ module mkMultiPageSorterCC#(Vector#(ways, SortingNetworkIfc#(inType, tupleCount)
 	, Ord#(inType)
 	);
 
-	MultiPageSorterIfc#(ways,inType,tupleCount,pageSz) mpsorter <- mkMultiPageSorter(snets, descending, clocked_by fastclk, reset_by fastrst);
+	MultiPageSorterIfc#(ways,inType,tupleCount,pageSz) mpsorter <- mkMultiPageSorter(descending, clocked_by fastclk, reset_by fastrst);
 
 	SyncFIFOIfc#(Vector#(tupleCount,inType)) getQ <- mkSyncFIFOToCC(8, fastclk, fastrst);
 	SyncFIFOIfc#(Vector#(tupleCount,inType)) enqQ <- mkSyncFIFOFromCC(8, fastclk);
@@ -519,7 +720,7 @@ module mkMultiPageSorterCC#(Vector#(ways, SortingNetworkIfc#(inType, tupleCount)
 endmodule
 
 
-module mkPageSorterV#(SortingNetworkIfc#(inType, tupleCount) sorter, Bool descending) (PageSorterIfc#(inType, tupleCount, pageSz))
+module mkPageSorterV#(Bool descending) (PageSorterIfc#(inType, tupleCount, pageSz))
 	provisos(
 	Bits#(Vector::Vector#(tupleCount, inType), inVSz)
 	, Add#(1,b__,inVSz)
@@ -592,15 +793,18 @@ module mkPageSorterV#(SortingNetworkIfc#(inType, tupleCount) sorter, Bool descen
 	
 	//Reg#(Bit#(32)) curStrideOut <- mkReg(0);
 	FIFO#(Vector#(tupleCount, inType)) readQ <- mkSizedBRAMFIFO(pageSize/2);
-	Vector#(tupleCount, Reg#(inType)) readBuf <- replicateM(mkReg(0));
 	Reg#(Bit#(8)) readIdx <- mkReg(0);
 	rule readSorted;
 		let d <- merger.get;
+		//$display ( "Got results!" );
+		/*
 		sorter.enq(d);
 	endrule
 	rule readSorted2;
 		let d <- sorter.get;
-		readQ.enq(d);
+		//readQ.enq(d);
+		*/
+		readQ.enq(sortBitonic(d,descending));
 	endrule
 
 

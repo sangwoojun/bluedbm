@@ -5,5 +5,6 @@ all:
 	gcc -o obj/encode encode.cpp -Wall -pedantic -g
 	gcc -o obj/parse parse.cpp -Wall -pedantic -g
 	g++ -o obj/bfs bfs.cpp -Wall -pedantic
+	g++ -o obj/tostring tostring.cpp -Wall -pedantic
 clean:
 	rm -r obj

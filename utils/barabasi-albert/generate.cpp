@@ -135,7 +135,7 @@ main(int argc, char** argv) {
 	uint64_t scale = 5;
 	char ofilename[128] = "generated.dat";
 	float random_edge_rate = 0.1f;
-	uint64_t edgefactor = 16;
+	uint64_t edgefactor = 8;
 
 	if ( argc >= 2 ) {
 		strncpy(ofilename, argv[1], 128);
@@ -164,8 +164,9 @@ main(int argc, char** argv) {
 	add_edge(2,0);
 
 
-	for (uint64_t nidx = 2; nidx < nodecount; nidx++) {
-		for ( uint64_t eidx = 0; eidx < edgefactor; eidx++ ) {
+	uint64_t cur_percent = 1;
+	for (uint64_t nidx = 3; nidx < nodecount; nidx++) {
+		for ( uint64_t eidx = 0; eidx < edgefactor && eidx < nidx; eidx++ ) {
 			uint32_t redgev = rand()%1000;
 			if ( redgev < random_edge_rate*1000 ) {
 				uint64_t tv = llrand()%(nidx-1);
@@ -174,6 +175,11 @@ main(int argc, char** argv) {
 				uint64_t tv = random_vertex();
 				add_edge(tv,nidx);
 			}
+		}
+		uint64_t percent = nidx*100/nodecount;
+		if ( cur_percent < percent ) {
+			cur_percent = percent;
+			printf( "Generated %ld%%\n", percent );
 		}
 	}
 	for ( uint64_t i = 0; i < blockcount; i++ ) {

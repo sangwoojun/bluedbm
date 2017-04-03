@@ -8,6 +8,7 @@ BgVertexList::BgVertexList(BgKeyType keyType, BgValType valType) {
 
 BgVertexListFile::BgVertexListFile(BgKeyType keyType, BgValType valType) : BgVertexList(keyType,valType) {
 	this->readBuffer.valid = false;
+	this->filesize = 0;
 }
 
 void
@@ -16,6 +17,10 @@ BgVertexListFile::OpenFile(std::string name) {
 	if ( this->fin == NULL ) {
 		fprintf(stderr, "Error: BgVertexListFile initialization failed. Cannot load %s\n", name.c_str() );
 	}
+	fseek(fin,0,SEEK_END);
+	filesize = ftell(fin);
+	printf( "\t\tBgVertexListFile opened %s %ld bytes\n", name.c_str(), filesize );
+	fseek(fin,0,SEEK_SET);
 }
 
 void
@@ -48,6 +53,21 @@ BgVertexListFile::GetNext() {
 	}
 
 	return this->LoadNext();
+}
+
+BgKvPair
+BgVertexListFile::PeekNext() {
+	if ( readBuffer.valid ) {
+		//readBuffer.valid = false;
+		return readBuffer;
+	}
+
+	readBuffer = this->LoadNext();
+	return readBuffer;
+}
+bool
+BgVertexListFile::IsEmpty() {
+	return (filesize==0);
 }
 
 BgKvPair
@@ -116,6 +136,17 @@ BgVertexListInMem::GetNext() {
 		return kvp;
 	}
 }
+BgKvPair 
+BgVertexListInMem::PeekNext() {
+	if (offset < buffer.size() ) {
+		BgKvPair kvp = buffer[offset];
+		//offset++;
+		return kvp;
+	} else {
+		BgKvPair kvp = {false, 0,0};
+		return kvp;
+	}
+}
 void 
 BgVertexListInMem::Rewind() {
 	offset = 0;
@@ -124,4 +155,9 @@ void
 BgVertexListInMem::addVal(uint64_t k, uint64_t v) {
 	BgKvPair kvp = {true,k,v};
 	buffer.push_back(kvp);
+}
+
+bool
+BgVertexListInMem::IsEmpty() {
+	return (buffer.size()>0);
 }

@@ -9,4 +9,9 @@ BgUserSSSP::VertexProgram(uint64_t v1, uint64_t v2) {
 	return (v1>v2 ? v2 : v1);
 }
 
+bool 
+BgUserSSSP::Converged(uint64_t v1, uint64_t v2) {
+	return (v1>v2)?false:true;
+}
+
 

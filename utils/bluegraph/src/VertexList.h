@@ -13,6 +13,8 @@ public:
 	virtual bool HasNext()=0;
 	virtual BgKvPair GetNext()=0;
 	virtual void Rewind()=0;
+	virtual BgKvPair PeekNext()=0;
+	virtual bool IsEmpty()=0;
 
 	BgKeyType keyType;
 	BgValType valType;
@@ -25,8 +27,10 @@ public:
 
 	bool HasNext();
 	BgKvPair GetNext();
+	BgKvPair PeekNext();
 	void Rewind();
 	void OpenFile(std::string name);
+	bool IsEmpty();
 
 
 
@@ -43,6 +47,8 @@ private:
 
 	BgKvPair readBuffer;// = {false, 0,0};
 
+	uint64_t filesize;
+
 };
 
 class BgVertexListInMem : public BgVertexList {
@@ -51,7 +57,10 @@ public:
 	bool HasNext();
 	BgKvPair GetNext();
 	void Rewind();
+	BgKvPair PeekNext();
 	void addVal(uint64_t k, uint64_t v);
+	bool IsEmpty();
+
 private:
 	BgVertexListInMem();
 

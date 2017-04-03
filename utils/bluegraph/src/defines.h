@@ -4,6 +4,8 @@
 
 #include <string>
 
+#define SORTER_THREAD_COUNT 8
+
 
 #ifndef __DEFINES_H__
 #define __DEFINES_H__
@@ -30,8 +32,10 @@ class BgUserProgram {
 public:
 static uint64_t EdgeProgram(uint64_t vertexValue, BgKvPair edge);
 static uint64_t VertexProgram(uint64_t v1, uint64_t v2);
+static bool Converged(uint64_t v1, uint64_t v2);
 };
 typedef enum {
+	BGUSERPROG_NULL,
 	BGUSERPROG_BFS,
 	BGUSERPROG_PAGERANK,
 	BGUSERPROG_SSSP

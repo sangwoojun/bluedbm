@@ -1,3 +1,8 @@
+#ifndef __SORTERS_TPP__
+#define __SORTERS_TPP__
+
+#include <cstdlib>
+
 template <class keyType, class valType>
 void* get_offset_ptr(void* buffer, int offset) {
 	void* np = (void*)(((uint8_t*)buffer)+(sizeof(keyType)+sizeof(valType))*offset);
@@ -120,7 +125,24 @@ void bubble_sort_block(void* buffer, int count) {
 }
 
 template <class keyType, class valType>
+int compareKvp(const void*a, const void*b) {
+	keyType ak = *((keyType*)a);
+	keyType bk = *((keyType*)b);
+
+	if ( ak < bk ) return -1;
+	if ( ak > bk ) return 1;
+	return 0;
+}
+
+template <class keyType, class valType>
+void quick_sort_lib(void* buffer, int count) {
+	qsort(buffer, count, sizeof(keyType)+sizeof(valType),compareKvp<keyType,valType>);
+}
+
+template <class keyType, class valType>
 void quick_sort_block(void* buffer, int count) {
+	qsort(buffer, count, sizeof(keyType)+sizeof(valType),compareKvp<keyType,valType>);
+	return;
 /*
 	uint64_t* buffer = (uint64_t*)bufferv;
 	*/
@@ -140,11 +162,10 @@ void quick_sort_block(void* buffer, int count) {
 	void* zp = get_offset_ptr<keyType,valType>(buffer, 0);
 	//uint64_t z[2] = {buffer[0], buffer[1]};
 
-	int nel = -1;
+	int nel = 0;
 	bool alleq = true;
 	for ( int i = 1; i < count; i++ ) {
 		void* cp = get_offset_ptr<keyType,valType>(buffer, i);
-		//uint64_t a[2] = {buffer[i*2], buffer[i*2+1]};
 		if ( !compareeq_kv<keyType,valType> (zp,cp) ) {
 			alleq = false;
 			nel = i;
@@ -152,31 +173,20 @@ void quick_sort_block(void* buffer, int count) {
 		}
 	}
 	if ( alleq ) return;
-	/*
-	int nelt = count;
-	void* zp = get_offset_ptr<keyType,valType>(buffer, count-1);
-	for ( int i = count-2; i >= 0; i-- ) {
-		void* cp = get_offset_ptr<keyType,valType>(buffer, i);
-		//uint64_t a[2] = {buffer[i*2], buffer[i*2+1]};
-		if ( !compareeq_kv<keyType,valType> (zp,tp) ) {
-			nelt = i;
-			break;
-		}
-	}
-	*/
 
-	if ( nel >= 0 ) {
-		int mid = count/2;
-		int div = (mid>nel)?mid:nel;
+	if ( nel > 0 ) {
+	
+		//int mid = count/2;
+		//int div = (mid>nel)?mid:nel;
+		int div = nel+(count-nel)/2;
 		void* cp = get_offset_ptr<keyType,valType>(buffer, div);
+	
 		//void* cp = get_offset_ptr<keyType,valType>(buffer, nel);
 		swap_kv<keyType,valType>(zp,cp);
-	}
-	//z[0] = buffer[0];
-	//z[1] = buffer[1];
+	} else return;
 
 	int lc = 1;
-	for ( int i = 1; i < count; i++ ) {
+	for ( int i = 2; i < count; i++ ) {
 		//uint64_t a[2] = {buffer[i*2], buffer[i*2+1]};
 		void* cp = get_offset_ptr<keyType,valType>(buffer, i);
 		if ( compare_kv<keyType,valType>(cp,zp) ) {
@@ -188,19 +198,10 @@ void quick_sort_block(void* buffer, int count) {
 	}
 	void* lp = get_offset_ptr<keyType,valType>(buffer, lc-1);
 	swap_kv<keyType,valType>(zp,lp);
-	//swap(buffer,0,lc-1);
 
-	if ( lc >= count ) lc--;
 	void* lpn = get_offset_ptr<keyType,valType>(buffer, lc);
 	quick_sort_block<keyType,valType>(buffer, lc);
 	quick_sort_block<keyType,valType>(lpn, count-lc);
-
-/*
-	if ( count < SORT_BLOCK_SIZE ) return;
-
-	if ( !check_sorted(buffer, count) ) {
-		printf( "Block sort has errors!\n" );
-	}
-*/
 }
 
+#endif

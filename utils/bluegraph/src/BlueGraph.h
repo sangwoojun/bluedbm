@@ -10,7 +10,6 @@
 #include "VertexList.h"
 #include "Sorters.h"
 
-#define SORTER_THREAD_COUNT 4
 
 #ifndef __BLUEGRAPH_H__
 #define __BLUEGRAPH_H__
@@ -56,6 +55,7 @@ public:
 
 	uint64_t EdgeProgram(uint64_t vertexValue, BgKvPair edge, BgUserProgramType userProg);
 	uint64_t VertexProgram(uint64_t vertexValue1, uint64_t vertexValue2, BgUserProgramType userProg);
+	bool Converged(uint64_t vertexValue1, uint64_t vertexValue2, BgUserProgramType userProg);
 
 	int PageSort(BgKeyType keyType, BgValType valType, BgUserProgramType prog);
 
@@ -64,11 +64,19 @@ public:
 	int MergeSort16(BgKeyType keyType, BgValType valType, BgUserProgramType prog, int stage, int mergedBlockCount);
 
 
+	BgVertexList* VectorDiff(BgVertexList* from, BgVertexList* term, std::string fname);
+	BgVertexList* VectorUnion(BgVertexList* from, BgVertexList* term, BgUserProgramType prog, std::string fname);
+	BgVertexList* VectorConverged(BgVertexList* from, BgVertexList* term, BgUserProgramType prog, std::string fname);
+
+
 
 private:
+	BlueGraph();
 	static BlueGraph* m_pInstance;
 
 	FILE* ftmp = NULL;
+
+	int vectorGenIdx;
 };
 
 class ReducerWriter {

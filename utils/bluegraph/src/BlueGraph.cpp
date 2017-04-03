@@ -12,7 +12,8 @@ ReducerWriter::ReducerWriter(std::string filename, BgUserProgramType prog, BgKey
 	this->fout = fopen(filename.c_str(), "wb");
 	this->keyType = keyType;
 	this->valType = valType;
-	this->lastVal = false;
+	this->lastValid = false;
+	this->writecnt = 0;
 }
 
 ReducerWriter::~ReducerWriter() {
@@ -20,6 +21,7 @@ ReducerWriter::~ReducerWriter() {
 }
 void 
 ReducerWriter::RawWrite(uint64_t key, uint64_t val) {
+	//printf( "RawWrite %lx %lx\n", key, val );
 	if ( keyType == BGKEY_BINARY32 ) {
 		uint32_t skey = (uint32_t)key;
 		fwrite(&skey, sizeof(uint32_t), 1, fout);
@@ -38,6 +40,8 @@ ReducerWriter::RawWrite(uint64_t key, uint64_t val) {
 }
 void 
 ReducerWriter::Finish() {
+	if ( lastValid == false ) return;
+
 	this->RawWrite(lastKey,lastVal);
 	lastValid = false;
 }
@@ -68,11 +72,19 @@ ReducerWriter::ReduceWrite(uint64_t key, uint64_t val, bool last) {
 		return;
 	}
 
+
 	if ( lastKey == key ) {
 		uint64_t vr = bgraph->VertexProgram(val, lastVal, prog);
 		lastVal = vr;
 		return;
 	}
+	
+	/*
+	if ( lastKey > key ) {
+		printf( "lastKey > key!! %lx > %lx\n", lastKey, key );
+	}
+	*/
+	
 
 	this->RawWrite(lastKey,lastVal);
 	lastKey = key;
@@ -98,6 +110,8 @@ ReducerWriter::ReduceWriteBlock(uint8_t* buffer, int count){
 		uint64_t val = 0;
 		if ( valType == BGVAL_BINARY32 ) val = *((uint32_t*)(buffer+off+keysize));
 		if ( valType == BGVAL_BINARY64 ) val = *((uint64_t*)(buffer+off+keysize));
+
+		//if ( i == 0 ) printf( "First pair of ReduceWriteBlock %lx %lx\n", key, val );
 
 		this->ReduceWrite(key, val, i>=(count-1));
 	}
@@ -258,6 +272,10 @@ BlueGraph* BlueGraph::getInstance() {
 	return m_pInstance;
 }
 
+BlueGraph::BlueGraph() {
+	vectorGenIdx = 0;
+}
+
 
 BgEdgeList*
 BlueGraph::LoadEdges(std::string idxname, std::string matname, BgKeyType keyType) {
@@ -292,14 +310,26 @@ BlueGraph::VertexProgram(uint64_t vertexValue1, uint64_t vertexValue2, BgUserPro
 			break;
 		}
 		default:
-			return 0;
+			return vertexValue1;
+	}
+}
+
+bool
+BlueGraph::Converged(uint64_t vertexValue1, uint64_t vertexValue2, BgUserProgramType userProg) {
+	switch(userProg) {
+		case(BGUSERPROG_SSSP): {
+			return BgUserSSSP::Converged(vertexValue1, vertexValue2);
+			break;
+		}
+		default:
+			return vertexValue1;
 	}
 }
 
 BgVertexList* 
 BlueGraph::Execute(BgEdgeList* el, BgVertexList* vl, std::string newVertexListName, BgUserProgramType userProg, BgKeyType targetKeyType, BgValType targetValType) {
 
-	printf( "starting execution\n"  );
+	printf( "Starting execution\n"  ); fflush(stdout);
 
 	ftmp = fopen("ftmp.dat", "wb+");
 	if ( ftmp == NULL ) {
@@ -362,9 +392,9 @@ BlueGraph::Execute(BgEdgeList* el, BgVertexList* vl, std::string newVertexListNa
 	std::remove("ftmp.dat");
 
 	if ( mergedBlockCount == 1 ) {
-		std::rename("sort_00_0000.dat", newVertexListName.c_str()); 
+		while(!std::rename("sort_00_0000.dat", newVertexListName.c_str()));
 		BgVertexList* rv = this->LoadVertices(newVertexListName.c_str(),targetKeyType,targetValType);
-		printf( "Reduction done! Finishing Execition\n" );
+		printf( "Reduction done! Finishing Execution\n" ); fflush(stdout);
 		return rv;
 	}
 
@@ -375,9 +405,9 @@ BlueGraph::Execute(BgEdgeList* el, BgVertexList* vl, std::string newVertexListNa
 	}
 	char outfilename[128];
 	sprintf(outfilename, "sort_%02d_0000.dat",externalMergeStage);
-	std::rename(outfilename, newVertexListName.c_str()); 
+	while (!std::rename(outfilename, newVertexListName.c_str()));
 	BgVertexList* rv = this->LoadVertices(newVertexListName.c_str(),targetKeyType,targetValType);
-	printf( "Reduction done! Finishing Execition\n" );
+	printf( "Reduction done! Finishing Execution\n" ); fflush(stdout);
 
 	//MergeSort
 	return rv;
@@ -432,6 +462,7 @@ BlueGraph::PageSort(BgKeyType keyType, BgValType valType, BgUserProgramType prog
 		ainfo[spawn_tid].keyType = keyType;
 		ainfo[spawn_tid].valType = valType;
 		
+		printf( "Starting thread to sort block\n" );
 		thread_working[spawn_tid] = true;
 		pthread_create(&ainfo[spawn_tid].tid, NULL, &block_sorter_worker, &ainfo[spawn_tid]);
 		
@@ -551,4 +582,165 @@ BlueGraph::MergeSort16(BgKeyType keyType, BgValType valType, BgUserProgramType p
 	}
 
 	return resBlockCount;
+}
+
+
+
+BgVertexList* 
+BlueGraph::VectorDiff(BgVertexList* from, BgVertexList* term, std::string fname) {
+	if ( from->keyType != term->keyType ) return NULL;
+	if ( from->valType != term->valType ) return NULL;
+
+	BgKeyType keyType = from->keyType;
+	BgValType valType = from->valType;
+
+	const char* strfname = fname.c_str();
+	char genfname[128];
+	if ( fname == "" ) {
+		sprintf(genfname, "tempvec%04d.dat", vectorGenIdx);
+		vectorGenIdx++;
+		strfname = genfname;
+	}
+
+	from->Rewind();
+	term->Rewind();
+	ReducerWriter* writer = new ReducerWriter(strfname, BGUSERPROG_NULL, keyType, valType);
+	while (from->HasNext() ) {
+		BgKvPair kv = from->GetNext();
+		if ( kv.valid == false ) break; // Just to be safe
+		
+		bool exist = false;
+		while ( term->HasNext() ) {
+			BgKvPair kvt = term->PeekNext();
+			if ( kvt.valid == false ) break;
+
+			if ( kv.key == kvt.key ) {
+				exist = true;
+				term->GetNext();
+				break;
+			}
+			if ( kv.key < kvt.key ) {
+				break;
+			}
+			term->GetNext();
+		}
+
+		if ( exist ) {
+			continue;
+		}
+
+		writer->ReduceWrite(kv.key, kv.value, false);
+	}
+	writer->Finish();
+	printf( "VectorDiff write %ld pairs\n", writer->writecnt );
+	delete writer;
+
+
+	BgVertexList* rv = this->LoadVertices(strfname,keyType,valType);
+	return rv;
+}
+
+BgVertexList* 
+BlueGraph::VectorUnion(BgVertexList* from, BgVertexList* term, BgUserProgramType prog, std::string fname) {
+	if ( from->keyType != term->keyType ) return NULL;
+	if ( from->valType != term->valType ) return NULL;
+
+	BgKeyType keyType = from->keyType;
+	BgValType valType = from->valType;
+
+	const char* strfname = fname.c_str();
+	char genfname[128];
+	if ( fname == "" ) {
+		sprintf(genfname, "tempvec%04d.dat", vectorGenIdx);
+		vectorGenIdx++;
+		strfname = genfname;
+	}
+
+	from->Rewind();
+	term->Rewind();
+	ReducerWriter* writer = new ReducerWriter(strfname, prog, keyType, valType);
+	while (from->HasNext() ) {
+		BgKvPair kv = from->GetNext();
+		if ( kv.valid == false ) break; // Just to be safe
+		
+		while ( term->HasNext() ) {
+			BgKvPair kvt = term->PeekNext();
+			if ( kvt.valid == false ) break;
+
+			if ( kv.key >= kvt.key ) {
+				writer->ReduceWrite(kvt.key, kvt.value, false);
+				term->GetNext();
+				continue;
+			}
+			if ( kv.key < kvt.key ) {
+				break;
+			}
+		}
+
+		writer->ReduceWrite(kv.key, kv.value, false);
+	}
+	writer->Finish();
+	printf( "VectorUnion write %ld pairs\n", writer->writecnt );
+	delete writer;
+	BgVertexList* rv = this->LoadVertices(strfname,keyType,valType);
+	return rv;
+}
+
+BgVertexList* 
+BlueGraph::VectorConverged(BgVertexList* from, BgVertexList* term, BgUserProgramType prog, std::string fname) {
+	if ( from->keyType != term->keyType ) return NULL;
+	if ( from->valType != term->valType ) return NULL;
+
+	BgKeyType keyType = from->keyType;
+	BgValType valType = from->valType;
+
+	const char* strfname = fname.c_str();
+	char genfname[128];
+	if ( fname == "" ) {
+		sprintf(genfname, "tempvec%04d.dat", vectorGenIdx);
+		vectorGenIdx++;
+		strfname = genfname;
+	}
+
+	from->Rewind();
+	term->Rewind();
+	ReducerWriter* writer = new ReducerWriter(strfname, prog, keyType, valType);
+	while (from->HasNext() ) {
+		BgKvPair kv = from->GetNext();
+		if ( kv.valid == false ) break; // Just to be safe
+		
+		bool exist = false;
+		uint64_t existVal = 0;
+		while ( term->HasNext() ) {
+			BgKvPair kvt = term->PeekNext();
+			if ( kvt.valid == false ) break;
+
+			if ( kv.key == kvt.key ) {
+				exist = true;
+				existVal = kvt.value;
+				term->GetNext();
+				break;
+			}
+			if ( kv.key < kvt.key ) {
+				break;
+			}
+			term->GetNext();
+		}
+
+		if ( exist ) {
+			if ( !Converged(kv.value,existVal, prog) ) {
+				writer->ReduceWrite(kv.key, kv.value, false);
+			}
+			continue;
+		}
+
+		writer->ReduceWrite(kv.key, kv.value, false);
+	}
+	writer->Finish();
+	printf( "VectorConverged write %ld pairs\n", writer->writecnt );
+	delete writer;
+
+
+	BgVertexList* rv = this->LoadVertices(strfname,keyType,valType);
+	return rv;
 }

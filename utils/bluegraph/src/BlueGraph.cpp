@@ -2,6 +2,7 @@
 #include "Sorters.h"
 
 #include "sssp.h"
+#include "bfs.h"
 
 #include <pthread.h>
 
@@ -14,6 +15,8 @@ ReducerWriter::ReducerWriter(std::string filename, BgUserProgramType prog, BgKey
 	this->valType = valType;
 	this->lastValid = false;
 	this->writecnt = 0;
+
+	checklast = 0;
 }
 
 ReducerWriter::~ReducerWriter() {
@@ -21,7 +24,10 @@ ReducerWriter::~ReducerWriter() {
 }
 void 
 ReducerWriter::RawWrite(uint64_t key, uint64_t val) {
-	//printf( "RawWrite %lx %lx\n", key, val );
+	if ( checklast > key ) {
+		printf( "Warning: lastKey > key!! %lx > %lx %ld\n", checklast, key, writecnt );
+	}
+	checklast = key;
 	if ( keyType == BGKEY_BINARY32 ) {
 		uint32_t skey = (uint32_t)key;
 		fwrite(&skey, sizeof(uint32_t), 1, fout);
@@ -49,6 +55,7 @@ ReducerWriter::Finish() {
 
 void 
 ReducerWriter::ReduceWrite(uint64_t key, uint64_t val, bool last) {
+
 	BlueGraph* bgraph = BlueGraph::getInstance();
 	if ( last == true ) {
 		if ( lastValid ) {
@@ -79,11 +86,6 @@ ReducerWriter::ReduceWrite(uint64_t key, uint64_t val, bool last) {
 		return;
 	}
 	
-	/*
-	if ( lastKey > key ) {
-		printf( "lastKey > key!! %lx > %lx\n", lastKey, key );
-	}
-	*/
 	
 
 	this->RawWrite(lastKey,lastVal);
@@ -175,6 +177,18 @@ BgEdgeList::BgEdgeList(std::string idxname, std::string matname, BgKeyType keyty
 	this->fmat = fopen(matname.c_str(), "rb");
 	this->keyType = keytype;
 	this->matrixFileOffset = 0;
+	this->stat_lastpage = 0xffffffffffffffff;
+	this->stat_readpagecnt=0;
+
+	fseek(fidx,0,SEEK_END);
+	uint64_t idxfsz = ftell(fidx);
+	this->vertexCount = idxfsz/sizeof(uint64_t);
+	fseek(fidx,0,SEEK_SET);
+	
+	fseek(fmat,0,SEEK_END);
+	this->edgeSz = ftell(fmat);
+	
+	fseek(fmat,0,SEEK_SET);
 
 	if ( this->fidx == NULL ) {
 		fprintf(stderr, "Error: BgEdgeList initialization failed. Cannot load %s\n", idxname.c_str() );
@@ -196,9 +210,23 @@ BgEdgeList::LoadOutEdges(uint64_t key) {
 	matrixFileOffset = trv[0];
 	matrixReadLimit = trv[1];
 	if ( r == 1 ) {
-		matrixReadLimit = 0xFFFFFFFFFFFFFFFF;
+		matrixReadLimit = this->edgeSz;
 	}
 	matrixCurOffset = matrixFileOffset;
+
+	matrixReadEdgeCount = matrixReadLimit - matrixFileOffset;
+	if ( keyType == BGKEY_BINARY32 ) matrixReadEdgeCount /= sizeof(uint32_t);
+	if ( keyType == BGKEY_BINARY64 ) matrixReadEdgeCount /= sizeof(uint64_t);
+
+	uint64_t startpage = (matrixFileOffset>>13);
+	uint64_t endpage = (matrixReadLimit>>13);
+	if ( stat_lastpage != 0xffffffffffffffff && startpage <= stat_lastpage ) startpage = stat_lastpage+1;
+	uint64_t pagereadcnt = endpage-startpage+1;
+	//printf( "read %ld pages, %ld edges\n",pagereadcnt, matrixReadEdgeCount );
+	stat_readpagecnt+=pagereadcnt;
+	stat_lastpage = endpage;
+
+	if ( matrixFileOffset == matrixReadLimit ) return false;
 
 	//printf ( "reading edges for key %ld, %lx-%lx\n", key, matrixFileOffset, matrixReadLimit );
 	return true;
@@ -292,10 +320,14 @@ BlueGraph::LoadVertices(std::string name, BgKeyType keyType, BgValType valType) 
 }
 	
 uint64_t 
-BlueGraph::EdgeProgram(uint64_t vertexValue, BgKvPair edge, BgUserProgramType userProg) {
+BlueGraph::EdgeProgram(uint64_t vertexValue, uint64_t edgeValue, BgUserProgramType userProg) {
 	switch(userProg) {
 		case(BGUSERPROG_SSSP): {
-			return BgUserSSSP::EdgeProgram(vertexValue, edge);
+			return BgUserSSSP::EdgeProgram(vertexValue, edgeValue);
+			break;
+		}
+		case(BGUSERPROG_BFS): {
+			return BgUserBFS::EdgeProgram(vertexValue, edgeValue);
 			break;
 		}
 		default:
@@ -307,6 +339,10 @@ BlueGraph::VertexProgram(uint64_t vertexValue1, uint64_t vertexValue2, BgUserPro
 	switch(userProg) {
 		case(BGUSERPROG_SSSP): {
 			return BgUserSSSP::VertexProgram(vertexValue1, vertexValue2);
+			break;
+		}
+		case(BGUSERPROG_BFS): {
+			return BgUserBFS::VertexProgram(vertexValue1, vertexValue2);
 			break;
 		}
 		default:
@@ -321,13 +357,19 @@ BlueGraph::Converged(uint64_t vertexValue1, uint64_t vertexValue2, BgUserProgram
 			return BgUserSSSP::Converged(vertexValue1, vertexValue2);
 			break;
 		}
+		case(BGUSERPROG_BFS): {
+			return BgUserBFS::Converged(vertexValue1, vertexValue2);
+			break;
+		}
 		default:
 			return vertexValue1;
 	}
 }
 
 BgVertexList* 
-BlueGraph::Execute(BgEdgeList* el, BgVertexList* vl, std::string newVertexListName, BgUserProgramType userProg, BgKeyType targetKeyType, BgValType targetValType) {
+BlueGraph::Execute(BgEdgeList* el, BgVertexList* vl, std::string newVertexListName, BgUserProgramType userProg, BgKeyType targetKeyType, BgValType targetValType, bool edgeCountArg) {
+
+	el->StatNewIter();
 
 	printf( "Starting execution\n"  ); fflush(stdout);
 
@@ -354,7 +396,7 @@ BlueGraph::Execute(BgEdgeList* el, BgVertexList* vl, std::string newVertexListNa
 			if ( edge.valid == false ) break;
 
 
-			uint64_t edgeres = EdgeProgram(kv.value, edge, userProg);
+			uint64_t edgeres = EdgeProgram(kv.value, edgeCountArg?el->matrixReadEdgeCount:edge.value, userProg);
 			switch (targetKeyType) {
 				case BGKEY_BINARY32: {
 					fwrite(&edge.key, sizeof(uint32_t), 1, ftmp);
@@ -386,7 +428,8 @@ BlueGraph::Execute(BgEdgeList* el, BgVertexList* vl, std::string newVertexListNa
 	// TODO may not be aligned to 512!!
 
 	// Sort edge read-modify-write list while reducing
-	printf( "Finished generating edge log\n" );
+	printf( "STAT Finished generating edge log %ld\n", initlogcount );
+	printf( "STAT edge log generation page read: %ld\n", el->stat_readpagecnt );
 	int mergedBlockCount = PageSort(targetKeyType, targetValType, userProg);
 	fclose(ftmp);
 	std::remove("ftmp.dat");
@@ -403,13 +446,18 @@ BlueGraph::Execute(BgEdgeList* el, BgVertexList* vl, std::string newVertexListNa
 		mergedBlockCount = MergeSort16(targetKeyType, targetValType, userProg, externalMergeStage, mergedBlockCount);
 		externalMergeStage++;
 	}
-	char outfilename[128];
-	sprintf(outfilename, "sort_%02d_0000.dat",externalMergeStage);
-	while (!std::rename(outfilename, newVertexListName.c_str()));
-	BgVertexList* rv = this->LoadVertices(newVertexListName.c_str(),targetKeyType,targetValType);
-	printf( "Reduction done! Finishing Execution\n" ); fflush(stdout);
+
+	if ( initlogcount > 0 ) {
+		char outfilename[128];
+		sprintf(outfilename, "sort_%02d_0000.dat",externalMergeStage);
+		while (!std::rename(outfilename, newVertexListName.c_str()));
+		BgVertexList* rv = this->LoadVertices(newVertexListName.c_str(),targetKeyType,targetValType);
+		printf( "Reduction done! Finishing Execution\n" ); fflush(stdout);
+		return rv;
+	}
 
 	//MergeSort
+	BgVertexList* rv = (BgVertexList*)(new BgVertexListInMem(targetKeyType, targetValType));
 	return rv;
 }
 
@@ -435,6 +483,8 @@ BlueGraph::PageSort(BgKeyType keyType, BgValType valType, BgUserProgramType prog
 	int blockidx = 0;
 	char outfilename[128];
 
+	uint64_t sortedblocks = 0;
+
 	while ( !feof(ftmp) ) {
 		uint8_t* tbuf = (uint8_t*)calloc(itemsz,cntinblk);
 		int objcount = fread(tbuf, itemsz, cntinblk, ftmp);
@@ -453,6 +503,7 @@ BlueGraph::PageSort(BgKeyType keyType, BgValType valType, BgUserProgramType prog
 			blockidx++;
 
 			free(ainfo[spawn_tid].tbuf);
+			sortedblocks++;
 
 			printf( "Block sort finished by thread %d\n", spawn_tid );
 		}
@@ -486,11 +537,12 @@ BlueGraph::PageSort(BgKeyType keyType, BgValType valType, BgUserProgramType prog
 		blockidx++;
 
 		free(ainfo[i].tbuf);
+		sortedblocks++;
 		thread_working[i] = false;
 		printf( "Block sort finished by thread %d\n", i );
 	}
 
-	printf( "Sorting done\n" );
+	printf( "STAT sorted-blocks: %ld\n", sortedblocks );
 	return blockidx;
 	//fclose(ftmp1);
 	//delete writer;
@@ -516,6 +568,9 @@ BlueGraph::MergeSort16(BgKeyType keyType, BgValType valType, BgUserProgramType p
 	if ( valType == BGVAL_BINARY64 ) valsz = 8;
 	//int objsz = keysz + valsz;
 
+	uint64_t readkbp = 0;
+	uint64_t writekbp = 0;
+
 	for ( int i = 0; i < resBlockCount; i++ ){
 		FILE* fins[16];
 		sprintf(outfilename, "sort_%02d_%04d.dat",stage+1, i);
@@ -526,6 +581,8 @@ BlueGraph::MergeSort16(BgKeyType keyType, BgValType valType, BgUserProgramType p
 		for ( int j = 0; j < 16; j++ ) {
 			fins[j] = NULL;
 			valids[j] = false;
+			keys[j] = 0;
+			vals[j] = 0;
 		}
 
 		//FILE* fout = fopen(outfilename, "wb");
@@ -537,7 +594,10 @@ BlueGraph::MergeSort16(BgKeyType keyType, BgValType valType, BgUserProgramType p
 
 			sprintf(infilename, "sort_%02d_%04d.dat",stage, bidx);
 			fins[j] = fopen(infilename, "rb");
+			if ( fins[j] == NULL ) printf( "FAILED TO OPEN %s\n", infilename );
 		}
+
+		uint64_t lastkey = 0;
 
 		while(true) {
 			for ( int j = 0; j < 16; j++ ) {
@@ -548,7 +608,10 @@ BlueGraph::MergeSort16(BgKeyType keyType, BgValType valType, BgUserProgramType p
 			
 				int r = fread(&keys[j], keysz, 1, fins[j]);
 				r += fread(&vals[j], valsz, 1, fins[j]);
-				if ( r == 2 ) valids[j] = true;
+				if ( r == 2 ) {
+					valids[j] = true;
+					readkbp++;
+				}
 			}
 
 			bool exist = false;
@@ -564,12 +627,18 @@ BlueGraph::MergeSort16(BgKeyType keyType, BgValType valType, BgUserProgramType p
 			}
 
 			if ( exist == false ) {
-				writer->Finish();
 				break;
+			}
+
+			if ( lastkey > keys[minloc] ) {
+				printf( "Merge sort error!! %lx %lx\n", lastkey, keys[minloc] );
+			} else {
+				lastkey = keys[minloc];
 			}
 
 			writer->ReduceWrite(keys[minloc], vals[minloc], false);
 			valids[minloc] = false;
+			writekbp ++;
 		}
 		for ( int j = 0; j < 16; j++ ) {
 			int bidx = i*16 + j;
@@ -578,8 +647,10 @@ BlueGraph::MergeSort16(BgKeyType keyType, BgValType valType, BgUserProgramType p
 			sprintf(infilename, "sort_%02d_%04d.dat",stage, bidx);
 			std::remove(infilename);
 		}
+		writer->Finish();
 		delete writer;
 	}
+	printf( "STAT merge-sort stage %d into %d %ld -> %ld\n", stage, resBlockCount, readkbp, writekbp );
 
 	return resBlockCount;
 }
@@ -602,11 +673,13 @@ BlueGraph::VectorDiff(BgVertexList* from, BgVertexList* term, std::string fname)
 		strfname = genfname;
 	}
 
+	uint64_t readcnt = 0;
 	from->Rewind();
 	term->Rewind();
 	ReducerWriter* writer = new ReducerWriter(strfname, BGUSERPROG_NULL, keyType, valType);
 	while (from->HasNext() ) {
 		BgKvPair kv = from->GetNext();
+		readcnt++;
 		if ( kv.valid == false ) break; // Just to be safe
 		
 		bool exist = false;
@@ -617,12 +690,14 @@ BlueGraph::VectorDiff(BgVertexList* from, BgVertexList* term, std::string fname)
 			if ( kv.key == kvt.key ) {
 				exist = true;
 				term->GetNext();
+				readcnt++;
 				break;
 			}
 			if ( kv.key < kvt.key ) {
 				break;
 			}
 			term->GetNext();
+			readcnt++;
 		}
 
 		if ( exist ) {
@@ -632,7 +707,7 @@ BlueGraph::VectorDiff(BgVertexList* from, BgVertexList* term, std::string fname)
 		writer->ReduceWrite(kv.key, kv.value, false);
 	}
 	writer->Finish();
-	printf( "VectorDiff write %ld pairs\n", writer->writecnt );
+	printf( "STAT VectorDiff write %ld pairs read %ld pairs\n", writer->writecnt, readcnt );
 	delete writer;
 
 
@@ -656,11 +731,13 @@ BlueGraph::VectorUnion(BgVertexList* from, BgVertexList* term, BgUserProgramType
 		strfname = genfname;
 	}
 
+	uint64_t readcnt = 0;
 	from->Rewind();
 	term->Rewind();
 	ReducerWriter* writer = new ReducerWriter(strfname, prog, keyType, valType);
 	while (from->HasNext() ) {
 		BgKvPair kv = from->GetNext();
+		readcnt++;
 		if ( kv.valid == false ) break; // Just to be safe
 		
 		while ( term->HasNext() ) {
@@ -670,6 +747,7 @@ BlueGraph::VectorUnion(BgVertexList* from, BgVertexList* term, BgUserProgramType
 			if ( kv.key >= kvt.key ) {
 				writer->ReduceWrite(kvt.key, kvt.value, false);
 				term->GetNext();
+				readcnt++;
 				continue;
 			}
 			if ( kv.key < kvt.key ) {
@@ -679,8 +757,15 @@ BlueGraph::VectorUnion(BgVertexList* from, BgVertexList* term, BgUserProgramType
 
 		writer->ReduceWrite(kv.key, kv.value, false);
 	}
+	while ( term->HasNext() ) {
+		BgKvPair kvt = term->GetNext();
+		readcnt++;
+		if ( kvt.valid == false ) break;
+		writer->ReduceWrite(kvt.key, kvt.value, false);
+	}
+
 	writer->Finish();
-	printf( "VectorUnion write %ld pairs\n", writer->writecnt );
+	printf( "STAT VectorUnion write %ld pairs read %ld pairs\n", writer->writecnt, readcnt );
 	delete writer;
 	BgVertexList* rv = this->LoadVertices(strfname,keyType,valType);
 	return rv;
@@ -702,11 +787,14 @@ BlueGraph::VectorConverged(BgVertexList* from, BgVertexList* term, BgUserProgram
 		strfname = genfname;
 	}
 
+	uint64_t readcnt = 0;
+
 	from->Rewind();
 	term->Rewind();
 	ReducerWriter* writer = new ReducerWriter(strfname, prog, keyType, valType);
 	while (from->HasNext() ) {
 		BgKvPair kv = from->GetNext();
+		readcnt++;
 		if ( kv.valid == false ) break; // Just to be safe
 		
 		bool exist = false;
@@ -719,12 +807,14 @@ BlueGraph::VectorConverged(BgVertexList* from, BgVertexList* term, BgUserProgram
 				exist = true;
 				existVal = kvt.value;
 				term->GetNext();
+				readcnt++;
 				break;
 			}
 			if ( kv.key < kvt.key ) {
 				break;
 			}
 			term->GetNext();
+			readcnt++;
 		}
 
 		if ( exist ) {
@@ -737,7 +827,7 @@ BlueGraph::VectorConverged(BgVertexList* from, BgVertexList* term, BgUserProgram
 		writer->ReduceWrite(kv.key, kv.value, false);
 	}
 	writer->Finish();
-	printf( "VectorConverged write %ld pairs\n", writer->writecnt );
+	printf( "STAT VectorConverged write %ld pairs read %ld pairs\n", writer->writecnt, readcnt );
 	delete writer;
 
 

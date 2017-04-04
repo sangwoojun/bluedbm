@@ -4,7 +4,7 @@
 
 #include <string>
 
-#define SORTER_THREAD_COUNT 8
+#define SORTER_THREAD_COUNT 16
 
 
 #ifndef __DEFINES_H__

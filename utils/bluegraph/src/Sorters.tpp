@@ -137,6 +137,9 @@ int compareKvp(const void*a, const void*b) {
 template <class keyType, class valType>
 void quick_sort_lib(void* buffer, int count) {
 	qsort(buffer, count, sizeof(keyType)+sizeof(valType),compareKvp<keyType,valType>);
+	if ( !check_sorted<keyType,valType>(buffer,count) ) {
+		printf( "qsort failed to sort!\n" );
+	}
 }
 
 template <class keyType, class valType>

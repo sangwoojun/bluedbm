@@ -41,6 +41,17 @@ private:
 	uint64_t matrixFileOffset;
 	uint64_t matrixReadLimit;
 	uint64_t matrixCurOffset;
+	uint64_t stat_lastpage;
+
+	uint64_t vertexCount;
+	uint64_t edgeSz;
+public:
+	uint64_t stat_readpagecnt;
+	uint64_t matrixReadEdgeCount;
+	void StatNewIter() {
+		stat_readpagecnt = 0;
+		stat_lastpage = 0xffffffffffffffff;
+	}
 };
 
 class BlueGraph {
@@ -51,9 +62,9 @@ public:
 	BgEdgeList* LoadEdges(std::string idxname, std::string matname, BgKeyType keytype);
 	BgVertexList* LoadVertices(std::string name, BgKeyType keyType, BgValType valType );
 
-	BgVertexList* Execute(BgEdgeList* el, BgVertexList* vl, std::string newVertexListName, BgUserProgramType userProg, BgKeyType targetKeyType, BgValType targetValType);
+	BgVertexList* Execute(BgEdgeList* el, BgVertexList* vl, std::string newVertexListName, BgUserProgramType userProg, BgKeyType targetKeyType, BgValType targetValType, bool edgeCountArg);
 
-	uint64_t EdgeProgram(uint64_t vertexValue, BgKvPair edge, BgUserProgramType userProg);
+	uint64_t EdgeProgram(uint64_t vertexValue, uint64_t edgeValue, BgUserProgramType userProg);
 	uint64_t VertexProgram(uint64_t vertexValue1, uint64_t vertexValue2, BgUserProgramType userProg);
 	bool Converged(uint64_t vertexValue1, uint64_t vertexValue2, BgUserProgramType userProg);
 
@@ -96,6 +107,8 @@ private:
 	bool lastValid;
 	uint64_t lastKey;
 	uint64_t lastVal;
+
+	uint64_t checklast;
 
 	BgKeyType keyType;
 	BgValType valType;

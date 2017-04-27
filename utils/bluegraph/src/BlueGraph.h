@@ -43,11 +43,11 @@ private:
 	uint64_t matrixCurOffset;
 	uint64_t stat_lastpage;
 
-	uint64_t vertexCount;
 	uint64_t edgeSz;
 public:
 	uint64_t stat_readpagecnt;
 	uint64_t matrixReadEdgeCount;
+	uint64_t vertexCount;
 	void StatNewIter() {
 		stat_readpagecnt = 0;
 		stat_lastpage = 0xffffffffffffffff;
@@ -77,8 +77,11 @@ public:
 
 	BgVertexList* VectorDiff(BgVertexList* from, BgVertexList* term, std::string fname);
 	BgVertexList* VectorUnion(BgVertexList* from, BgVertexList* term, BgUserProgramType prog, std::string fname);
+	BgVertexList* VectorArith(BgVertexList* from, BgUserProgramType prog, BgEdgeList* el, std::string fname);
 	BgVertexList* VectorConverged(BgVertexList* from, BgVertexList* term, BgUserProgramType prog, std::string fname);
+	BgVertexList* VectorApply(BgVertexList* to, BgVertexList* from, std::string fname);
 
+BgVertexList* CreatePRVector(uint64_t vertexCount, BgEdgeList* el, BgKeyType keyType, BgValType valType);
 
 
 private:

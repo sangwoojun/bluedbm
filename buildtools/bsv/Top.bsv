@@ -106,7 +106,7 @@ module mkProjectTop #(
 
    
 ////////// DDR3
-	DRAMControllerIfc dramController <- mkDRAMController(clocked_by uclk, reset_by urst);
+	DRAMControllerIfc dramController <- mkDRAMController(clocked_by clk250, reset_by rst250);//clocked_by uclk, reset_by urst);
 
 `ifdef USE_DRAM
 	Clock ddr_buf = clk200;
@@ -119,7 +119,7 @@ module mkProjectTop #(
 	Clock ddr3clk = ddr3_ctrl.user.clock;
 	Reset ddr3rstn = ddr3_ctrl.user.reset_n;
 
-	let ddr_cli_200Mhz <- mkDDR3ClientSync(dramController.ddr3_cli, clockOf(dramController), resetOf(dramController), ddr3clk, ddr3rstn, clocked_by uclk, reset_by urst);
+	let ddr_cli_200Mhz <- mkDDR3ClientSync(dramController.ddr3_cli, clockOf(dramController), resetOf(dramController), ddr3clk, ddr3rstn, clocked_by clk250, reset_by rst250);//, clocked_by uclk, reset_by urst);
 	mkConnection(ddr_cli_200Mhz, ddr3_ctrl.user);
 `endif
 

@@ -78,15 +78,15 @@ create_clock -name init_clk_2_i -period 20.0 [get_pins -hier -regexp .*auroraInt
 set_max_delay -from [get_clocks init_clk_1_i] -to [get_clocks aurora1_user_clk_i] -datapath_only 9.091	 
 set_max_delay -from [get_clocks init_clk_2_i] -to [get_clocks aurora2_user_clk_i] -datapath_only 9.091	 
 
-set_false_path -from [get_clocks aurora1_user_clk_i] -to [get_clocks clk_gen_pll_CLKOUT0]
-set_false_path -from [get_clocks aurora1_user_clk_i] -to [get_clocks clk_gen_pll_CLKOUT1]
-set_false_path -from [get_clocks aurora2_user_clk_i] -to [get_clocks clk_gen_pll_CLKOUT0]
-set_false_path -from [get_clocks aurora2_user_clk_i] -to [get_clocks clk_gen_pll_CLKOUT1]
-
-set_false_path -from [get_clocks clk_gen_pll_CLKOUT0] -to [get_clocks aurora1_user_clk_i]
-set_false_path -from [get_clocks clk_gen_pll_CLKOUT1] -to [get_clocks aurora1_user_clk_i]
-set_false_path -from [get_clocks clk_gen_pll_CLKOUT0] -to [get_clocks aurora2_user_clk_i]
-set_false_path -from [get_clocks clk_gen_pll_CLKOUT1] -to [get_clocks aurora2_user_clk_i]
+#set_false_path -from [get_clocks aurora1_user_clk_i] -to [get_clocks clk_gen_pll_CLKOUT0]
+#set_false_path -from [get_clocks aurora1_user_clk_i] -to [get_clocks clk_gen_pll_CLKOUT1]
+#set_false_path -from [get_clocks aurora2_user_clk_i] -to [get_clocks clk_gen_pll_CLKOUT0]
+#set_false_path -from [get_clocks aurora2_user_clk_i] -to [get_clocks clk_gen_pll_CLKOUT1]
+#
+#set_false_path -from [get_clocks clk_gen_pll_CLKOUT0] -to [get_clocks aurora1_user_clk_i]
+#set_false_path -from [get_clocks clk_gen_pll_CLKOUT1] -to [get_clocks aurora1_user_clk_i]
+#set_false_path -from [get_clocks clk_gen_pll_CLKOUT0] -to [get_clocks aurora2_user_clk_i]
+#set_false_path -from [get_clocks clk_gen_pll_CLKOUT1] -to [get_clocks aurora2_user_clk_i]
 
 ############################### GT LOC ###################################
 #get_cells -hierarchical -regexp {.*aurora_8b10b_fmc1_i/inst/gt_wrapper_i/aurora_8b10b_fmc1_multi_gt_i/gt0_aurora_8b10b_fmc1_i/gtxe2_i}
@@ -170,3 +170,9 @@ set_false_path -from [get_pins -hierarchical -filter {NAME=~ *CHANNEL_UP_reg/C}]
 
 set_false_path -from [get_pins -hier -filter {NAME=~ *auroraIntra1ClockDiv5/fastReset/rst_reg/C}]
 set_false_path -from [get_pins -hier -filter {NAME=~ *auroraIntra2ClockDiv5/fastReset/rst_reg/C}]
+
+set_clock_groups -asynchronous -group {clk_125mhz} -group {aurora1_user_clk_i}
+set_clock_groups -asynchronous -group {clk_250mhz} -group {aurora1_user_clk_i}
+
+set_clock_groups -asynchronous -group {clk_125mhz} -group {aurora2_user_clk_i}
+set_clock_groups -asynchronous -group {clk_250mhz} -group {aurora2_user_clk_i}

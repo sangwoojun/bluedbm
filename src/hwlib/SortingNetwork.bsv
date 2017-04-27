@@ -72,6 +72,31 @@ function Vector#(vcnt, itype) sortBitonic8_2(Vector#(vcnt, itype) in, Bool desce
 
 endfunction
 
+function Vector#(vcnt, itype) sortBitonic4(Vector#(vcnt, itype) in, Bool descending)
+	provisos(
+		Ord#(itype)
+	);
+
+	Vector#(vcnt, itype) rvec;
+	let r01 = compareAndSwap(in[0], in[2], descending);
+	let r02 = compareAndSwap(in[1], in[3], descending);
+	rvec[0] = tpl_1(r01);
+	rvec[1] = tpl_1(r02);
+	rvec[2] = tpl_2(r01);
+	rvec[3] = tpl_2(r02);
+
+	Vector#(vcnt, itype) rvec2;
+	let r11 = compareAndSwap(rvec[0], rvec[1], descending);
+	let r12 = compareAndSwap(rvec[2], rvec[3], descending);
+	rvec2[0] = tpl_1(r11);
+	rvec2[1] = tpl_1(r11);
+	rvec2[2] = tpl_2(r12);
+	rvec2[3] = tpl_2(r12);
+
+	return rvec2;
+
+endfunction
+
 function Vector#(vcnt, itype) sortBitonic8(Vector#(vcnt, itype) in, Bool descending)
 	provisos(
 		Ord#(itype)
@@ -120,6 +145,8 @@ function Vector#(vcnt, itype) sortBitonic(Vector#(vcnt, itype) in, Bool descendi
 
 	if ( valueOf(vcnt) == 8 ) begin
 		return sortBitonic8(in, descending);
+	end else if ( valueOf(vcnt) == 4 ) begin
+		return sortBitonic4(in, descending);
 	end else begin
 		// UNCAUGHT!!
 		return in;

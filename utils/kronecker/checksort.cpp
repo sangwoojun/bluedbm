@@ -22,6 +22,8 @@ main(int argc, char** argv) {
 		uint32_t din[2];// = 0;
 		if ( 0 == fread(din, sizeof(uint32_t),2,fin) ) break;
 
+		float v = *((float*)(&(din[1])));
+		printf( "++%f\n",v );
 		if ( din[0] <= last ) {
 			printf( "Unsorted 64bit value! %x < %x @ %lx\n", din[0], last, offset );
 		} else {

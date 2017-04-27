@@ -4,6 +4,7 @@ set_param general.maxThreads 8
 #
 # STEP#0: define output directory area.
 #
+set builddir ../../../../buildtools/
 set pciedir ../../../../bluespecpcie/
 set flashdir ../../../../flash/
 set ddr3dir ../../../../ddr3_v2_0/
@@ -21,6 +22,8 @@ set partname {xc7vx485tffg1761-2}
 read_verilog [ glob {verilog/top/*.v} ]
 
 set_property part $partname [current_project]
+
+read_xdc $builddir/top.xdc
 
 ############# Float Stuff
 read_ip $floatdir/core/fp_mult32/fp_mult32.xci
@@ -69,6 +72,7 @@ report_utilization -verbose -file $outputDir/mkprojecttop_post_synth_utilization
 report_datasheet -file $outputDir/mkprojecttop_post_synth_datasheet.txt
 write_verilog -force $outputDir/mkprojecttop_netlist.v
 write_debug_probes -force probes.ltx
+report_clocks -file $outputDir/mkprojecttop_post_synth_clock_report.rpt
 #report_power -file $outputDir/mkprojecttop_post_synth_power.rpt
 
 #

@@ -35,6 +35,24 @@ def populatecode():
 	code8[5] = [];
 	code8[5].append([2,3]);
 	code8[5].append([4,5]);
+
+	#######################
+	code[4] = {};
+	code4 = code[4];
+	code4["stage"] = 3;
+	code4[0] = [];
+	code4[0].append([0,1]);
+	code4[0].append([2,3]);
+	code4[1] = [];
+	code4[1].append([1,3]);
+	code4[1].append([0,2]);
+	code4[2] = [];
+	code4[2].append([1,2]);
+
+
+
+
+
 def printpreamble(ways):
 	print """\
 import FIFO::*;
@@ -62,8 +80,8 @@ def main(ways):
 	if not ways in code:
 		print "ERROR! "+str(ways)+" not in database"
 		return;
-	code8 = code[8];
-	stage = code8["stage"];
+	codecur = code[ways];
+	stage = codecur["stage"];
 
 	print """\
 	Vector#("""+str(ways)+""", FIFO#(inType)) st0Q <- replicateM(mkFIFO);
@@ -75,7 +93,7 @@ def main(ways):
 		stagesrc.append([True,i]); # skip(fifo), idx. If False (cas) -> False, i, [0,1]
 	for s in xrange(stage):
 		nstagesrc = [];
-		swaps = code8[s];
+		swaps = codecur[s];
 		swapc = len(swaps);
 		skips = ways-(swapc*2);
 		print "	Vector#("+str(swapc)+", OptCompareAndSwapIfc#(inType)) cas"+str(s+1)+" <- replicateM(mkOptCompareAndSwap(descending));";
@@ -151,8 +169,11 @@ def main(ways):
 """
 
 populatecode();
+
 printpreamble(8);
 main(8)
 printfooter();
 
+printpreamble(4);
+main(4)
 

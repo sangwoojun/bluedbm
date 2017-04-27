@@ -38,6 +38,7 @@ typedef enum {
 	BGUSERPROG_NULL,
 	BGUSERPROG_BFS,
 	BGUSERPROG_PAGERANK,
+	BGUSERPROG_UPDATE, // dummy for pagerank, to update visited list
 	BGUSERPROG_SSSP
 } BgUserProgramType; //FIXME
 

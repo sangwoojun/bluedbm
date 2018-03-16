@@ -10,7 +10,7 @@ int main( int argc, char** argv) {
 	srand(time(0));
 
 	uint64_t scale = 5;
-	int edgefactor=16;
+	int edgefactor=1; //FIXME
 	double seed[2][2] = {
 		{0.57,0.19},
 		{0.19,0.05}
@@ -46,6 +46,7 @@ int main( int argc, char** argv) {
 	//fwrite(&edgecount, sizeof(uint64_t), 1, fout);
 	printf( "Generating %ld nodes\n", nodecount );
 	printf( "Generating %ld edges\n", edgecount );
+	printf( "Edgefactor: %d\n", edgefactor);
 
 	uint64_t count[2][2] = {{0,0},{0,0}};
 

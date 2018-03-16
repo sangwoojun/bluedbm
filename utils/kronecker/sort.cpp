@@ -109,60 +109,90 @@ void sort_block_q(uint64_t* buffer, int count) {
 
 	if ( count < SORT_BLOCK_SIZE ) return;
 
+/*
 	if ( !check_sorted(buffer, count) ) {
 		printf( "Block sort has errors!\n" );
 	}
+*/
 }
 
 int main( int argc, char** argv ) {
 	if ( argc < 2 ) {
-		fprintf(stderr, "usage: %s [filename]\n", argv[0]);
+		fprintf(stderr, "usage: %s startlev [filename]\n", argv[0]);
 		exit(1);
 	}
 
-	FILE* fin = fopen(argv[1], "rb");
-	if ( fin == NULL ) {
-		fprintf(stderr, "Filename %s not found\n", argv[1]);
-		exit(1);
-	}
-
-	uint64_t* block = (uint64_t*)malloc(sizeof(uint64_t)*2*SORT_BLOCK_SIZE);
-
-	FILE* fout = fopen("temp_0.dat", "wb");
-
+	int slev = atoi(argv[1]);
 
 	uint64_t block_count = 0;
-	while ( !feof(fin) ) {
-		size_t readcount = fread(block, sizeof(uint64_t)*2, SORT_BLOCK_SIZE, fin);
-		if ( readcount == 0 ) break;
-
-		printf( "Sorting block %ld (%ld)\n", block_count, readcount );
-		if ( !check_sorted( block, readcount ) ) {
-			sort_block_q(block, readcount);
+	if ( slev == 0 ) { 
+		if ( argc < 3 ) {
+			printf( "Initial filename not given!\n" );
+			exit(1);
 		}
-		fwrite(block, sizeof(uint64_t)*2, readcount, fout);
-		block_count ++;
-	}
-	fclose(fout);
-	fclose(fin);
+		FILE* fin = fopen(argv[2], "rb");
+		if ( fin == NULL ) {
+			fprintf(stderr, "Filename %s not found\n", argv[1]);
+			exit(1);
+		}
 
-	printf("Initial block-level sorting finished!\n");
+		uint64_t* block = (uint64_t*)malloc(sizeof(uint64_t)*2*SORT_BLOCK_SIZE);
+
+		FILE* fout = fopen("temp_0.dat", "wb");
+
+
+		while ( !feof(fin) ) {
+			size_t readcount = fread(block, sizeof(uint64_t)*2, SORT_BLOCK_SIZE, fin);
+			if ( readcount == 0 ) break;
+
+			printf( "Sorting block %ld (%ld)\n", block_count, readcount );
+			//if ( !check_sorted( block, readcount ) ) {
+				sort_block_q(block, readcount);
+			//}
+			fwrite(block, sizeof(uint64_t)*2, readcount, fout);
+			block_count ++;
+		}
+		fclose(fout);
+		fclose(fin);
+
+		printf("Initial block-level sorting finished!\n");
+	}
 
 	//uint64_t* blocka = (uint64_t*)malloc(sizeof(uint64_t)*2*SORT_BLOCK_SIZE);
 	//uint64_t* blockb = (uint64_t*)malloc(sizeof(uint64_t)*2*SORT_BLOCK_SIZE);
 
-	uint64_t merge_block_count = 1;
 
 	char cur_in_filename[128];
 	char cur_out_filename[128];
 	// Mergesort stages
-	for (int sort_stage = 0; ; sort_stage++) {
+	int init_stage = 0;
+	if ( slev > 0 ) init_stage = slev - 1;
+	uint64_t merge_block_count = 1<<init_stage;
+	for (int sort_stage = init_stage; ; sort_stage++) {
 		sprintf(cur_in_filename, "temp_%d.dat", sort_stage);
 		FILE* fin1 = fopen(cur_in_filename, "rb");
 		FILE* fin2 = fopen(cur_in_filename, "rb");
+
+		if ( slev == 0 ) {
+		/*
+			&& block_count != bcnt ) {
+			printf( "STRANGE! block_count does not match estimate from file %ld,0x%lx %ld,0x%lx\n", block_count, block_count, bcnt, bcnt );
+			exit(1);
+		*/
+		}
+		else {
+			fseek(fin1, 0, SEEK_END);
+			uint64_t fsz = ftell(fin1);
+			fseek(fin1, 0, SEEK_SET);
+
+			uint64_t bcnt = fsz/SORT_BLOCK_SIZE/sizeof(uint64_t)/2;
+			printf( "Merging %ld,0x%lx blocks\n", bcnt, bcnt );
+			block_count = bcnt;
+		}
+
 		sprintf(cur_out_filename, "temp_%d.dat", sort_stage+1);
-		printf("Sorting stage %d! %s\n", sort_stage, cur_in_filename);
-		fout =fopen(cur_out_filename,"wb");
+		printf("Sorting stage %d! %s -- %ld\n", sort_stage, cur_in_filename, block_count);
+		FILE* fout =fopen(cur_out_filename,"wb");
 		
 		uint64_t cur_block_off = 0;
 		// Mergesort blocks
@@ -217,7 +247,7 @@ int main( int argc, char** argv ) {
 		fclose(fin1);
 		fclose(fin2);
 		fclose(fout);
-		std::remove(cur_in_filename);
+		if (sort_stage > 0 ) std::remove(cur_in_filename); //FIXME
 		if ( merge_block_count >= block_count ) break;
 	}
 

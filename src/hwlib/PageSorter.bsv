@@ -389,6 +389,125 @@ module mkMultiPageSorter#( Bool descending) (MultiPageSorterIfc#(ways, inType, t
 	endmethod
 endmodule
 
+module mkMultiPageSorterToCC#(Clock fastclk, Reset fastrst, Bool descending) (MultiPageSorterIfc#(ways, inType, tupleCount, pageSz))
+	provisos(
+	Bits#(Vector::Vector#(tupleCount, inType), inVSz)
+	, Add#(1,a__,ways)
+	, Add#(1,b__,inVSz)
+	, Bits#(inType, inTypeSz)
+	, Add#(1,c__,inTypeSz)
+	, Literal#(inType)
+	, Ord#(inType)
+	);
+
+	Integer iPageSz = valueOf(pageSz);
+	Integer pageSize = 2**iPageSz;
+	Integer iTupleCount = valueOf(tupleCount);
+	Integer iWays = valueOf(ways);
+
+	Vector#(ways, PageSorterIfc#(inType,tupleCount,pageSz)) sorters;
+	for ( Integer i = 0; i < iWays; i=i+1 ) begin
+		sorters[i] <- mkPageSorterV(descending);
+	end
+	//Vector#(ways, Reg#(Bit#(pageSz))) inCntUp <- replicateM(mkReg(0));
+	//Vector#(ways, Reg#(Bit#(pageSz))) inCntDown <- replicateM(mkReg(0));
+
+	FIFO#(Bit#(TLog#(ways))) enqAvailQ <- mkSizedFIFO(fromInteger(iWays), clocked_by fastclk, reset_by fastrst);
+	FIFO#(Bit#(TLog#(ways))) deqAvailQ <- mkSizedFIFO(fromInteger(iWays), clocked_by fastclk, reset_by fastrst);
+	Reg#(Bit#(TAdd#(1,TLog#(ways)))) initQcounter <- mkReg(fromInteger(iWays), clocked_by fastclk, reset_by fastrst);
+	rule initQs(initQcounter > 0);
+		initQcounter <= initQcounter - 1;
+		enqAvailQ.enq(truncate(initQcounter-1));
+	endrule
+	Reg#(Bit#(TAdd#(1,pageSz))) enqoff <- mkReg(0, clocked_by fastclk, reset_by fastrst);
+	Reg#(Bit#(TAdd#(1,pageSz))) deqoff <- mkReg(0, clocked_by fastclk, reset_by fastrst);
+	Reg#(Bit#(TLog#(ways))) curenq <- mkReg(0, clocked_by fastclk, reset_by fastrst);
+	Reg#(Bit#(TLog#(ways))) curdeq <- mkReg(0, clocked_by fastclk, reset_by fastrst);
+
+	FIFO#(Vector#(tupleCount,inType)) enqQ <- mkFIFO(clocked_by fastclk, reset_by fastrst);
+	FIFO#(Vector#(tupleCount,inType)) deqQ <- mkFIFO(clocked_by fastclk, reset_by fastrst);
+
+	FIFO#(Tuple2#(Bit#(TLog#(ways)),Vector#(tupleCount,inType))) enqdQ <- mkFIFO;
+	ScatterNIfc#(ways,Vector#(tupleCount,inType)) sdin <- mkScatterN(clocked_by fastclk, reset_by fastrst);
+
+	rule enqdata;
+		let target = curenq;
+		if ( enqoff == 0 ) begin
+			target = enqAvailQ.first;
+			enqAvailQ.deq;
+			curenq <= target;
+			deqAvailQ.enq(target);
+		end 
+		
+		if ( enqoff + 1 >= fromInteger(pageSize) ) begin
+			enqoff <= 0;
+		end else begin
+			enqoff <= enqoff + 1;
+		end
+
+		//enqdQ.enq(tuple2(target,enqQ.first));
+		sdin.enq(enqQ.first,target);
+		enqQ.deq;
+	endrule
+	
+	Vector#(ways, SyncFIFOIfc#(Vector#(tupleCount,inType))) vDeqQ <- replicateM(mkSyncFIFOFromCC(8, fastclk));
+	for ( Integer i = 0; i < iWays; i=i+1 ) begin
+		SyncFIFOIfc#(Vector#(tupleCount,inType)) enqSQ <- mkSyncFIFOToCC(8, fastclk, fastrst);
+		rule sorterenqdata;
+			let d <- sdin.get[i].get;
+			enqSQ.enq(d);
+		endrule
+		rule sorterenqdata2;
+			enqSQ.deq;
+			let d = enqSQ.first;
+			sorters[i].enq(d);
+		endrule
+
+		rule getsorted;
+			let d <- sorters[i].get;
+			vDeqQ[i].enq(d);
+		endrule
+	end
+	
+	/*
+	rule sorterenqdata;
+		enqdQ.deq;
+		let d = enqdQ.first;
+		sorters[tpl_1(d)].enq(tpl_2(d));
+	endrule
+	*/
+
+	rule deqdata;
+		let src = curdeq;
+		if ( deqoff == 0 ) begin
+			src = deqAvailQ.first;
+			deqAvailQ.deq;
+			curdeq <= src;
+			enqAvailQ.enq(src);
+		end
+
+		if ( deqoff + 1 >= fromInteger(pageSize) ) begin
+			deqoff <= 0;
+		end else begin
+			deqoff <= deqoff + 1;
+		end
+
+		//let d <- sorters[src].get;
+		vDeqQ[src].deq;
+		let d = vDeqQ[src].first;
+		deqQ.enq(d);
+	endrule
+
+
+
+	method Action enq(Vector#(tupleCount,inType) data);
+		enqQ.enq(data);
+	endmethod
+	method ActionValue#(Vector#(tupleCount,inType)) get;
+		deqQ.deq;
+		return deqQ.first;
+	endmethod
+endmodule
 module mkMultiPageSorterCC#(Clock fastclk, Reset fastrst, Bool descending) (MultiPageSorterIfc#(ways, inType, tupleCount, pageSz))
 	provisos(
 	Bits#(Vector::Vector#(tupleCount, inType), inVSz)

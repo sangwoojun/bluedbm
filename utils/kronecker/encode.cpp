@@ -59,11 +59,19 @@ int main(int argc, char** argv) {
 		uint64_t redge = cur[1];
 
 		if ( rnode == redge ) continue;
+		if ( rnode < cur_node ) {
+			printf( "node order wrong! %ld -> %ld\n", cur_node, rnode );
+			continue;
+		}
 
 		if ( cur_node == rnode ) {
 			if ( last_edge > redge ) {
-				printf( "Error!! Source node not sorted!\n" );
-				exit(0);
+				printf( "edge order wrong! %ld -> %ld\n", last_edge, redge );
+				continue;
+			}
+			if ( last_edge > redge ) {
+				printf( "Error!! Dest edge not sorted!\n" ); // FIXME! rnode < cur_node already checks for this...
+				exit(1);
 			}
 			if ( last_edge == redge ) continue;
 
@@ -81,7 +89,7 @@ int main(int argc, char** argv) {
 			last_edge = redge;
 			total_edges++;
 		} else {
-			if ( cur_node > rnode ) {
+			if ( cur_node > rnode ) { // FIXME rnode< cur_node already checks for this
 				printf( "Error!! Source node not sorted!\n" );
 				exit(0);
 			}
@@ -111,7 +119,7 @@ int main(int argc, char** argv) {
 			last_edge = redge;
 		}
 
-		if ( total_edges % 1000000 == 0 ) {
+		if ( total_edges % (1024L*1024L*64L) == 0 ) {
 			printf( "Total edges: %ld\n", total_edges );
 		}
 

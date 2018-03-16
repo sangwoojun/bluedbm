@@ -27,15 +27,17 @@ main(int argc, char** argv) {
 	printf( "%s > %s dedup: %s\n", infilename, outfilename, dedup?"True":"False" );
 
 	uint64_t rbuf[2];
-	uint64_t last_rbuf[2];
+	uint64_t last_rbuf[2] = {0,0};
 	while ( !feof(fin) ) {
 		int r = fread(&rbuf, sizeof(uint64_t), 2, fin);
 		if ( r != 2 ) continue;
 
 		if ( rbuf[0] == last_rbuf[0] && rbuf[1] == last_rbuf[1] ) continue;
+		if ( last_rbuf[0] > rbuf[0] ) continue;
 
 		last_rbuf[0] = rbuf[0];
 		last_rbuf[1] = rbuf[1];
+
 
 		fprintf(fout, "%10ld\t%10ld\n", rbuf[0], rbuf[1] );
 	}

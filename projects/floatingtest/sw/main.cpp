@@ -30,6 +30,7 @@ int main(int argc, char** argv) {
 	printf( "All Init Done\n" );
 	fflush(stdout);
 	
+	//pcie->userWriteWord(16*4,0xc001d00d);
 	while (1) {
 		for ( int i = 0; i < 32; i++ ) {
 			printf( "++%2d %x\n", i, pcie->userReadWord(i*4) );

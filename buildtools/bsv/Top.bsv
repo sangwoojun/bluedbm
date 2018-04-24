@@ -87,7 +87,7 @@ module mkProjectTop #(
 	Clock clk200 = clk_gen.clkout2;
 	
 	Clock clk125 = clk_gen.clkout1;
-	Reset rst125 <- mkAsyncReset( 8, sys_rst_n_buf, clk125);
+	Reset rst125 <- mkAsyncReset( 4, sys_rst_n_buf, clk125);
 	//Reset rst125 <- mkSyncReset( 4, rst125a, clk125);
 
 	Clock uclk = clk125;
@@ -125,7 +125,8 @@ module mkProjectTop #(
 
 
 ////////////////
-	HwMainIfc hwmain <- mkHwMain(pcie.ctrl.user, flashes,/* flashCtrl2.man,*/ dramController.user, clk250, rst250, clocked_by uclk, reset_by urst);
+	//HwMainIfc hwmain <- mkHwMain(pcie.ctrl.user, flashes, dramController.user, clk250, rst250, clocked_by pcie.ctrl.user.user_clk, reset_by pcie.ctrl.user.user_rst);
+	HwMainIfc hwmain <- mkHwMain(pcie.ctrl.user, flashes, dramController.user, clk250, rst250, clocked_by uclk, reset_by urst);
 
 	//ReadOnly#(Bit#(4)) leddata <- mkNullCrossingWire(noClock, pcieCtrl.leds);
 

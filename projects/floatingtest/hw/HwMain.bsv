@@ -32,7 +32,7 @@ typedef 4 DMAEngineCount;
 typedef 3 AccelCount;
 typedef TAdd#(AccelCount,1) DestCount; // 0 is always host DRAM
 
-typedef 32 CoreCnt;
+typedef 8 CoreCnt;
 
 interface DistAccumIfc;
 	method Action enq(Bit#(32) fa, Bit#(32) fb);
@@ -43,7 +43,7 @@ module mkDistAccum (DistAccumIfc);
 	FpPairIfc fp_add32 <- mkFpAdd32;
 	FpPairIfc fp_sub32 <- mkFpSub32;
 	
-	Reg#(Bit#(32)) fpTotSum <- mkReg(0);
+	Reg#(Bit#(32)) fpTotSum <- mkReg(32'h3f800000);
 	
 	rule trymult;
 		fp_sub32.deq;
@@ -85,42 +85,56 @@ module mkHwMain#(PcieUserIfc pcie, Vector#(2,FlashCtrlUser) flashes,
 
 	PcieSharedBufferIfc#(12) pciebuf <- mkPcieSharedBuffer(pcie);
 
-	DRAMArbiterIfc#(2) drama <- mkDRAMArbiter(dram);
-	FpPairIfc fp_mult32 <- mkFpMult32;
-	FpPairIfc fp_add32 <- mkFpAdd32;
-	FpPairIfc fp_sub32 <- mkFpSub32;
+	//DRAMArbiterIfc#(2) drama <- mkDRAMArbiter(dram);
 
 	Reg#(Bit#(64)) cycles <- mkReg(0);
-	rule cycleCount;
+	rule cycleCount ( cycles < 1000000 );
 		cycles <= cycles + 1;
 	endrule
 
+
+/*
+	Reg#(Bit#(8)) initc <- mkReg(0);
+	rule inirr(initc < 64);
+		pciebuf.write(5+zeroExtend(initc), 32'hdeadbeef);
+		initc <= initc + 1;
+	endrule
+*/
+
+	//FpPairIfc fp_mult32 <- mkFpMult32;
+	//FpPairIfc fp_add32 <- mkFpAdd32;
+	//FpPairIfc fp_sub32 <- mkFpSub32;
 	MergeNIfc#(CoreCnt, Tuple2#(Bit#(8),Bit#(32))) mcnt <- mkMergeN;
 
 	Vector#(CoreCnt, DistAccumIfc) cDistAccum <- replicateM(mkDistAccum);
 	for ( Integer i = 0; i < valueOf(CoreCnt); i=i+1) begin
 		Reg#(Bit#(32)) emitCnt <- mkReg(0);
-		rule injectCalc;
+		Reg#(Bit#(32)) pushCnt <- mkReg(0);
+		rule injectCalc ( pushCnt < 1);
 			if ( i == 0 ) begin
-				cDistAccum[i].enq(32'h3e4ccccd, 32'h40a9999a);
+				cDistAccum[i].enq(32'h40000000, 32'h3fb33333);
+			end else 
+			if ( i == 1 ) begin
+				cDistAccum[i].enq(32'h40000000, 32'h40733333);
 			end else begin
-				cDistAccum[i].enq(fromInteger(i)<<23, 32'h40a9999a);
+				cDistAccum[i].enq(32'h40000000, 32'h3f99999a);
+				//cDistAccum[i].enq(fromInteger(i)<<23, 32'h40a9999a);
 			end
+			pushCnt <= pushCnt + 1;
 		endrule
 		rule readout;
 			let res <- cDistAccum[i].res;
-			if ( emitCnt[7:0] == 0 ) begin
+			//if ( emitCnt[7:0] == 0 ) begin
 				//mcnt.enq[i].enq(tuple2(fromInteger(i), truncate(emitCnt)));
 				mcnt.enq[i].enq(tuple2(fromInteger(i), res));
-			end
+			//end
 			emitCnt <= emitCnt + 1;
 		endrule
 	end
 	rule setDone;
 		mcnt.deq;
 		let d_ = mcnt.first;
-		pciebuf.write(zeroExtend(tpl_1(d_)), tpl_2(d_));
+		pciebuf.write((zeroExtend(tpl_1(d_))+8), tpl_2(d_));
 		
 	endrule
 endmodule
-

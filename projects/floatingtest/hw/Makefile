@@ -7,7 +7,7 @@ BUILDTOOLS=$(realpath $(ROOT)/buildtools)
 include $(BUILDTOOLS)/Makefile.base
 
 #BSC_DEFINES = -D USE_DRAM -D USE_FLASH
-BSC_DEFINES = -D USE_DRAM
+BSC_DEFINES = 
 
 hw:
 	mkdir -p build/obj

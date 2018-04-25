@@ -857,100 +857,252 @@ module mkReducerUnit#(ReducerType rtype, Bool lastunit, Integer index) (ReducerU
 
 endmodule
 
-interface StripedReducerIfc#(type keyType, type valType);
-	method Action enq(Tuple2#(keyType, valType) data, Bool last);
-	method ActionValue#(Tuple2#(Tuple2#(keyType,valType),Bool)) get;
+interface StreamReducerIfc#(type keyType, type valType);
+	method Action enq(Maybe#(Tuple2#(keyType, valType)) data);
+	method ActionValue#(Maybe#(Tuple2#(keyType,valType))) get;
 endinterface
 
-//TODO tag last
-module mkStripedReducer#(Integer stripecnt) (StripedReducerIfc#(Bit#(32),Bit#(32)));
+//TODO problem if stream is shorter than stripecnt
+module mkStripedReducer#(Integer stripecnt) (StreamReducerIfc#(Bit#(32),Bit#(32)));
 	//Integer stripecnt = 8;
 
 	ReducerIfc#(Bit#(32)) reducer <- mkReducerFloatMult;
 	//ReducerIfc#(Bit#(32)) reducer <- mkReducerAdd;
-	FIFO#(Bit#(32)) reducedQ <- mkSizedFIFO(stripecnt);
+	FIFO#(Bit#(32)) reducedQ <- mkSizedFIFO(stripecnt*2);
 	rule relayReduced;
 		let v <- reducer.get;
 		reducedQ.enq(v);
 	endrule
 
 
-	FIFO#(Tuple2#(Bit#(32),Maybe#(Bit#(32)))) stripeQ <- mkSizedFIFO(stripecnt+1);
+	FIFO#(Tuple2#(Bit#(32),Maybe#(Bit#(32)))) stripeQ <- mkSizedFIFO(stripecnt*2);
 	//Reg#(Bit#(8)) stripeQIn <- mkReg(0);
 	Reg#(Bit#(8)) stripeQOut <- mkReg(0);
 
-	FIFO#(Tuple2#(Bit#(32),Bit#(32))) inQ <- mkFIFO;
-	FIFO#(Bool) lastQ <- mkFIFO;
-
-	FIFO#(Tuple2#(Bit#(32),Bit#(32))) outQ <- mkFIFO;
-	FIFO#(Bool) lastOutQ <- mkFIFO;
+	FIFO#(Maybe#(Tuple2#(Bit#(32),Bit#(32)))) inQ <- mkSizedFIFO(stripecnt);
+	FIFO#(Maybe#(Tuple2#(Bit#(32),Bit#(32)))) outQ <- mkSizedFIFO(stripecnt);
 
 	Reg#(Bit#(8)) initCnt <- mkReg(0);
 
 	Reg#(Bool) flushing <- mkReg(False);
 	rule procin(!flushing);
 		inQ.deq;
-		let inv = inQ.first;
-		lastQ.deq;
-		let last = lastQ.first;
+		let inv = fromMaybe(?,inQ.first);
+		Bool valid = isValid(inQ.first);
 
-		stripeQ.deq;
-		let stv = stripeQ.first;
-		let stvv = fromMaybe(?,tpl_2(stv));
-		if ( !isValid(tpl_2(stv)) ) begin
-			stvv = reducedQ.first;
-			reducedQ.deq;
-		end
+		if ( valid ) begin
+			stripeQ.deq;
+			let stv = stripeQ.first;
+			let stvv = fromMaybe(?,tpl_2(stv));
+			if ( !isValid(tpl_2(stv)) ) begin
+				stvv = reducedQ.first;
+				reducedQ.deq;
+			end
 
 
-		if ( tpl_1(inv) == tpl_1(stv) ) begin
-			stripeQ.enq(tuple2(tpl_1(inv),tagged Invalid));
-			reducer.enq(tpl_2(inv), stvv);
+			if ( tpl_1(inv) == tpl_1(stv) ) begin
+				stripeQ.enq(tuple2(tpl_1(inv),tagged Invalid));
+				reducer.enq(tpl_2(inv), stvv);
+			end else begin
+				stripeQ.enq(tuple2(tpl_1(inv),tagged Valid tpl_2(inv)));
+				outQ.enq(tagged Valid tuple2(tpl_1(stv), stvv));
+			end
+
 		end else begin
-			stripeQ.enq(tuple2(tpl_1(inv),tagged Valid tpl_2(inv)));
-			outQ.enq(tuple2(tpl_1(stv), stvv));
-			lastOutQ.enq(False);
+			flushing <= True;
 		end
-
-		if ( last ) flushing <= True;
 	endrule
 
-	rule flushdone(flushing); 
+	rule flush(flushing && stripeQOut < fromInteger(stripecnt)); 
 		stripeQ.deq;
 		stripeQOut <= stripeQOut + 1;
 
-		Bool lasto = False;
-		if ( stripeQOut + 1 >= fromInteger(stripecnt) ) begin
-			flushing <= False;
-			lasto = True;
-		end
-
 		let stv = stripeQ.first;
 		let stvv = fromMaybe(?,tpl_2(stv));
 		if ( !isValid(tpl_2(stv)) ) begin
 			stvv = reducedQ.first;
 			reducedQ.deq;
 		end
-		outQ.enq(tuple2(tpl_1(stv), stvv));
-		lastOutQ.enq(lasto);
+		outQ.enq(tagged Valid tuple2(tpl_1(stv), stvv));
+	endrule
+
+	rule  flushdone(flushing && stripeQOut >= fromInteger(stripecnt));
+		flushing <= False;
+		stripeQOut <= 0;
 	endrule
 
 
-	method Action enq(Tuple2#(Bit#(32), Bit#(32)) data, Bool last);
+	method Action enq(Maybe#(Tuple2#(Bit#(32), Bit#(32))) data) if ( !flushing );
+		//let data = tpl_1(data_);
+		//let last = tpl_2(data_);
+		let sd = fromMaybe(?, data);
+
 		if ( initCnt < fromInteger(stripecnt) ) begin
 			initCnt <= initCnt + 1;
-			stripeQ.enq(tuple2(tpl_1(data), tagged Valid tpl_2(data)));
+			stripeQ.enq(tuple2(tpl_1(sd), tagged Valid tpl_2(sd)));
+			// FIXME: error if stream is shorter than latency
 		end else begin
 			inQ.enq(data);
-			lastQ.enq(last);
 		end
 	endmethod
-	method ActionValue#(Tuple2#(Tuple2#(Bit#(32),Bit#(32)),Bool)) get;
+	method ActionValue#(Maybe#(Tuple2#(Bit#(32),Bit#(32)))) get;
 		outQ.deq;
-		lastOutQ.deq;
 
-		return tuple2(outQ.first, lastOutQ.first);
+		return outQ.first; //tuple2(outQ.first, lastOutQ.first);
 	endmethod
 endmodule
 
 
+interface MergeReduceIfc#(type keyType, type valType);
+	method Action enq1(Maybe#(Tuple2#(Bit#(32), Bit#(32))) data);
+	method Action enq2(Maybe#(Tuple2#(Bit#(32), Bit#(32))) data);
+	method ActionValue#(Maybe#(Tuple2#(keyType, valType))) get;
+endinterface
+
+module mkMergeSortReducer#(Integer latency) (MergeReduceIfc#(Bit#(32), Bit#(32)));
+
+	ReducerIfc#(Bit#(32)) reducer <- mkReducerFloatMult;
+	FIFO#(Maybe#(Tuple2#(Bit#(32), Maybe#(Bit#(32))))) bypassQ <- mkSizedFIFO(latency);
+	FIFO#(Maybe#(Tuple2#(Bit#(32), Bit#(32)))) inQ1 <- mkFIFO;
+	FIFO#(Maybe#(Tuple2#(Bit#(32), Bit#(32)))) inQ2 <- mkFIFO;
+	//Reg#(Bool) done1 <- mkReg(False);
+	//Reg#(Bool) done2 <- mkReg(False);
+	
+	FIFO#(Maybe#(Tuple2#(Bit#(32), Bit#(32)))) outQ <- mkFIFO;
+
+
+	rule comparein;
+		let d1_ = inQ1.first;
+		let d2_ = inQ2.first;
+		Bool valid1 = isValid(d1_);
+		Bool valid2 = isValid(d2_);
+		let d1 = fromMaybe(?,d1_);
+		let d2 = fromMaybe(?,d2_);
+
+		let k1 = tpl_1(d1);
+		let k2 = tpl_1(d2);
+		if ( valid1 && valid2 ) begin
+			if ( k1 == k2 ) begin
+				let nv = tuple2(k1, tagged Invalid);
+				bypassQ.enq( tagged Valid nv );
+				reducer.enq(tpl_2(d1), tpl_2(d2));
+				inQ1.deq;
+				inQ2.deq;
+
+			end else if ( k1 < k2 ) begin
+				let nv = tuple2(k1, tagged Valid tpl_2(d1));
+				bypassQ.enq( tagged Valid nv );
+				inQ1.deq;
+			end else begin
+				let nv = tuple2(k2, tagged Valid tpl_2(d2));
+				bypassQ.enq( tagged Valid nv );
+				inQ2.deq;
+			end
+		end else if ( valid1 && !valid2 ) begin
+			let nv = tuple2(k1, tagged Valid tpl_2(d1));
+			bypassQ.enq( tagged Valid nv );
+			inQ1.deq;
+		end else if ( !valid1 && valid2 )begin
+			let nv = tuple2(k2, tagged Valid tpl_2(d2));
+			bypassQ.enq( tagged Valid nv );
+			inQ2.deq;
+		end else begin
+			inQ1.deq;
+			inQ2.deq;
+			bypassQ.enq( tagged Invalid );
+		end
+	endrule
+
+
+	rule recvred;
+		bypassQ.deq;
+		let v_ = bypassQ.first;
+		Bool valid = isValid(v_);
+		let v = fromMaybe(?,v_);
+
+		if ( !valid ) begin
+			outQ.enq(tagged Invalid);
+		end else begin
+			let mv = tpl_2(v);
+			let k = tpl_1(v);
+
+			let ov = fromMaybe(?,mv);
+			if ( !isValid(mv) ) begin
+				ov <- reducer.get;
+			end
+
+			let nv = tuple2(k,ov);
+			outQ.enq(tagged Valid nv);
+		end
+	endrule
+
+	method Action enq1(Maybe#(Tuple2#(Bit#(32), Bit#(32))) data);
+		inQ1.enq(data);
+	endmethod
+	method Action enq2(Maybe#(Tuple2#(Bit#(32), Bit#(32))) data);
+		inQ2.enq(data);
+	endmethod
+	method ActionValue#(Maybe#(Tuple2#(Bit#(32), Bit#(32)))) get;
+		outQ.deq;
+		return outQ.first;
+	endmethod
+endmodule
+
+module mkSingleReducer8 (StreamReducerIfc#(Bit#(32), Bit#(32)));
+	StreamReducerIfc#(Bit#(32),Bit#(32)) striped <- mkStripedReducer(8);
+	Vector#(4,MergeReduceIfc#(Bit#(32),Bit#(32))) mrr0 <- replicateM(mkMergeSortReducer(8));
+	Vector#(2,MergeReduceIfc#(Bit#(32),Bit#(32))) mrr1 <- replicateM(mkMergeSortReducer(8));
+	MergeReduceIfc#(Bit#(32),Bit#(32)) mrr2 <- mkMergeSortReducer(8);
+
+	
+	Reg#(Bit#(4)) stdest <- mkReg(0);
+	rule distributestripe;
+		let nv <- striped.get;
+		Bool valid = isValid(nv);
+		let inv = fromMaybe(?,nv);
+		if ( !valid ) begin
+			for ( Integer i = 0; i < 4; i=i+1 ) begin
+				mrr0[i].enq1(tagged Invalid);
+				mrr0[i].enq2(tagged Invalid);
+			end
+			stdest <= 0;
+		end else begin
+			if ( stdest[0] == 0 ) begin
+				mrr0[stdest/2].enq1(nv);
+			end else begin
+				mrr0[stdest/2].enq2(nv);
+			end
+			stdest <= (stdest + 1)%8;
+		end
+	endrule
+
+	for ( Integer i = 0; i < 4; i=i+1 ) begin
+		rule relay0;
+			let v <- mrr0[i].get;
+			if ( i%2 == 0 ) begin
+				mrr1[i/2].enq1(v);
+			end else begin
+				mrr1[i/2].enq2(v);
+			end
+		endrule
+	end
+	for ( Integer i = 0; i < 2; i=i+1 ) begin
+		rule relay1;
+			let v <- mrr1[i].get;
+			if ( i%2 == 0 ) begin
+				mrr2.enq1(v);
+			end else begin
+				mrr2.enq2(v);
+			end
+		endrule
+	end
+
+
+	method Action enq(Maybe#(Tuple2#(Bit#(32), Bit#(32))) data);
+		striped.enq(data);
+	endmethod
+	method ActionValue#(Maybe#(Tuple2#(Bit#(32),Bit#(32)))) get;
+		let nv <- mrr2.get;
+		return nv;
+	endmethod
+endmodule

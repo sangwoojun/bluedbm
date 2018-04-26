@@ -1,6 +1,7 @@
 import FIFO::*;
 import FIFOF::*;
 import Vector::*;
+import SpecialFIFOs::*;
 
 import BRAMFIFO::*;
 
@@ -866,9 +867,14 @@ endinterface
 module mkStripedReducer#(Integer stripecnt) (StreamReducerIfc#(Bit#(32),Bit#(32)));
 	//Integer stripecnt = 8;
 
+	Reg#(Bit#(32)) cycles <- mkReg(0);
+	rule inccycles;
+		cycles <= cycles + 1;
+	endrule
+
 	ReducerIfc#(Bit#(32)) reducer <- mkReducerFloatMult;
 	//ReducerIfc#(Bit#(32)) reducer <- mkReducerAdd;
-	FIFO#(Bit#(32)) reducedQ <- mkSizedFIFO(stripecnt*2);
+	FIFO#(Bit#(32)) reducedQ <- mkSizedFIFO(stripecnt);
 	rule relayReduced;
 		let v <- reducer.get;
 		reducedQ.enq(v);
@@ -879,17 +885,29 @@ module mkStripedReducer#(Integer stripecnt) (StreamReducerIfc#(Bit#(32),Bit#(32)
 	//Reg#(Bit#(8)) stripeQIn <- mkReg(0);
 	Reg#(Bit#(8)) stripeQOut <- mkReg(0);
 
-	FIFO#(Maybe#(Tuple2#(Bit#(32),Bit#(32)))) inQ <- mkSizedFIFO(stripecnt);
-	FIFO#(Maybe#(Tuple2#(Bit#(32),Bit#(32)))) outQ <- mkSizedFIFO(stripecnt);
+	FIFO#(Maybe#(Tuple2#(Bit#(32),Bit#(32)))) inQ <- mkFIFO;
+	FIFO#(Maybe#(Tuple2#(Bit#(32),Bit#(32)))) outQ <- mkFIFO;
 
 	Reg#(Bit#(8)) initCnt <- mkReg(0);
 
 	Reg#(Bool) flushing <- mkReg(False);
-	rule procin(!flushing);
+	rule primein(!flushing && initCnt < fromInteger(stripecnt));
+		let data = inQ.first;
+		inQ.deq;
+
+		let sd = fromMaybe(?, data);
+
+		initCnt <= initCnt + 1;
+		stripeQ.enq(tuple2(tpl_1(sd), tagged Valid tpl_2(sd)));
+		// FIXME: error if stream is shorter than latency
+	endrule
+
+	rule procin(!flushing && initCnt >= fromInteger(stripecnt));
 		inQ.deq;
 		let inv = fromMaybe(?,inQ.first);
 		Bool valid = isValid(inQ.first);
 
+		
 		if ( valid ) begin
 			stripeQ.deq;
 			let stv = stripeQ.first;
@@ -899,7 +917,6 @@ module mkStripedReducer#(Integer stripecnt) (StreamReducerIfc#(Bit#(32),Bit#(32)
 				reducedQ.deq;
 			end
 
-
 			if ( tpl_1(inv) == tpl_1(stv) ) begin
 				stripeQ.enq(tuple2(tpl_1(inv),tagged Invalid));
 				reducer.enq(tpl_2(inv), stvv);
@@ -907,10 +924,11 @@ module mkStripedReducer#(Integer stripecnt) (StreamReducerIfc#(Bit#(32),Bit#(32)
 				stripeQ.enq(tuple2(tpl_1(inv),tagged Valid tpl_2(inv)));
 				outQ.enq(tagged Valid tuple2(tpl_1(stv), stvv));
 			end
-
+		
 		end else begin
 			flushing <= True;
 		end
+
 	endrule
 
 	rule flush(flushing && stripeQOut < fromInteger(stripecnt)); 
@@ -927,14 +945,18 @@ module mkStripedReducer#(Integer stripecnt) (StreamReducerIfc#(Bit#(32),Bit#(32)
 	endrule
 
 	rule  flushdone(flushing && stripeQOut >= fromInteger(stripecnt));
+		outQ.enq(tagged Invalid);
 		flushing <= False;
 		stripeQOut <= 0;
+		$display("Flushdone!");
 	endrule
 
 
 	method Action enq(Maybe#(Tuple2#(Bit#(32), Bit#(32))) data) if ( !flushing );
 		//let data = tpl_1(data_);
 		//let last = tpl_2(data_);
+		
+		/*
 		let sd = fromMaybe(?, data);
 
 		if ( initCnt < fromInteger(stripecnt) ) begin
@@ -944,6 +966,10 @@ module mkStripedReducer#(Integer stripecnt) (StreamReducerIfc#(Bit#(32),Bit#(32)
 		end else begin
 			inQ.enq(data);
 		end
+		*/
+			
+		inQ.enq(data);
+		
 	endmethod
 	method ActionValue#(Maybe#(Tuple2#(Bit#(32),Bit#(32)))) get;
 		outQ.deq;

@@ -1,7 +1,9 @@
 import FIFO::*;
 import FIFOF::*;
 import Vector::*;
-import SpecialFIFOs::*;
+//import SpecialFIFOs::*;
+
+import MergeSorter::*;
 
 import BRAMFIFO::*;
 
@@ -13,7 +15,7 @@ interface ReducerIfc#(type valType);
 endinterface
 
 module mkReducerAdd(ReducerIfc#(valType))
-	provisos(Bits#(valType,valTypeSz), Arith#(valType), Add#(1,a__,valTypeSz));
+	provisos(Bits#(valType,valTypeSz), Arith#(valType), Add#(32,a__,valTypeSz));
 
 	FIFO#(valType) resQ <- mkFIFO;
 
@@ -26,26 +28,28 @@ module mkReducerAdd(ReducerIfc#(valType))
 	endmethod
 endmodule
 
-module mkReducerFloatMult(ReducerIfc#(Bit#(32)));
+module mkReducerFloatMult(ReducerIfc#(valType))
+	provisos(Bits#(valType,valTypeSz), Arith#(valType), Add#(32,a__,valTypeSz));
 
-	FIFO#(Bit#(32)) resQ <- mkSizedFIFO(8);
+	//FIFO#(Bit#(32)) resQ <- mkSizedFIFO(8);
+	FIFO#(Bit#(32)) resQ <- mkFIFO;
 	FpPairIfc fp_mult32 <- mkFpMult32;
 	rule getv;
 		fp_mult32.deq;
 		resQ.enq(fp_mult32.first);
 	endrule
 
-	method Action enq(Bit#(32) val1, Bit#(32) val2);
-		fp_mult32.enq(val1,val2);
+	method Action enq(valType val1, valType val2);
+		fp_mult32.enq(truncate(pack(val1)),truncate(pack(val2)));
 	endmethod
-	method ActionValue#(Bit#(32)) get;
+	method ActionValue#(valType) get;
 		resQ.deq;
-		return resQ.first;
+		return unpack(zeroExtend(resQ.first));
 	endmethod
 endmodule
 
 module mkReducerFirst(ReducerIfc#(valType))
-	provisos(Bits#(valType,valTypeSz), Arith#(valType), Add#(1,a__,valTypeSz));
+	provisos(Bits#(valType,valTypeSz), Arith#(valType), Add#(32,a__,valTypeSz));
 	FIFO#(valType) resQ <- mkFIFO;
 
 	method Action enq(valType val1, valType val2);
@@ -58,7 +62,7 @@ module mkReducerFirst(ReducerIfc#(valType))
 endmodule
 
 module mkReducerAddMC(ReducerIfc#(valType))
-	provisos(Bits#(valType,valTypeSz), Arith#(valType), Add#(1,a__,valTypeSz));
+	provisos(Bits#(valType,valTypeSz), Arith#(valType), Add#(32,a__,valTypeSz));
 	FIFO#(Tuple2#(valType,valType)) inQ <- mkFIFO;
 	FIFO#(valType) resQ <- mkFIFO;
 	Reg#(Bit#(16)) cyclesUp <- mkReg(0);
@@ -96,7 +100,7 @@ typedef enum {
 module mkCompareAndShift#(Integer depth) (CompareAndMergeIfc#(keyType,valType))
 	provisos(
 		Bits#(keyType,keyTypeSz), Eq#(keyType), Add#(1,a__,keyTypeSz),
-		Bits#(valType,valTypeSz), Arith#(valType), Add#(1,a__,valTypeSz)
+		Bits#(valType,valTypeSz), Arith#(valType), Add#(32,b__,valTypeSz)
 	);
 	
 	FIFO#(Maybe#(Tuple2#(keyType, valType))) bypassQ1 <- mkSizedFIFO(depth);
@@ -123,12 +127,16 @@ endmodule
 module mkCompareAndMerge#(ReducerType rtype, Integer depth) (CompareAndMergeIfc#(keyType,valType))
 	provisos(
 		Bits#(keyType,keyTypeSz), Eq#(keyType), Add#(1,a__,keyTypeSz),
-		Bits#(valType,valTypeSz), Arith#(valType), Add#(1,a__,valTypeSz)
+		Bits#(valType,valTypeSz), Arith#(valType), Add#(32,b__,valTypeSz)
 	);
 
 	ReducerIfc#(valType) reducer;
 	if ( rtype == ReducerAdd ) begin
 		reducer <- mkReducerAdd;
+	end else if ( rtype == ReducerFloatMult ) begin
+		reducer <- mkReducerFloatMult;
+	end else begin
+		reducer <- mkReducerFirst;
 	end
 
 	FIFO#(Maybe#(keyType)) fromReducerQ <- mkSizedFIFO(depth);
@@ -179,6 +187,52 @@ module mkCompareAndMerge#(ReducerType rtype, Integer depth) (CompareAndMergeIfc#
 	endmethod
 endmodule
 
+interface StreamReducerIntraIfc#(numeric type vcnt, type keyType, type valType);
+	method Action enq(Maybe#(Vector#(vcnt,Maybe#(Tuple2#(keyType,valType)))) data);
+	method ActionValue#(Maybe#(Vector#(vcnt, Maybe#(Tuple2#(keyType,valType))))) get;
+endinterface
+
+module mkReducerIntra2#(ReducerType rtype, Integer depth) (StreamReducerIntraIfc #(vcnt,keyType, valType))
+	provisos(
+		Bits#(keyType,keyTypeSz), Eq#(keyType), Add#(1,a__,keyTypeSz),
+		Bits#(valType,valTypeSz), Arith#(valType), Add#(32,b__,valTypeSz),
+		Bits#(Vector#(vcnt, Maybe#(Tuple2#(keyType,valType))), tuplemvSz)
+	);
+	
+	CompareAndMergeIfc#(keyType, valType) cam00 <- mkCompareAndMerge(rtype,depth);
+	FIFO#(Bool) lastQ0 <- mkSizedFIFO(depth);
+	FIFO#(Maybe#(Vector#(vcnt, Maybe#(Tuple2#(keyType,valType))))) outQ <- mkFIFO;
+
+	rule recvmerged;
+		Bool last = lastQ0.first;
+		lastQ0.deq;
+
+		if ( last ) begin
+			outQ.enq(tagged Invalid);
+		end else begin
+			let r0 <- cam00.get;
+			Vector#(vcnt, Maybe#(Tuple2#(keyType,valType))) ov = ?;
+			ov[0] = tpl_1(r0);
+			ov[1] = tpl_2(r0);
+			outQ.enq(tagged Valid ov);
+		end
+	endrule
+
+	method Action enq(Maybe#(Vector#(vcnt,Maybe#(Tuple2#(keyType,valType)))) data_);
+		if ( isValid(data_) ) begin
+			let data = fromMaybe(?,data_);
+			cam00.enq(data[0], data[1]);
+			lastQ0.enq(False);
+		end else begin
+			lastQ0.enq(True);
+		end
+	endmethod
+	method ActionValue#(Maybe#(Vector#(vcnt, Maybe#(Tuple2#(keyType,valType))))) get;
+		outQ.deq;
+		return outQ.first;
+	endmethod
+endmodule
+
 interface ReducerIntraIfc#(numeric type vcnt, type keyType, type valType);
 	method Action enq(Vector#(vcnt,Maybe#(Tuple2#(keyType,valType))) data, Bool last);
 	method ActionValue#(Tuple2#(Vector#(vcnt, Maybe#(Tuple2#(keyType,valType))),Bool)) get;
@@ -187,7 +241,7 @@ endinterface
 module mkReducerIntra4#(ReducerType rtype, Integer depth) (ReducerIntraIfc #(4,keyType, valType))
 	provisos(
 		Bits#(keyType,keyTypeSz), Eq#(keyType), Add#(1,a__,keyTypeSz),
-		Bits#(valType,valTypeSz), Arith#(valType), Add#(1,a__,valTypeSz)
+		Bits#(valType,valTypeSz), Arith#(valType), Add#(32,a__,valTypeSz)
 	);
 
 	CompareAndMergeIfc#(keyType, valType) cam00 <- mkCompareAndMerge(rtype,depth);
@@ -284,12 +338,29 @@ module mkReducerIntra#(ReducerType rtype, Integer depth) (ReducerIntraIfc#(vcnt,
 endmodule
 */
 
-interface VertexAlignerIfc#(numeric type vcnt, type inType);
+interface StreamingVectorAlignerIfc#(numeric type vcnt, type inType);
+	method Action enq(Maybe#(Vector#(vcnt, Maybe#(inType))) data);
+	method ActionValue#(Maybe#(Vector#(vcnt, Maybe#(inType)))) get;
+endinterface
+
+module mkStreamingVectorAligner (StreamingVectorAlignerIfc#(vcnt, inType))
+	provisos(Bits#(inType,inTypeSz), Add#(1,a__,inTypeSz));
+	Integer iVcnt = valueOf(vcnt);
+	
+	method Action enq(Maybe#(Vector#(vcnt, Maybe#(inType))) data);
+	endmethod
+	method ActionValue#(Maybe#(Vector#(vcnt, Maybe#(inType)))) get;
+		return ?;
+	endmethod
+endmodule
+
+
+interface VectorAlignerIfc#(numeric type vcnt, type inType);
 	method Action enq(Vector#(vcnt, Maybe#(inType)) data, Bool last);
 	method ActionValue#(Tuple2#(Vector#(vcnt, Maybe#(inType)),Bool)) get;
 endinterface
 
-module mkVertexAligner4 (VertexAlignerIfc#(4, inType))
+module mkVectorAligner4 (VectorAlignerIfc#(4, inType))
 	provisos(Bits#(inType,inTypeSz), Add#(1,a__,inTypeSz));
 	Integer ivcnt = 4;
 
@@ -612,7 +683,7 @@ module mkCheckUnique (CheckUniqueIfc#(vcnt, keyType, valType))
 		return tuple3(inQ[ivcnt-1].first,lastQ[ivcnt-1].first,nuniqueQ[ivcnt-1].first);
 	endmethod
 endmodule
-
+/*
 module mkReducerLoop4#(ReducerType rtype, Integer rdepth, Integer bcnt) (ReducerIntraIfc#(4, keyType, valType))
 	provisos(
 		Bits#(keyType,keyTypeSz), Eq#(keyType), Add#(1,a__,keyTypeSz),
@@ -626,7 +697,7 @@ module mkReducerLoop4#(ReducerType rtype, Integer rdepth, Integer bcnt) (Reducer
 	FIFO#(Tuple2#(Vector#(4, Maybe#(Tuple2#(keyType,valType))),Bool)) outQ <- mkFIFO;
 
 	ReducerIntraIfc#(4,keyType,valType) rin <- mkReducerIntra4(rtype, rdepth);
-	VertexAlignerIfc#(4, Tuple2#(keyType,valType)) aligner <- mkVertexAligner4;
+	VectorAlignerIfc#(4, Tuple2#(keyType,valType)) aligner <- mkVectorAligner4;
 	CheckUniqueIfc#(4,keyType,valType) checkunique <- mkCheckUnique;
 
 	Reg#(Bit#(16)) inqcntUp <- mkReg(0);
@@ -696,7 +767,7 @@ module mkReducerLoop4#(ReducerType rtype, Integer rdepth, Integer bcnt) (Reducer
 		return outQ.first;
 	endmethod
 endmodule
-
+*/
 
 /*
 interface ReducerInterIfc#(numeric type vcnt, type keyType, type valType);
@@ -763,7 +834,7 @@ endmodule
 
 
 
-
+/*
 interface ReducerUnitIfc#(type keyType, type valType);
 	method Action enq(keyType key, valType val, Bool last);
 	method Action getToken;
@@ -781,6 +852,8 @@ module mkReducerUnit#(ReducerType rtype, Bool lastunit, Integer index) (ReducerU
 	ReducerIfc#(valType) reducer;
 	if ( rtype == ReducerAdd ) begin
 		reducer <- mkReducerAddMC;
+	end else if ( rtype == ReducerFloatMult ) begin
+		reducer <- mkReducerFloatMult;
 	end else begin
 		reducer <- mkReducerFirst;
 	end
@@ -857,6 +930,7 @@ module mkReducerUnit#(ReducerType rtype, Bool lastunit, Integer index) (ReducerU
 	endmethod
 
 endmodule
+*/
 
 interface StreamReducerIfc#(type keyType, type valType);
 	method Action enq(Maybe#(Tuple2#(keyType, valType)) data);
@@ -980,8 +1054,8 @@ endmodule
 
 
 interface MergeReduceIfc#(type keyType, type valType);
-	method Action enq1(Maybe#(Tuple2#(Bit#(32), Bit#(32))) data);
-	method Action enq2(Maybe#(Tuple2#(Bit#(32), Bit#(32))) data);
+	method Action enq1(Maybe#(Tuple2#(keyType, valType)) data);
+	method Action enq2(Maybe#(Tuple2#(keyType, valType)) data);
 	method ActionValue#(Maybe#(Tuple2#(keyType, valType))) get;
 endinterface
 
@@ -1130,5 +1204,143 @@ module mkSingleReducer8 (StreamReducerIfc#(Bit#(32), Bit#(32)));
 	method ActionValue#(Maybe#(Tuple2#(Bit#(32),Bit#(32)))) get;
 		let nv <- mrr2.get;
 		return nv;
+	endmethod
+endmodule
+
+interface MultiReducerIfc#(numeric type vcnt, type keyType, type valType);
+	method Action enq1(Maybe#(Vector#(vcnt, Tuple2#(keyType, valType))) data);
+	method Action enq2(Maybe#(Vector#(vcnt, Tuple2#(keyType, valType))) data);
+	method ActionValue#(Maybe#(Vector#(vcnt, Tuple2#(keyType, valType)))) get;
+endinterface
+
+
+
+module mkMultiReducer#(Integer latency) (MultiReducerIfc#(vcnt, Bit#(32), Bit#(32)))
+	provisos(
+	Bits#(Vector#(vcnt,Tuple2#(Bit#(32),Bit#(32))), tuplevSz),
+	Bits#(Vector#(vcnt,Maybe#(Tuple2#(Bit#(32),Bit#(32)))), tuplemvSz)
+	);
+
+	StreamVectorMergerIfc#(vcnt, Bit#(32), Bit#(32)) merger <- mkStreamVectorMerger(False);
+	Integer iVcnt = valueOf(vcnt);
+
+	Reg#(Maybe#(Vector#(vcnt,Tuple2#(Bit#(32),Bit#(32))))) buffer <- mkReg(tagged Invalid);
+	Reg#(Bit#(2)) bufferType <- mkReg(0);
+	//Reg#(Maybe#(Vector#(vcnt,Tuple2#(Bit#(32),Bit#(32))))) buffer2 <- mkReg(tagged Invalid);
+	
+	ReducerIfc#(Bit#(32)) reducer <- mkReducerFloatMult;
+	FIFO#(Bit#(32)) reducedQ <- mkSizedFIFO(latency);
+	rule relayreduced;
+		let r <- reducer.get;
+		reducedQ.enq(r);
+	endrule
+
+	FIFO#(Maybe#(Vector#(vcnt,Tuple2#(Bit#(32),Bit#(32))))) inQ <- mkSizedFIFO(latency+1);
+	FIFO#(Bit#(2)) inTypeQ <- mkSizedFIFO(latency+1);
+
+	Reg#(Bool) flushing <- mkReg(False);
+	rule getmerger(!flushing);
+		let r <- merger.get;
+		buffer <= r;
+
+		if ( !isValid(r) ) begin
+			flushing <= True;
+		end
+
+		Bit#(2) inQType = bufferType;
+		Bit#(2) bufferTypeNext = 0;
+		if ( isValid(r) && isValid(buffer) ) begin
+			Vector#(vcnt,Tuple2#(Bit#(32),Bit#(32))) d1 = fromMaybe(?, r); // later
+			Vector#(vcnt,Tuple2#(Bit#(32),Bit#(32))) d2 = fromMaybe(?, buffer); // first
+			Tuple2#(Bit#(32),Bit#(32)) firstLast = d2[iVcnt-1];
+			Tuple2#(Bit#(32),Bit#(32)) laterFirst = d1[0];
+
+			if ( tpl_1(firstLast) == tpl_1(laterFirst) ) begin
+				reducer.enq(tpl_2(firstLast),tpl_2(laterFirst));
+				inQType = inQType | 2'b10;
+				bufferTypeNext = bufferTypeNext | 2'b01;
+			end
+		end
+		bufferType <= bufferTypeNext;
+		inQ.enq(buffer);
+		inTypeQ.enq(inQType);
+	endrule
+
+	Reg#(Bit#(1)) flushStep <- mkReg(0);
+	rule flushmgerger(flushing && flushStep == 0);
+		bufferType <= 0;
+		flushStep <= 1;
+		
+		inQ.enq(buffer);
+		inTypeQ.enq(bufferType);
+	endrule
+	rule flushmgerger2(flushing && flushStep == 1);
+		flushing <= False;
+		flushStep <= 0;
+
+		inQ.enq(tagged Invalid);
+		inTypeQ.enq(0);
+	endrule
+
+			
+	FIFO#(Maybe#(Vector#(vcnt, Maybe#(Tuple2#(Bit#(32),Bit#(32)))))) internalReduceQ <- mkFIFO;
+
+	rule relayReduced;
+		let inv_ = inQ.first;
+		inQ.deq;
+		let intype = inTypeQ.first;
+		inTypeQ.deq;
+
+		if ( isValid(inv_) ) begin
+
+			let inv = fromMaybe(?, inv_);
+
+			Vector#(vcnt, Maybe#(Tuple2#(Bit#(32),Bit#(32)))) iv;
+
+
+			if ( (intype | 2'b01) > 0 ) begin // ignore first
+				iv[0] = tagged Invalid;
+			end else begin
+				iv[0] = tagged Valid inv[0];
+			end
+			
+			if ( (intype | 2'b10) > 0 ) begin // reduced 'later'
+				reducedQ.deq;
+				iv[iVcnt-1] = tagged Valid tuple2(tpl_1(inv[iVcnt-1]),reducedQ.first);
+			end else begin
+				iv[iVcnt-1] = tagged Valid inv[iVcnt-1];
+			end
+
+			for ( Integer i = 1; i < iVcnt-1; i=i+1 ) begin
+				iv[i] = tagged Valid inv[i];
+			end
+			internalReduceQ.enq(tagged Valid iv);
+
+		end else begin
+			internalReduceQ.enq(tagged Invalid);
+		end
+	endrule
+	
+	StreamReducerIntraIfc#(vcnt,Bit#(32),Bit#(32)) sr;
+	if ( iVcnt == 2 ) begin
+		sr <- mkReducerIntra2(ReducerFloatMult, 8);
+	end
+
+	rule pushIntraReduce;
+		let inv_ = internalReduceQ.first;
+		internalReduceQ.deq;
+		sr.enq(inv_);
+	endrule
+
+	method Action enq1(Maybe#(Vector#(vcnt, Tuple2#(Bit#(32), Bit#(32)))) data);
+		merger.enq1(data);
+	endmethod
+	method Action enq2(Maybe#(Vector#(vcnt, Tuple2#(Bit#(32), Bit#(32)))) data);
+		merger.enq2(data);
+	endmethod
+	method ActionValue#(Maybe#(Vector#(vcnt, Tuple2#(Bit#(32), Bit#(32))))) get;
+		//FIXME should be aligned!
+		let r <- sr.get;
+		return ?;
 	endmethod
 endmodule

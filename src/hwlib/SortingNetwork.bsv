@@ -154,6 +154,95 @@ function Vector#(vcnt, itype) sortBitonic(Vector#(vcnt, itype) in, Bool descendi
 
 endfunction
 
+function Tuple2#(Tuple2#(keyType,valType),Tuple2#(keyType,valType)) compareAndSwapKV(Tuple2#(keyType,valType) a, Tuple2#(keyType,valType) b, Bool descending)
+	provisos(
+		Ord#(keyType), Eq#(keyType), Ord#(valType) 
+	);
+
+	keyType ak = tpl_1(a);
+	keyType bk = tpl_1(b);
+	if ( descending ) begin
+		if ( ak > bk ) begin
+			return tuple2(a,b);
+		end else begin
+			return tuple2(b,a);
+		end
+	end else begin
+		if ( bk > ak ) begin
+			return tuple2(a,b);
+		end else begin
+			return tuple2(b,a);
+		end
+	end
+endfunction
+
+function Vector#(vcnt, Tuple2#(keyType,valType)) sortBitonicKV_2(Vector#(vcnt, Tuple2#(keyType,valType)) in, Bool descending)
+	provisos(
+		Ord#(keyType), Eq#(keyType), Ord#(valType) 
+	);
+
+	Vector#(vcnt, Tuple2#(keyType,valType)) rvec;
+	let r01 = compareAndSwap(in[0], in[1], descending);
+	rvec[0] = tpl_1(r01);
+	rvec[1] = tpl_2(r01);
+
+	return rvec;
+endfunction
+
+function Vector#(vcnt, Tuple2#(keyType,valType)) sortBitonicKV(Vector#(vcnt, Tuple2#(keyType,valType)) in, Bool descending)
+	provisos(
+		Ord#(keyType), Eq#(keyType), Ord#(valType) 
+	);
+/*
+	if ( valueOf(vcnt) == 8 ) begin
+		return sortBitonic8(in, descending);
+	end else if ( valueOf(vcnt) == 4 ) begin
+		return sortBitonic4(in, descending);
+	end else 
+	*/
+	if ( valueOf(vcnt) == 2 ) begin
+		return sortBitonicKV_2(in, descending);
+	end else begin
+		// UNCAUGHT!!
+		return in;
+	end
+
+endfunction
+
+function Tuple2#(Vector#(vcnt, Tuple2#(keyType,valType)), Vector#(vcnt, Tuple2#(keyType,valType))) halfCleanKV(Vector#(vcnt, Tuple2#(keyType,valType)) in1, Vector#(vcnt, Tuple2#(keyType,valType)) in2, Bool descending)
+	provisos(
+		Ord#(keyType)
+	);
+	Vector#(vcnt, Tuple2#(keyType,valType)) top;
+	Vector#(vcnt, Tuple2#(keyType,valType)) bot;
+
+	for ( Integer i = 0; i < valueOf(vcnt); i=i+1 ) begin
+		let at = in1[i];
+		let bt = in2[valueOf(vcnt)-i-1];
+		let a = tpl_1(at);
+		let b = tpl_1(bt);
+		if ( descending ) begin
+			if ( a >= b ) begin
+				top[i] = at;
+				bot[i] = bt;
+			end else begin
+				top[i] = bt;
+				bot[i] = at;
+			end
+		end else begin
+			if ( b >= a ) begin
+				top[i] = at;
+				bot[i] = bt;
+			end else begin
+				top[i] = bt;
+				bot[i] = at;
+			end
+		end
+	end
+
+	return tuple2(top,bot);
+endfunction
+
 function Tuple2#(Vector#(vcnt, itype), Vector#(vcnt, itype)) halfClean(Vector#(vcnt, itype) in1, Vector#(vcnt, itype) in2, Bool descending)
 	provisos(
 		Ord#(itype)

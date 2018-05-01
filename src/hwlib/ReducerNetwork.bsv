@@ -4,6 +4,7 @@ import Vector::*;
 //import SpecialFIFOs::*;
 
 import MergeSorter::*;
+import SortingNetwork::*;
 
 import BRAMFIFO::*;
 
@@ -222,6 +223,8 @@ module mkReducerIntra2#(ReducerType rtype, Integer depth) (StreamReducerIntraIfc
 		if ( isValid(data_) ) begin
 			let data = fromMaybe(?,data_);
 			cam00.enq(data[0], data[1]);
+			//$display( "~~ %d %d", tpl_1(fromMaybe(?,data[0])), tpl_1(fromMaybe(?,data[1])));
+			//$display( "~~ %s %s", isValid(data[0])?"Y":"N", isValid(data[1])?"Y":"N");
 			lastQ0.enq(False);
 		end else begin
 			lastQ0.enq(True);
@@ -229,6 +232,9 @@ module mkReducerIntra2#(ReducerType rtype, Integer depth) (StreamReducerIntraIfc
 	endmethod
 	method ActionValue#(Maybe#(Vector#(vcnt, Maybe#(Tuple2#(keyType,valType))))) get;
 		outQ.deq;
+		let o_ = outQ.first;
+		let o = fromMaybe(?,o_);
+		//$display( "~~ %s %s", isValid(o[0])?"Y":"N", isValid(o[1])?"Y":"N");
 		return outQ.first;
 	endmethod
 endmodule
@@ -338,19 +344,161 @@ module mkReducerIntra#(ReducerType rtype, Integer depth) (ReducerIntraIfc#(vcnt,
 endmodule
 */
 
-interface StreamingVectorAlignerIfc#(numeric type vcnt, type inType);
+interface StreamVectorAlignerIfc#(numeric type vcnt, type inType);
 	method Action enq(Maybe#(Vector#(vcnt, Maybe#(inType))) data);
 	method ActionValue#(Maybe#(Vector#(vcnt, Maybe#(inType)))) get;
 endinterface
 
-module mkStreamingVectorAligner (StreamingVectorAlignerIfc#(vcnt, inType))
-	provisos(Bits#(inType,inTypeSz), Add#(1,a__,inTypeSz));
+module mkStreamVectorAligner (StreamVectorAlignerIfc#(vcnt, inType))
+	provisos(Bits#(inType,inTypeSz), Add#(1,a__,inTypeSz), Add#(2,b__,vcnt),
+	Bits#(Vector#(vcnt, Maybe#(inType)),vectorinSz),
+	Log#(vcnt,vlogc),Add#(vlogc,1,vlog)
+	);
 	Integer iVcnt = valueOf(vcnt);
 	
+	Reg#(Bit#(32)) cycles <- mkReg(0);
+	rule inccycles;
+		cycles <= cycles + 1;
+	endrule
+
+	FIFO#(Maybe#(Vector#(vcnt, Maybe#(inType)))) inQ <- mkFIFO;
+	FIFO#(Maybe#(Vector#(vcnt, Maybe#(inType)))) in2Q <- mkFIFO;
+	FIFO#(Bit#(vlog)) cntQ <- mkFIFO;
+	rule countvalids;
+		let d_ = inQ.first;
+		inQ.deq;
+		if ( isValid(d_) ) begin
+			let d = fromMaybe(?, d_);
+			Integer cnt = 1;
+			for ( Integer i = 1; i < iVcnt; i=i+1 ) begin
+				if ( isValid(d[i]) ) cnt = cnt + 1;
+			end
+
+			cntQ.enq(fromInteger(cnt));
+		end else begin
+			cntQ.enq(0);
+		end
+		in2Q.enq(d_);
+	endrule
+	
+	FIFO#(Bool) validQ <- mkSizedFIFO(iVcnt+2);
+	Reg#(Bit#(vlog)) curOff <- mkReg(0);
+
+	Vector#(vcnt, FIFO#(Bit#(vlog))) vShiftRemainQ <- replicateM(mkFIFO);
+	Vector#(vcnt, FIFO#(Vector#(vcnt, Maybe#(inType)))) vShiftQ <- replicateM(mkFIFO);
+
+	rule startShift;
+		let d_ = in2Q.first;
+		in2Q.deq;
+		let cnt = cntQ.first;
+		cntQ.deq;
+		
+		//$display( "startShift %d cycles %s -- %d",cycles, isValid(d_)?"valid":"not valid", cnt );
+
+		if ( isValid(d_) ) begin
+			let d = fromMaybe(?,d_);
+
+			//$display( "startShift %d", cycles);
+
+			vShiftQ[0].enq(d);
+			vShiftRemainQ[0].enq(curOff);
+			Bit#(TAdd#(vlog,1)) nextoff = zeroExtend(curOff) + zeroExtend(cnt);
+			if ( nextoff >= fromInteger(iVcnt) ) nextoff = nextoff - fromInteger(iVcnt);
+			curOff <= truncate(nextoff);
+			validQ.enq(True);
+		end else begin
+			curOff <= 0;
+			validQ.enq(False);
+		end
+	endrule
+
+	for (Integer i = 0; i < iVcnt-1; i=i+1) begin
+		rule shiftData;
+			vShiftRemainQ[i].deq;
+			vShiftQ[i].deq;
+			let remain = vShiftRemainQ[i].first;
+			let data = vShiftQ[i].first;
+
+
+			if ( remain > 0 ) begin
+				Vector#(vcnt, Maybe#(inType)) next;
+				next[0] = tagged Invalid;
+				for (Integer j = 1; j < iVcnt; j=j+1 ) begin
+					next[j] = data[j-1];
+				end
+				
+				vShiftRemainQ[i+1].enq(remain-1);
+				vShiftQ[i+1].enq(next);
+			end else begin
+				vShiftRemainQ[i+1].enq(0);
+				vShiftQ[i+1].enq(data);
+			end
+		endrule
+	end
+
+	Reg#(Bool) flushNext <- mkReg(False);
+	Vector#(vcnt, FIFOF#(inType)) packQ <- replicateM(mkFIFOF);
+
+	rule packaligned(!flushNext);
+		vShiftRemainQ[iVcnt-1].deq;
+		vShiftQ[iVcnt-1].deq;
+		let data = vShiftQ[iVcnt-1].first;
+		Bool valid = validQ.first;
+		validQ.deq;
+		
+		//$display( "packaligned %d cycles %s",cycles, valid?"valid":"not valid" );
+
+
+		if ( !valid ) flushNext <= True;
+		for (Integer i = 0; i < iVcnt; i=i+1) begin
+			if ( isValid(data[i]) ) begin
+				let d = fromMaybe(?, data[i]);
+				packQ[i].enq(d);
+			end
+		end
+	
+
+	endrule
+
+	FIFO#(Maybe#(Vector#(vcnt, Maybe#(inType)))) outQ <- mkFIFO;
+
+	rule extractpacked(!flushNext);
+		Vector#(vcnt,Maybe#(inType)) ov;
+		for (Integer i = 0; i < iVcnt; i=i+1) begin
+			packQ[i].deq;
+			ov[i] = tagged Valid packQ[i].first;
+		end
+		outQ.enq(tagged Valid ov);
+	endrule
+	Reg#(Bit#(1)) flushstep <- mkReg(0);
+	rule flushpacked(flushNext && flushstep == 0);
+
+		Vector#(vcnt,Maybe#(inType)) ov;
+		for (Integer i = 0; i < iVcnt; i=i+1) begin
+			if ( packQ[i].notEmpty ) begin
+				packQ[i].deq;
+				ov[i] = tagged Valid packQ[i].first;
+			end else begin
+				ov[i] = tagged Invalid;
+			end
+		end
+		outQ.enq(tagged Valid ov);
+
+		flushstep <= 1;
+	endrule
+	rule flushpacked2(flushNext && flushstep == 1);
+		outQ.enq(tagged Invalid);
+		flushNext <= False;
+		flushstep <= 0;
+	endrule
+
+	
 	method Action enq(Maybe#(Vector#(vcnt, Maybe#(inType))) data);
+		inQ.enq(data);
 	endmethod
 	method ActionValue#(Maybe#(Vector#(vcnt, Maybe#(inType)))) get;
-		return ?;
+		outQ.deq;
+		return outQ.first;
 	endmethod
 endmodule
 
@@ -383,7 +531,6 @@ module mkVectorAligner4 (VectorAlignerIfc#(4, inType))
 
 		shiftCntQ.enq(nextOff);
 		
-		$display( "startshift %d %d %s", nextOff, cnt, islast?"last":"not" );
 
 		if ( islast ) begin
 			nextOff <= 0;
@@ -1210,13 +1357,14 @@ endmodule
 interface MultiReducerIfc#(numeric type vcnt, type keyType, type valType);
 	method Action enq1(Maybe#(Vector#(vcnt, Tuple2#(keyType, valType))) data);
 	method Action enq2(Maybe#(Vector#(vcnt, Tuple2#(keyType, valType))) data);
-	method ActionValue#(Maybe#(Vector#(vcnt, Tuple2#(keyType, valType)))) get;
+	method ActionValue#(Maybe#(Vector#(vcnt, Maybe#(Tuple2#(keyType, valType))))) get;
 endinterface
 
 
 
 module mkMultiReducer#(Integer latency) (MultiReducerIfc#(vcnt, Bit#(32), Bit#(32)))
 	provisos(
+	Add#(2, a__, vcnt),
 	Bits#(Vector#(vcnt,Tuple2#(Bit#(32),Bit#(32))), tuplevSz),
 	Bits#(Vector#(vcnt,Maybe#(Tuple2#(Bit#(32),Bit#(32)))), tuplemvSz)
 	);
@@ -1238,6 +1386,7 @@ module mkMultiReducer#(Integer latency) (MultiReducerIfc#(vcnt, Bit#(32), Bit#(3
 	FIFO#(Maybe#(Vector#(vcnt,Tuple2#(Bit#(32),Bit#(32))))) inQ <- mkSizedFIFO(latency+1);
 	FIFO#(Bit#(2)) inTypeQ <- mkSizedFIFO(latency+1);
 
+
 	Reg#(Bool) flushing <- mkReg(False);
 	rule getmerger(!flushing);
 		let r <- merger.get;
@@ -1250,20 +1399,28 @@ module mkMultiReducer#(Integer latency) (MultiReducerIfc#(vcnt, Bit#(32), Bit#(3
 		Bit#(2) inQType = bufferType;
 		Bit#(2) bufferTypeNext = 0;
 		if ( isValid(r) && isValid(buffer) ) begin
-			Vector#(vcnt,Tuple2#(Bit#(32),Bit#(32))) d1 = fromMaybe(?, r); // later
-			Vector#(vcnt,Tuple2#(Bit#(32),Bit#(32))) d2 = fromMaybe(?, buffer); // first
+			Vector#(vcnt,Tuple2#(Bit#(32),Bit#(32))) d1_ = fromMaybe(?, r); // later
+			let d1 = sortBitonicKV(d1_, False); //FIXME descending = false
+			Vector#(vcnt,Tuple2#(Bit#(32),Bit#(32))) d2_ = fromMaybe(?, buffer); // first
+			let d2 = sortBitonicKV(d2_, False); //FIXME descending = false
+
 			Tuple2#(Bit#(32),Bit#(32)) firstLast = d2[iVcnt-1];
 			Tuple2#(Bit#(32),Bit#(32)) laterFirst = d1[0];
 
 			if ( tpl_1(firstLast) == tpl_1(laterFirst) ) begin
 				reducer.enq(tpl_2(firstLast),tpl_2(laterFirst));
-				inQType = inQType | 2'b10;
-				bufferTypeNext = bufferTypeNext | 2'b01;
+				inQType = (inQType | 2'b10);
+				bufferTypeNext = (bufferTypeNext | 2'b01);
+				//$display( "%d matched %d", tpl_1(firstLast), tpl_2(laterFirst) );
 			end
+
+			bufferType <= bufferTypeNext;
+			//inQ.enq(buffer);
+			inQ.enq(tagged Valid d2);
+			inTypeQ.enq(inQType);
+			//$display( "inQType %d", inQType );
+			//$display( "== %d %d", tpl_1(d2[0]), tpl_1(d2[1]) );
 		end
-		bufferType <= bufferTypeNext;
-		inQ.enq(buffer);
-		inTypeQ.enq(inQType);
 	endrule
 
 	Reg#(Bit#(1)) flushStep <- mkReg(0);
@@ -1285,11 +1442,18 @@ module mkMultiReducer#(Integer latency) (MultiReducerIfc#(vcnt, Bit#(32), Bit#(3
 			
 	FIFO#(Maybe#(Vector#(vcnt, Maybe#(Tuple2#(Bit#(32),Bit#(32)))))) internalReduceQ <- mkFIFO;
 
+	Reg#(Bit#(32)) cycles <- mkReg(0);
+	rule incycles;
+		cycles <= cycles + 1;
+	endrule
 	rule relayReduced;
 		let inv_ = inQ.first;
 		inQ.deq;
 		let intype = inTypeQ.first;
 		inTypeQ.deq;
+		
+		
+		
 
 		if ( isValid(inv_) ) begin
 
@@ -1298,13 +1462,14 @@ module mkMultiReducer#(Integer latency) (MultiReducerIfc#(vcnt, Bit#(32), Bit#(3
 			Vector#(vcnt, Maybe#(Tuple2#(Bit#(32),Bit#(32)))) iv;
 
 
-			if ( (intype | 2'b01) > 0 ) begin // ignore first
+			if ( (intype & 2'b01) > 0 ) begin // ignore first
 				iv[0] = tagged Invalid;
+				//$display( "ignoring first %d %d", intype, (intype|2'b01));
 			end else begin
 				iv[0] = tagged Valid inv[0];
 			end
 			
-			if ( (intype | 2'b10) > 0 ) begin // reduced 'later'
+			if ( (intype & 2'b10) > 0 ) begin // reduced 'later'
 				reducedQ.deq;
 				iv[iVcnt-1] = tagged Valid tuple2(tpl_1(inv[iVcnt-1]),reducedQ.first);
 			end else begin
@@ -1319,6 +1484,7 @@ module mkMultiReducer#(Integer latency) (MultiReducerIfc#(vcnt, Bit#(32), Bit#(3
 		end else begin
 			internalReduceQ.enq(tagged Invalid);
 		end
+	
 	endrule
 	
 	StreamReducerIntraIfc#(vcnt,Bit#(32),Bit#(32)) sr;
@@ -1330,6 +1496,13 @@ module mkMultiReducer#(Integer latency) (MultiReducerIfc#(vcnt, Bit#(32), Bit#(3
 		let inv_ = internalReduceQ.first;
 		internalReduceQ.deq;
 		sr.enq(inv_);
+
+		//$display("intrareduce %d %s", cycles, isValid(inv_)?"valid":"not valid");
+	endrule
+	StreamVectorAlignerIfc#(vcnt, Tuple2#(Bit#(32),Bit#(32))) va <- mkStreamVectorAligner;
+	rule pushAligner;
+		let r <- sr.get;
+		va.enq(r);
 	endrule
 
 	method Action enq1(Maybe#(Vector#(vcnt, Tuple2#(Bit#(32), Bit#(32)))) data);
@@ -1338,9 +1511,9 @@ module mkMultiReducer#(Integer latency) (MultiReducerIfc#(vcnt, Bit#(32), Bit#(3
 	method Action enq2(Maybe#(Vector#(vcnt, Tuple2#(Bit#(32), Bit#(32)))) data);
 		merger.enq2(data);
 	endmethod
-	method ActionValue#(Maybe#(Vector#(vcnt, Tuple2#(Bit#(32), Bit#(32))))) get;
-		//FIXME should be aligned!
-		let r <- sr.get;
-		return ?;
+	method ActionValue#(Maybe#(Vector#(vcnt, Maybe#(Tuple2#(Bit#(32), Bit#(32)))))) get;
+		let r <- va.get;
+		//$display( "Aligner get %d", cycles );
+		return r;
 	endmethod
 endmodule

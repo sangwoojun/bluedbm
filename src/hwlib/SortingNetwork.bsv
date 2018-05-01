@@ -182,7 +182,7 @@ function Vector#(vcnt, Tuple2#(keyType,valType)) sortBitonicKV_2(Vector#(vcnt, T
 	);
 
 	Vector#(vcnt, Tuple2#(keyType,valType)) rvec;
-	let r01 = compareAndSwap(in[0], in[1], descending);
+	let r01 = compareAndSwapKV(in[0], in[1], descending);
 	rvec[0] = tpl_1(r01);
 	rvec[1] = tpl_2(r01);
 

@@ -32,13 +32,13 @@ endinterface
 
 (* synthesize *)
 module mkFlashCtrlVirtex2#(
-	Clock gtx_clk_p, Clock gtx_clk_n, Clock clk250) (FlashCtrlVirtexIfc);
+	Clock gtx_clk_p, Clock gtx_clk_n, Clock clk200) (FlashCtrlVirtexIfc);
 
 	//GTX-GTP Aurora
 	//MakeResetIfc rst250 <- mkReset(8, True, clk250);
 	//ClockDividerIfc auroraIntra1ClockDiv5 <- mkClockDivider(5, clocked_by clk250, reset_by rst250.new_rst);
-	ClockDiv5Ifc auroraIntra2ClockDiv5 <- mkClockDiv5(clk250);
-	Clock clk50 = auroraIntra2ClockDiv5.slowClock;
+	ClockDiv4Ifc auroraIntra2ClockDiv <- mkClockDiv4(clk200);
+	Clock clk50 = auroraIntra2ClockDiv.slowClock;
 	AuroraIfc auroraIntra <- mkAuroraIntra2(gtx_clk_p, gtx_clk_n, clk50);
 
 	FIFO#(FlashCmd) flashCmdQ <- mkSizedFIFO(16); //should not have back pressure

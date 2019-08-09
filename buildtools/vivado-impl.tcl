@@ -25,14 +25,9 @@ set_property part $partname [current_project]
 
 read_xdc $builddir/top.xdc
 
-############# Float Stuff
-read_ip $floatdir/core/fp_mult32/fp_mult32.xci
-read_ip $floatdir/core/fp_add32/fp_add32.xci
-read_ip $floatdir/core/fp_sub32/fp_sub32.xci
-############# end Float Stuff
 
 ############# Pcie Stuff
-read_ip $pciedir/core/pcie_7x_0/pcie_7x_0.xci
+read_ip $pciedir/core/vc707/pcie_7x_0/pcie_7x_0.xci
 read_verilog [ glob $pciedir/src/*.v ]
 read_xdc $pciedir/src/xilinx_pcie_7x_ep_x8g2_VC707.xdc
 ############## end Pcie Stuff
@@ -45,9 +40,9 @@ read_xdc $flashdir/xilinx/aurora_8b10b_exdes.xdc
 ############# end Flash Stuff
 
 ############# DDR3 Stuff
-read_ip $ddr3dir/core/ddr3_v2_0/ddr3_v2_0.xci
-read_verilog [ glob $ddr3dir/*.v ]
-read_xdc $ddr3dir/ddr3_v2_0.xdc
+#read_ip $ddr3dir/core/ddr3_v2_0/ddr3_v2_0.xci
+#read_verilog [ glob $ddr3dir/*.v ]
+#read_xdc $ddr3dir/ddr3_v2_0.xdc
 ############# end Flash Stuff
 
 #generate_target {Synthesis} [get_files ../../xilinx/vio_7series/vio_7series.xci]

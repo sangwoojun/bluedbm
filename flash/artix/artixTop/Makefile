@@ -5,31 +5,31 @@ BUILD_DIR = build
 V_DIR = $(BUILD_DIR)/verilog
 B_DIR = $(BUILD_DIR)/obj
 
-COMMON_BSV_PATH	= ../src/common
+COMMON_BSV_PATH	= ../src/common:../../bluespecpcie/src
 
 #Synthesizable hardware controller + flash chips
 TOP_HW 				= mkTopArtix
 TOP_HW_PATH			= ../src/hw_artix/TopArtix.bsv
-TOP_HW_BSV_PATH 	= $(COMMON_BSV_PATH):../src/hw_artix:../src/hw_artix/ECC:../../src/lib:../xilinx/aurora_8b10b
-TOP_HW_XDC			= ../../xilinx/constraints/artix_hw_8buses.xdc ../../xilinx/aurora_8b10b/aurora_8b10b_exdes.xdc
+TOP_HW_BSV_PATH 	= $(COMMON_BSV_PATH):../src/hw_artix:../src/hw_artix/ECC:../../src/hwlib:../xilinx/
+TOP_HW_XDC			= ../../xilinx/constraints/artix_hw_8buses.xdc ../../xilinx/aurora_8b10b_exdes.xdc
 
 #Synthesizable controller model using RegFile
 TOP_MODEL 			= mkTopArtixModel
 TOP_MODEL_PATH 	= ../src/model_artix/TopArtixModel.bsv
-TOP_MODEL_BSV_PATH= $(COMMON_BSV_PATH):../src/model_artix:../../src/lib:../xilinx/aurora_8b10b
-TOP_MODEL_XDC		= ../../xilinx/constraints/artix_model.xdc ../../xilinx/aurora_8b10b/aurora_8b10b_exdes.xdc
+TOP_MODEL_BSV_PATH= $(COMMON_BSV_PATH):../src/model_artix:../../src/hwlib:../xilinx/
+TOP_MODEL_XDC		= ../../xilinx/constraints/artix_model.xdc ../../xilinx/aurora_8b10b_exdes.xdc
 
 #Synthesizable testbench + hardware controller + flash chips
 TOP_HW_TB			= mkTopTB
 TOP_HW_TB_PATH		= ../src/hw_artix/tb/TopTB.bsv
-TOP_HW_TB_BSV_PATH= $(COMMON_BSV_PATH):../src/hw_artix:../src/hw_artix/ECC:../../src/lib
+TOP_HW_TB_BSV_PATH= $(COMMON_BSV_PATH):../src/hw_artix:../src/hw_artix/ECC:../../src/hwlib
 TOP_HW_TB_XDC			= ../../xilinx/constraints/artix_hw_8buses.xdc
 
 #Verilog simulation testbench + hardware controller + nand verilog model
 #SIM_FLAGS			= -D NAND_SIM
 TOP_SIM_TB			= mkTopTB
 TOP_SIM_TB_PATH	= ../src/hw_artix/tb/TopTB.bsv
-TOP_SIM_TB_BSV_PATH = $(COMMON_BSV_PATH):../src/hw_artix:../src/hw_artix/ECC:../../src/lib
+TOP_SIM_TB_BSV_PATH = $(COMMON_BSV_PATH):../src/hw_artix:../src/hw_artix/ECC:../../src/hwlib
 
 
 default: clean compile_hw

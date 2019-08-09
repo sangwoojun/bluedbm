@@ -27,13 +27,13 @@ endinterface
 */
 
 // To make timing constraints easier
-interface ClockDiv5Ifc;
+interface ClockDiv4Ifc;
 interface Clock slowClock;
 endinterface
 (*synthesize*)
-module mkClockDiv5#(Clock fastClock) (ClockDiv5Ifc);
+module mkClockDiv4#(Clock fastClock) (ClockDiv4Ifc);
 	MakeResetIfc fastReset <- mkReset(8, True, fastClock);
-	ClockDividerIfc clockdiv5 <- mkClockDivider(5, clocked_by fastClock, reset_by fastReset.new_rst);
+	ClockDividerIfc clockdiv5 <- mkClockDivider(4, clocked_by fastClock, reset_by fastReset.new_rst);
 
 	interface slowClock = clockdiv5.slowClock;
 endmodule
@@ -78,13 +78,13 @@ endmodule
 
 (* synthesize *)
 module mkFlashCtrlVirtex1#(
-	Clock gtx_clk_p, Clock gtx_clk_n, Clock clk250) (FlashCtrlVirtexIfc);
+	Clock gtx_clk_p, Clock gtx_clk_n, Clock clk200) (FlashCtrlVirtexIfc);
 
 	//GTX-GTP Aurora
 	//MakeResetIfc rst250 <- mkReset(8, True, clk250);
 	//ClockDividerIfc auroraIntra2ClockDiv5 <- mkClockDivider(5, clocked_by clk250, reset_by rst250.new_rst);
-	ClockDiv5Ifc auroraIntra1ClockDiv5 <- mkClockDiv5(clk250);
-	Clock clk50 = auroraIntra1ClockDiv5.slowClock;
+	ClockDiv4Ifc auroraIntra1ClockDiv <- mkClockDiv4(clk200);
+	Clock clk50 = auroraIntra1ClockDiv.slowClock;
 	AuroraIfc auroraIntra <- mkAuroraIntra1(gtx_clk_p, gtx_clk_n, clk50);
 
 	FIFO#(FlashCmd) flashCmdQ <- mkSizedFIFO(16); //should not have back pressure

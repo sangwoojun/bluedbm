@@ -182,3 +182,7 @@ set_clock_groups -asynchronous -group {clk_250mhz} -group {init_clk_1_i}
 
 set_clock_groups -asynchronous -group {clk_125mhz} -group {init_clk_2_i}
 set_clock_groups -asynchronous -group {clk_250mhz} -group {init_clk_2_i}
+
+
+set_clock_groups -asynchronous -group {sys_clk_200} -group {aurora1_user_clk_i}
+set_clock_groups -asynchronous -group {sys_clk_200} -group {aurora2_user_clk_i}

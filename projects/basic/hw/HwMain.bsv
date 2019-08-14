@@ -3,16 +3,16 @@ import FIFOF::*;
 import Clocks::*;
 import Vector::*;
 
+import Serializer::*;
+
 import BRAM::*;
 import BRAMFIFO::*;
 
 import PcieCtrl::*;
 import DRAMController::*;
 
-//import AuroraImportFmc1::*;
 import ControllerTypes::*;
 import FlashCtrlVirtex1::*;
-//import FlashCtrlModel::*;
 
 interface HwMainIfc;
 endinterface
@@ -26,102 +26,207 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 	Clock pcieclk = pcie.user_clk;
 	Reset pcierst = pcie.user_rst;
 
-	//DMASplitterIfc#(4) dma <- mkDMASplitter(pcie);
+	BRAM2Port#(Bit#(11), Bit#(32)) pageBuffer <- mkBRAM2Server(defaultValue); // 8KB
 
-	Reg#(Bit#(32)) wordReadLeft <- mkReg(0, clocked_by pcieclk, reset_by pcierst);
-	Reg#(Bit#(32)) wordWriteLeft <- mkReg(0, clocked_by pcieclk, reset_by pcierst);
-	Reg#(Bit#(32)) wordWriteReq <- mkReg(0, clocked_by pcieclk, reset_by pcierst);
-	Reg#(Bit#(32)) dramWriteLeft <- mkReg(0, clocked_by pcieclk, reset_by pcierst);
-	Reg#(Bit#(32)) dramReadLeft <- mkReg(0, clocked_by pcieclk, reset_by pcierst);
-	Reg#(Bit#(32)) dramWriteStartCycle <- mkReg(0, clocked_by pcieclk, reset_by pcierst);
-	Reg#(Bit#(32)) dramWriteEndCycle <- mkReg(0, clocked_by pcieclk, reset_by pcierst);
+	FIFO#(Tuple2#(Bit#(1),FlashCmd)) flashCmdQ <- mkFIFO;
 
-	Reg#(Bit#(32)) cycles <- mkReg(0, clocked_by pcieclk, reset_by pcierst);
-	rule incCycle;
-		cycles <= cycles + 1;
+
+	rule sendFlashCmd;
+		flashCmdQ.deq;
+		let fcmd_ = flashCmdQ.first;
+		
+		flashes[tpl_1(fcmd_)].sendCmd(tpl_2(fcmd_));
+	endrule
+
+	Reg#(Bit#(1)) writeDst <- mkReg(0);
+	Reg#(Bit#(16)) writeWordLeft <- mkReg(0);
+	FIFO#(Bit#(1)) targetBoardQ <- mkSizedFIFO(8);
+	rule writeReq1;
+		TagT tag <- flashes[0].writeDataReq();
+		writeDst <= 0;
+		writeWordLeft <= 512*4; //32 bits
+		targetBoardQ.enq(0);
+	endrule
+	rule writeReq2;
+		TagT tag <- flashes[1].writeDataReq();
+		writeDst <= 1;
+		writeWordLeft <= 512*4; //32 bits
+		targetBoardQ.enq(1);
+	endrule
+	rule reqBufferRead (writeWordLeft > 0);
+		writeWordLeft <= writeWordLeft - 1;
+
+		if ( writeWordLeft > 8 ) begin
+			pageBuffer.portA.request.put(
+				BRAMRequest{
+				write:False, responseOnWrite:False,
+				address:truncate(fromInteger(512*4)-writeWordLeft),
+				datain:?
+				}
+			);
+		end
+	endrule
+	DeSerializerIfc#(32, 4) des <- mkDeSerializer;
+	rule relayBRAMRead;
+		let v <- pageBuffer.portA.response.get();
+		des.put(v);
+	endrule
+	Reg#(Bit#(16)) flashWriteOff <- mkReg(0);
+
+	Reg#(Bit#(1)) curWriteTarget <- mkReg(0);
+	rule relayFlashWrite;
+		if ( flashWriteOff + 1 < 512 ) begin
+			flashWriteOff <= flashWriteOff + 1;
+
+			let wd <- des.get;
+
+			Bit#(1) cwt = curWriteTarget;
+			if ( flashWriteOff == 0 ) begin
+				let t = targetBoardQ.first;
+				targetBoardQ.deq;
+				curWriteTarget <= t;
+				cwt = t;
+			end
+			flashes[cwt].writeWord(tuple2(wd,0));
+
+		end else if (flashWriteOff + 1 <= 514 ) begin
+			if (flashWriteOff + 1 >= 514 ) flashWriteOff <= 0;
+			else flashWriteOff <= flashWriteOff + 1;
+
+
+			flashes[curWriteTarget].writeWord(tuple2(0,0));
+		end
+	endrule
+
+	SerializerIfc#(128,4) ser <- mkSerializer;
+	rule readFlashData1;
+		let taggedRdata <- flashes[0].readWord();
+		ser.put(tpl_1(taggedRdata));
+	endrule
+	rule readFlashData2;
+		let taggedRdata <- flashes[1].readWord();
+		ser.put(tpl_1(taggedRdata));
+	endrule
+	Reg#(Bit#(16)) bramWriteOff <- mkReg(0);
+	rule relayFlashRead;
+		bramWriteOff <= bramWriteOff + 1;
+		let d <- ser.get;
+
+		pageBuffer.portA.request.put(
+			BRAMRequest{
+			write:True,
+			responseOnWrite:False,
+			address:truncate(bramWriteOff),
+			datain:d
+			}
+		);
+
+	endrule
+
+	rule getFlashAck0;
+		let ackStatus <- flashes[0].ackStatus();
+	endrule
+	rule getFlashAck1;
+		let ackStatus <- flashes[1].ackStatus();
 	endrule
 
 
-	rule getCmd ( wordWriteLeft == 0 );
+	SyncFIFOIfc#(Tuple2#(IOReadReq, Bit#(32))) pcieRespQ <- mkSyncFIFOFromCC(16,pcieclk);
+	SyncFIFOIfc#(IOReadReq) pcieReadReqQ <- mkSyncFIFOToCC(16,pcieclk,pcierst);
+	SyncFIFOIfc#(IOWrite) pcieWriteQ <- mkSyncFIFOToCC(16,pcieclk,pcierst);
+	rule getWriteReq;
 		let w <- pcie.dataReceive;
+		pcieWriteQ.enq(w);
+	endrule
+	rule getReadReq;
+		let r <- pcie.dataReq;
+		pcieReadReqQ.enq(r);
+	endrule
+	rule returnReadResp;
+		let r_ = pcieRespQ.first;
+		pcieRespQ.deq;
+
+		pcie.dataSend(tpl_1(r_), tpl_2(r_));
+	endrule
+
+
+	rule getCmd;
+		pcieWriteQ.deq;
+		let w = pcieWriteQ.first;
+
 		let a = w.addr;
 		let d = w.data;
 		let off = (a>>2);
-		if ( off == 0 ) begin
-			wordWriteLeft <= d;
-			wordWriteReq <= d;
-			pcie.dmaWriteReq( 0, truncate(d), 0 ); // offset, words, tag
-		end else if ( off == 1 ) begin
-			pcie.dmaReadReq( 0, truncate(d), 1 ); // offset, words, tag
-			wordReadLeft <= wordReadLeft + d;
-		end else if ( off == 2 ) begin
-			dramWriteLeft <= d;
-			dramWriteStartCycle <= cycles;
-		end else if ( off == 3 ) begin
-			dramReadLeft <= d;
+
+		if ( (off>>11) > 0 ) begin // command
+			Bit#(2) cmd = truncate(off);
+			Bit#(8) tag = truncate(off>>8);
+
+			Bit#(8) page = truncate(d);
+			Bit#(16) block = truncate(d>>8);
+			Bit#(4) chip = truncate(d>>24);
+			Bit#(3) bus = truncate(d>>28);
+			Bit#(1) card = truncate(d>>31);
+
+			FlashOp fcmd = READ_PAGE;
+			if ( cmd == 1 ) fcmd = WRITE_PAGE;
+			else if ( cmd == 2 ) fcmd = ERASE_BLOCK;
+			
+			//tag = 7b
+
+			//bus = 3b
+			//chip = 3b
+			//block = 16b
+			//page = 8b
+
+			//FIXME now we have 16 busses (two cards)
+			FlashCmd fcmdt = FlashCmd{
+				tag: truncate(tag),
+				op: fcmd,
+				bus: truncate(bus),
+				chip: truncate(chip),
+				block: truncate(block),
+				page: truncate(page)
+				};
+			flashCmdQ.enq(tuple2(card,fcmdt));
+		end else begin //data
+			pageBuffer.portA.request.put(
+				BRAMRequest{
+				write:True,
+				responseOnWrite:False,
+				address:truncate(off),
+				datain:d
+				}
+			);
 		end
 	endrule
 
-	rule dramWrite( dramWriteLeft > 0 );
-		dramWriteLeft <= dramWriteLeft - 1;
-		Bit#(128) v0 = 128'h11112222333344445555666600000000 | zeroExtend(dramWriteLeft);
-		Bit#(128) v1 = 128'hcccccccccccccccccccccccc00000000 | zeroExtend(dramWriteLeft);
-		Bit#(128) v2 = 128'hdeadbeefdeadbeeddeadbeef00000000 | zeroExtend(dramWriteLeft);
-		Bit#(128) v3 = 128'h88887777666655554444333300000000 | zeroExtend(dramWriteLeft);
-
-		dram.write(zeroExtend(dramWriteLeft)*64, {v0,v1,v2,v3},64);
-		if ( dramWriteLeft == 1 ) begin
-			dramWriteEndCycle <= cycles;
-		end
-	endrule
-
-	rule dramReadReq ( dramReadLeft > 0 );
-		dramReadLeft <= dramReadLeft - 1;
-
-		dram.readReq(zeroExtend(dramReadLeft)*64, 64);
-	endrule
-	Reg#(Bit#(512)) dramReadVal <- mkReg(0, clocked_by pcieclk, reset_by pcierst);
-	rule dramReadResp;
-		let d <- dram.read;
-		dramReadVal <= d;
-	endrule
-
-	Reg#(DMAWord) lastRecvWord <- mkReg(0, clocked_by pcieclk, reset_by pcierst);
-
-	rule recvDMAData;
-		DMAWordTagged rd <- pcie.dmaReadWord;
-		wordReadLeft <= wordReadLeft - 1;
-		lastRecvWord <= rd.word;
-	endrule
-
-	Reg#(Bit#(32)) writeData <- mkReg(0, clocked_by pcieclk, reset_by pcierst);
-	rule sendDMAData ( wordWriteLeft > 0 );
-		pcie.dmaWriteData({writeData+3,writeData+2,writeData+1,writeData}, 0);
-		writeData <= writeData + 4;
-		wordWriteLeft <= wordWriteLeft - 1;
-	endrule
-
+	
+	FIFO#(IOReadReq) readReqQ <- mkFIFO;
 	rule readStat;
-		let r <- pcie.dataReq;
-		let a = r.addr;
+		pcieReadReqQ.deq;
+		let r = pcieReadReqQ.first;
 
-		// PCIe IO is done at 4 byte granularities
-		// lower 2 bits are always zero
+		readReqQ.enq(r);
+
+		let a = r.addr;
 		let offset = (a>>2);
-		if ( offset == 0 ) begin
-			//pcie.dataSend(r, wordWriteLeft);
-			pcie.dataSend(r, dramWriteLeft);
-		end else if ( offset == 1 ) begin
-			//pcie.dataSend(r, wordWriteReq);
-			pcie.dataSend(r, dramReadLeft);
-		end else if ( offset == 2 ) begin
-			//pcie.dataSend(r, wordReadLeft);
-			pcie.dataSend(r, dramWriteEndCycle-dramWriteStartCycle);
-		end else begin
-			let noff = (offset-3)*32;
-			//pcie.dataSend(r, pcie.debug_data);
-			pcie.dataSend(r, truncate(dramReadVal>>noff));
-		end
+		pageBuffer.portB.request.put(
+			BRAMRequest{
+			write:False, responseOnWrite:False,
+			address:truncate(offset),
+			datain:?
+			}
+		);
+		//pcie.dataSend(r, truncate(dramReadVal>>noff));
 	endrule
+	rule returnStat;
+		readReqQ.deq;
+		let r = readReqQ.first;
+
+		let v <- pageBuffer.portB.response.get();
+		pcieRespQ.enq(tuple2(r,v));
+	endrule
+
 
 endmodule

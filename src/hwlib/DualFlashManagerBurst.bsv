@@ -92,6 +92,10 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 
 	Vector#(2, BRAM2Port#(TagT, Tuple2#(Bit#(8),BusT))) tagMap <- replicateM(mkBRAM2Server(defaultValue)); // 128B
 
+
+	//////////////////////////////////////////////////////////////////////
+	/*********** Start Flash Command Issue ///////////
+
 	rule getFreeCardTag;
 		flashCmdQ.deq;
 		let cmd_ = flashCmdQ.first;
@@ -129,6 +133,12 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 		});
 	endrule
 
+	*/////////////////// End Flash Command Issue ///////////////////
+	//////////////////////////////////////////////////////////////////////
+	
+	//////////////////////////////////////////////////////////////////////
+	/*********** Start Flash Read / Burst reorder ///////////
+
 	//Burst merger
 	BurstMergeNIfc#(TMul#(NUM_BUSES, 2), FlashTaggedWord, 12) burstorder <- mkBurstMergeN;
 	FIFO#(FlashTaggedWord) wordOutQ <- mkFIFO;
@@ -142,8 +152,6 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 
 	for (Integer cidx = 0; cidx < 2; cidx = cidx + 1) begin
 		Vector#(NUM_BUSES, FIFO#(Tuple2#(Bit#(128),Bit#(8)))) busOrderQ <- replicateM(mkFIFO);
-
-
 
 		FIFO#(Bit#(128)) readDataQ <- mkSizedFIFO(4);
 		rule getRead;
@@ -205,6 +213,14 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 				burstorder.enq[cidx*valueOf(NUM_BUSES)+bidx].enq(busBurstQ.first);
 			endrule
 
+	end
+	*///////////////// End Flash Read / Burst reorder ///////////
+	//////////////////////////////////////////////////////////////////////
+
+
+	
+	for (Integer cidx = 0; cidx < 2; cidx = cidx + 1) begin
+		for (Integer bidx = 0; bidx < valueOf(NUM_BUSES); bidx = bidx + 1) begin
 		end
 
 		rule getWriteReq;

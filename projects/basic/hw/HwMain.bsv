@@ -29,7 +29,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 
 	DualFlashManagerBurstIfc flashman <- mkDualFlashManagerBurst(flashes, 128); // 128 bytes for PCIe bursts
 
-	BRAM2Port#(Bit#(11), Bit#(32)) pageBuffer <- mkBRAM2Server(defaultValue); // 8KB
+	BRAM2Port#(Bit#(14), Bit#(32)) pageBuffer <- mkBRAM2Server(defaultValue); // 8KB*8 = 64 KB
 
 	FIFO#(Tuple2#(Bit#(1),FlashCmd)) flashCmdQ <- mkFIFO;
 
@@ -100,22 +100,28 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 	endrule
 
 	SerializerIfc#(256,8) ser <- mkSerializer;
+	FIFO#(Bit#(8)) reptag <- mkStreamReplicate(8);
 	rule readFlashData;
 		let taggedData <- flashman.readWord;
 		ser.put(tpl_1(taggedData));
+		reptag.enq(tpl_2(taggedData));
 	endrule
-	Reg#(Bit#(16)) bramWriteOff <- mkReg(0);
+	Vector#(8,Reg#(Bit#(16))) bramWriteOff <- replicateM(mkReg(0));
 	rule relayFlashRead;
-		bramWriteOff <= bramWriteOff + 1;
 		let d <- ser.get;
 
-		$display ( "Writing %x to BRAM %d", d, bramWriteOff );
+		reptag.deq;
+		let tag = reptag.first;
+		
+		bramWriteOff[tag] <= bramWriteOff[tag] + 1;
+
+		$display ( "Writing %x to BRAM %d", d, bramWriteOff[tag] );
 
 		pageBuffer.portA.request.put(
 			BRAMRequest{
 			write:True,
 			responseOnWrite:False,
-			address:truncate(bramWriteOff),
+			address:truncate(bramWriteOff[tag])+zeroExtend(tag)*(8192/4),
 			datain:d
 			}
 		);
@@ -218,7 +224,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 			datain:?
 			}
 		);
-		$display ( "Reading BRAM %d", offset );
 		//pcie.dataSend(r, truncate(dramReadVal>>noff));
 	endrule
 	rule returnStat;
@@ -227,7 +232,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 
 		let v <- pageBuffer.portB.response.get();
 		pcieRespQ.enq(tuple2(r,v));
-		$display( "Read BRAM %x", v );
 	endrule
 
 

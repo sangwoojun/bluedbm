@@ -65,14 +65,18 @@ int main(int argc, char** argv) {
 
 	sleep(1);
 	
-	offset = ((1<<16) | /*cmd*/0 | (tag<<8))*4; //read
-	data = page | (block<<8) | (chip<<24) | (bus<<28);
-	pcie->userWriteWord(offset, data);
-	printf( "Sending read command\n" );
+	
+	for ( int p = 0; p < 8; p++ ) {
+		tag = p;
+		offset = ((1<<16) | /*cmd*/0 | (tag<<8))*4; //read
+		data = page+p | (block<<8) | (chip<<24) | (bus<<28);
+		pcie->userWriteWord(offset, data);
+		printf( "Sending read command\n" );
+	}
 	// read data from page buffer
 	sleep(1);
 
-	for ( int i = 0; i < 8192/4; i++ ) {
+	for ( int i = 0; i < 8192/4 * 8; i++ ) {
 		uint32_t d = pcie->userReadWord(i*4);
 		if ( i % 8 == 7 ) {
 			printf("%x\n", d);
@@ -83,40 +87,4 @@ int main(int argc, char** argv) {
 		}
 	}
 	exit(0);
-
-	
-	// send write command
-	offset = ((1<<16) | /*cmd*/1 | (tag<<8))*4;
-	data = page | (block<<8) | (chip<<24) | (bus<<28);
-	pcie->userWriteWord(offset, data);
-	printf( "Sending write command\n" );
-
-	// zero out page buffer
-	sleep(1);
-	for ( int i = 0; i < 8192/4; i++ ) {
-		if ( i % 8 == 0 ) {
-			pcie->userWriteWord(i*4,0);
-		}
-	}
-	// send read command
-	offset = ((1<<16) | /*cmd*/0 | (tag<<8))*4;
-	data = page | (block<<8) | (chip<<24) | (bus<<28);
-	pcie->userWriteWord(offset, data);
-	printf( "Sending read command\n" );
-	// read data from page buffer
-	sleep(1);
-	for ( int i = 0; i < 8192/4; i++ ) {
-		uint32_t d = pcie->userReadWord(i*4);
-		if ( i % 8 == 0 ) {
-			printf("%x\n", d);
-			fflush(stdout);
-		} else {
-			printf("%x ", d);
-			fflush(stdout);
-		}
-	}
-
-
-
-
 }

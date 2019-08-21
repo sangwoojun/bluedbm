@@ -94,7 +94,7 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 
 
 	//////////////////////////////////////////////////////////////////////
-	/*********** Start Flash Command Issue ///////////
+	/////*********** Start Flash Command Issue //////////*/
 
 	rule getFreeCardTag;
 		flashCmdQ.deq;
@@ -133,11 +133,11 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 		});
 	endrule
 
-	*/////////////////// End Flash Command Issue ///////////////////
+	//////*/////////////////// End Flash Command Issue //////////////////*/
 	//////////////////////////////////////////////////////////////////////
 	
 	//////////////////////////////////////////////////////////////////////
-	/*********** Start Flash Read / Burst reorder ///////////
+	/*********** Start Flash Read / Burst reorder //////////*/
 
 	//Burst merger
 	BurstMergeNIfc#(TMul#(NUM_BUSES, 2), FlashTaggedWord, 12) burstorder <- mkBurstMergeN;
@@ -194,34 +194,45 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 			//TODO assert less than 12
 			Reg#(Bit#(12)) burstReadyUp <- mkReg(0);
 			Reg#(Bit#(12)) burstReadyDown <- mkReg(0);
+			Reg#(Bit#(16)) readWordCnt <- mkReg(0); // Used to ignore 32 bytes at the end of each page
 			rule enqBurst1;
 				let w <- desword.get;
 				let t = skiptag.first;
 				skiptag.deq;
 
-				busBurstQ.enq(tuple2(w,t));
-				burstReadyUp <= burstReadyUp + 1;
-				// If enough data pushed in buffer, start burst
-				if ( burstReadyUp-burstReadyDown >= fromInteger(burstWords) ) begin
-					burstReadyDown <= burstReadyDown + fromInteger(burstWords);
-
-					burstorder.enq[cidx*valueOf(NUM_BUSES)+bidx].burst(fromInteger(burstWords));
+				if ( readWordCnt < (8192/32) ) begin
+					busBurstQ.enq(tuple2(w,t));
+					burstReadyUp <= burstReadyUp + 1;
+					// If enough data pushed in buffer, start burst
+					if ( burstReadyUp-burstReadyDown+1 >= fromInteger(burstWords) ) begin
+						burstReadyDown <= burstReadyDown + fromInteger(burstWords);
+						burstorder.enq[cidx*valueOf(NUM_BUSES)+bidx].burst(fromInteger(burstWords));
+					end
+					readWordCnt <= readWordCnt + 1;
+				end else if ( readWordCnt +1 < (8224/32) ) begin
+					readWordCnt <= readWordCnt + 1;
+					$display( "Ignoring end bytes per page" );
+				end else begin
+					$display( "Ignoring end bytes per page" );
+					readWordCnt <= 0;
 				end
+				
 			endrule
 			rule relayBurstData;
 				busBurstQ.deq;
 				burstorder.enq[cidx*valueOf(NUM_BUSES)+bidx].enq(busBurstQ.first);
 			endrule
-
+		end
 	end
-	*///////////////// End Flash Read / Burst reorder ///////////
+	////////*///////////////// End Flash Read / Burst reorder //////////*/
 	//////////////////////////////////////////////////////////////////////
 
 
 	
+	/*
 	for (Integer cidx = 0; cidx < 2; cidx = cidx + 1) begin
-		for (Integer bidx = 0; bidx < valueOf(NUM_BUSES); bidx = bidx + 1) begin
-		end
+		//for (Integer bidx = 0; bidx < valueOf(NUM_BUSES); bidx = bidx + 1) begin
+		//end
 
 		rule getWriteReq;
 			TagT tag <- flashes[cidx].writeDataReq;
@@ -231,6 +242,7 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 			let status <- flashes[cidx].ackStatus;
 		endrule
 	end
+	*/
 
 
 

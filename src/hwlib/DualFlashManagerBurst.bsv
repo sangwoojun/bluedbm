@@ -69,7 +69,7 @@ interface DualFlashManagerBurstIfc;
 	method Action eraseBlock(Bit#(8) tag, FlashAddress block);
 	method ActionValue#(FlashStatus) fevent;
 	method ActionValue#(FlashTaggedWord) readWord;
-	method Action writeWord(Bit#(8) tag, FlashWord data);
+	method Action writeWord(FlashWord data);
 
 
 	//TODO decode block mapping req
@@ -106,10 +106,8 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 		TagT newtag = freeCardTagsQ[c].first;
 		freeCardTagsQ[c].deq;
 
-		tagMap[c].portA.request.put(
-			BRAMRequest{
-			write:True,
-			responseOnWrite:False,
+		tagMap[c].portA.request.put( BRAMRequest{
+			write:True, responseOnWrite:False,
 			address:newtag,
 			datain:tuple2(tag,cmd.bus)
 			}
@@ -153,11 +151,13 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 	for (Integer cidx = 0; cidx < 2; cidx = cidx + 1) begin
 		Vector#(NUM_BUSES, FIFO#(Tuple2#(Bit#(128),Bit#(8)))) busOrderQ <- replicateM(mkFIFO);
 
-		FIFO#(Bit#(128)) readDataQ <- mkSizedFIFO(4);
+		Vector#(NUM_BUSES, Reg#(Bit#(16))) readDoneCount <- replicateM(mkReg(0));
+		FIFO#(Tuple2#(TagT,Bit#(128))) readDataQ <- mkSizedFIFO(4);
 		rule getRead;
 			let taggedRdata <- flashes[cidx].readWord();
 			Bit#(128) data = tpl_1(taggedRdata);
 			TagT tag = tpl_2(taggedRdata);
+
 
 			tagMap[cidx].portB.request.put( BRAMRequest{
 				write:False, responseOnWrite:False,
@@ -165,17 +165,26 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 				datain:?
 				});
 
-			readDataQ.enq(data);
+			readDataQ.enq(tuple2(tag,data));
 		endrule
 		rule scatterBus;
 			let d <- tagMap[cidx].portB.response.get;
 			let otag = tpl_1(d);
 			let bus = tpl_2(d);
 
-			let data = readDataQ.first;
+			let d_ = readDataQ.first;
 			readDataQ.deq;
+			let data = tpl_2(d_);
+			let tag = tpl_1(d_);
 
 			busOrderQ[bus].enq(tuple2(data, otag));
+			
+			if ( readDoneCount[bus] + 1 >= fromInteger((valueOf(PageSizeUser)/16)) ) begin
+				readDoneCount[bus] <= 0;
+				freeCardTagsQ[cidx].enq(tag);
+			end else begin
+				readDoneCount[bus] <= readDoneCount[bus] + 1;
+			end
 		endrule
 
 		for (Integer bidx = 0; bidx < valueOf(NUM_BUSES); bidx = bidx + 1) begin
@@ -209,7 +218,7 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 						burstorder.enq[cidx*valueOf(NUM_BUSES)+bidx].burst(fromInteger(burstWords));
 					end
 					readWordCnt <= readWordCnt + 1;
-				end else if ( readWordCnt +1 < (8224/32) ) begin
+				end else if ( readWordCnt +1 < fromInteger(valueOf(PageSizeUser)/32) ) begin
 					readWordCnt <= readWordCnt + 1;
 					$display( "Ignoring end bytes per page" );
 				end else begin
@@ -227,24 +236,130 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 	////////*///////////////// End Flash Read / Burst reorder //////////*/
 	//////////////////////////////////////////////////////////////////////
 
+	////////*///////////////// Begin Flash Status  (comand done, etc) //////////*/
+	//////////////////////////////////////////////////////////////////////
 
 	
-	/*
+	Merge2Ifc#(Tuple4#(Bit#(8), FlashStatusCode, TagT, Bit#(1))) mstat <- mkMerge2;
 	for (Integer cidx = 0; cidx < 2; cidx = cidx + 1) begin
-		//for (Integer bidx = 0; bidx < valueOf(NUM_BUSES); bidx = bidx + 1) begin
-		//end
+		FIFO#(Tuple2#(TagT,FlashStatusCode)) flashStatQ <- mkFIFO;
+		FIFO#(Tuple2#(TagT,FlashStatusCode)) flashStatBypassQ <- mkSizedFIFO(4);
+		(* descending_urgency = "flashAck, writeReady" *)
+		rule flashAck;
+			let ackStatus <- flashes[cidx].ackStatus();
+			StatusT status = tpl_2(ackStatus);
+			FlashStatusCode stat = case (status) 
+				WRITE_DONE: return STATE_WRITE_DONE;
+				ERASE_DONE: return STATE_ERASE_DONE;
+				ERASE_ERROR: return STATE_ERASE_FAIL;
+				default: STATE_NULL; // not reachable
+			endcase;
+			flashStatQ.enq(tuple2(tpl_1(ackStatus), stat));
 
-		rule getWriteReq;
-			TagT tag <- flashes[cidx].writeDataReq;
-			//flashes[cwt].writeWord(tuple2(wd,0));
+			// return down tag
+			freeCardTagsQ[cidx].enq(tpl_1(ackStatus));
 		endrule
-		rule getAck;
-			let status <- flashes[cidx].ackStatus;
+		rule writeReady;
+			TagT tag <- flashes[cidx].writeDataReq;
+			flashStatQ.enq(tuple2(tag, STATE_WRITE_READY));
+		endrule
+
+		rule translateTag;
+			flashStatQ.deq;
+			let d_ = flashStatQ.first;
+
+			tagMap[cidx].portA.request.put( BRAMRequest{
+				write:False, responseOnWrite:False,
+				address: tpl_1(d_),
+				datain:?
+				});
+			flashStatBypassQ.enq(d_);
+		endrule
+		rule enqMergeStat;
+			flashStatBypassQ.deq;
+			let d_ = flashStatBypassQ.first;
+			let tag = tpl_1(d_);
+			let word = tpl_2(d_);
+
+			let ntag <- tagMap[cidx].portA.response.get;
+			mstat.enq[cidx].enq(tuple4(tpl_1(ntag), word, tag, fromInteger(cidx)));
 		endrule
 	end
-	*/
+
+	////////*///////////////// End Flash Status  (comand done, etc) //////////*/
+	//////////////////////////////////////////////////////////////////////
+
+	////////*///////////////// Start Flash Write //////////*/
+	//////////////////////////////////////////////////////////////////////
+
+	FIFO#(Tuple2#(TagT, Bit#(1))) writeTargetOrderQ <- mkSizedBRAMFIFO(256);
+	FIFO#(Tuple2#(Bit#(8), FlashStatusCode)) statQ <- mkFIFO;
+	rule getWriteOrder;
+		mstat.deq;
+		let m = mstat.first;
+		statQ.enq(tuple2(tpl_1(m), tpl_2(m)));
+
+		if ( tpl_2(m) == STATE_WRITE_READY ) begin
+			writeTargetOrderQ.enq(tuple2(tpl_3(m), tpl_4(m)));
+		end
+	endrule
+
+	FIFO#(FlashWord) dataInQ <- mkFIFO;
+	FIFO#(FlashWord) dataInBypassQ <- mkSizedFIFO(4);
+	Reg#(Bit#(16)) writeWordCounter <- mkReg(0);
+
+	Reg#(Tuple2#(TagT, Bit#(1))) curWriteTarget <- mkReg(?);
+	Vector#(2, FIFO#(Tuple2#(TagT, FlashWord))) cardWriteQ <- replicateM(mkFIFO);
+
+	rule routeCardTarget;
+		if ( writeWordCounter < (8192/16) ) begin
+			dataInQ.deq;
+			let w = dataInQ.first;
+
+			let ctarget = curWriteTarget;
+			if ( writeWordCounter == 0 ) begin
+				writeTargetOrderQ.deq;
+				ctarget = writeTargetOrderQ.first;
+				curWriteTarget <= ctarget;
+			end
 
 
+			cardWriteQ[tpl_2(ctarget)].enq(tuple2(tpl_1(ctarget), w));
+
+			writeWordCounter <= writeWordCounter + 1;
+		end else if ( writeWordCounter + 1 < fromInteger(valueOf(PageSizeUser)/32) ) begin
+			let ctarget = curWriteTarget;
+			cardWriteQ[tpl_2(ctarget)].enq(tuple2(tpl_1(ctarget), 0));
+			writeWordCounter <= writeWordCounter + 1;
+		end else begin
+			let ctarget = curWriteTarget;
+			cardWriteQ[tpl_2(ctarget)].enq(tuple2(tpl_1(ctarget), 0));
+			writeWordCounter <= 0;
+		end
+	endrule
+
+	for (Integer cidx = 0; cidx < 2; cidx=cidx+1 ) begin
+		SerializerIfc#(256,2) wser <- mkSerializer;
+		FIFO#(TagT) wrep <- mkStreamReplicate(2);
+		rule serFlashWrite;
+			cardWriteQ[cidx].deq;
+			let d_ = cardWriteQ[cidx].first;
+
+			wrep.enq(tpl_1(d_));
+			wser.put(tpl_2(d_));
+		endrule
+
+		rule relayFlashWrite;
+			let w <- wser.get;
+			let t = wrep.first;
+			wrep.deq;
+
+			flashes[cidx].writeWord(tuple2(w,t));
+		endrule
+	end
+
+	////////*///////////////// End Flash Write //////////*/
+	//////////////////////////////////////////////////////////////////////
 
 	method Action readPage(Bit#(8) tag, FlashAddress page);
 		flashCmdQ.enq(tuple2(tag, decodeCommand(page, READ_PAGE)));
@@ -255,14 +370,20 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 	method Action eraseBlock(Bit#(8) tag, FlashAddress block);
 		flashCmdQ.enq(tuple2(tag, decodeCommand(block, ERASE_BLOCK)));
 	endmethod
+
 	method ActionValue#(FlashStatus) fevent;
-		return ?;
+		statQ.deq;
+		return FlashStatus {
+			code: tpl_2(statQ.first),
+			tag: tpl_1(statQ.first)
+		};
 	endmethod
 	method ActionValue#(FlashTaggedWord) readWord;
 		wordOutQ.deq;
 		return wordOutQ.first;
 	endmethod
-	method Action writeWord(Bit#(8) tag, FlashWord data);
+	method Action writeWord(FlashWord data);
+		dataInQ.enq(data);
 	endmethod
 endmodule
 

@@ -26,19 +26,23 @@ int main(int argc, char** argv) {
 
 	uint32_t offset = 0;
 	uint32_t data = 0;
-	
-	uint32_t page = 4;
-	uint32_t block = 1;
-	uint32_t chip = 0;
-	uint32_t bus = 0;
 	uint32_t tag = 0;
+	uint32_t pageoffset = 892;
 	
+	/*
 	// send erase command
 	offset = ((1<<16) | 2 | (tag<<8))*4;
-	data = (block<<8) | (chip<<24) | (bus<<28);
+	data = pageoffset;
 	pcie->userWriteWord(offset, data);
-	printf( "Sending erase command\n" );
-	sleep (1);
+	printf( "Sending erase command. Waiting for ack\n" ); fflush(stdout);
+	while (true) {
+		uint32_t event = pcie->userReadWord(8192*8);
+		if ( event >= 0xffffffff ) continue;
+
+
+		printf( "Event: %x\n", event );
+		break;
+	}
 
 	
 	for ( int i = 0; i < 8192/4; i++ ) {
@@ -52,31 +56,48 @@ int main(int argc, char** argv) {
 	fflush(stdout);
 	
 	// send write command
-	offset = ((1<<16) | /*cmd*/1 | (tag<<8))*4;
-	data = page | (block<<8) | (chip<<24) | (bus<<28);
+	offset = ((1<<16) | 1 | (tag<<8))*4;
+	data = pageoffset;
 	pcie->userWriteWord(offset, data);
-	printf( "Sending write command\n" );
-	sleep(1);
+	printf( "Sending write command. Waiting for ack...\n" );
+	while (true) {
+		uint32_t event = pcie->userReadWord(8192*8);
+		if ( event >= 0xffffffff ) continue;
+
+
+		printf( "Event: %x\n", event );
+		break;
+	}
 	
 	// zero out page buffer
 	for ( int i = 0; i < 8192/4; i++ ) {
 		pcie->userWriteWord(i*4,0);
 	}
+	*/
 
-	sleep(1);
-	
-	
-	for ( int p = 0; p < 8; p++ ) {
-		tag = p;
+	timespec start;
+	timespec now;
+	clock_gettime(CLOCK_REALTIME, & start);
+	printf( "Sending read commands\n" );
+	uint32_t pagecount = (1024*1024*(32/8)); //32 GB
+	for ( uint32_t p = 0; p < pagecount; p++ ) { // 32 GB
+	//for ( int p = 0; p < 32; p++ ) {
+		tag = p%256;
 		offset = ((1<<16) | /*cmd*/0 | (tag<<8))*4; //read
-		data = page | (block<<8) | (chip<<24) | (bus<<28);
+		data = p;
 		pcie->userWriteWord(offset, data);
-		printf( "Sending read command\n" );
+		//printf( "Sending read command %d\n", p ); fflush(stdout);
 	}
+
+	clock_gettime(CLOCK_REALTIME, & now);
+	double diff = timespec_diff_sec(start, now);
+	printf( "Elapsed: %f, words read %d\n", diff, pcie->userReadWord(16*8192));
+	fflush(stdout);
+
 	// read data from page buffer
 	sleep(1);
 
-	for ( int i = 0; i < 8192/4 * 8; i++ ) {
+	for ( int i = 0; i < 8192/4 * 4; i++ ) {
 		uint32_t d = pcie->userReadWord(i*4);
 		if ( i % 8 == 7 ) {
 			printf("%x\n", d);

@@ -20,13 +20,14 @@ module mkStreamingDeserializer (StreamingDeserializerIfc#(tFrom, tTo))
 	Reg#(Bit#(TAdd#(TLog#(tToSz),1))) outCounter <- mkReg(0);
 	Reg#(Bit#(tToSz)) outBuffer <- mkReg(0);
 
+	FIFO#(Tuple2#(tFrom, Bool)) inQ <- mkFIFO;
 	FIFO#(tTo) outQ <- mkFIFO;
 
-	method ActionValue#(tTo) deq;
-		outQ.deq;
-		return outQ.first;
-	endmethod
-	method Action enq(tFrom in, Bool cont);
+	rule procDes;
+		inQ.deq;
+		let in = tpl_1(inQ.first);
+		let cont = tpl_2(inQ.first);
+
 		let inData = pack(in);
 		Bit#(tToSz) nextBuffer = outBuffer | (zeroExtend(inData)<<outCounter);
 
@@ -55,6 +56,14 @@ module mkStreamingDeserializer (StreamingDeserializerIfc#(tFrom, tTo))
 			outBuffer <= 0;
 			outCounter <= 0;
 		end
+	endrule
+
+	method ActionValue#(tTo) deq;
+		outQ.deq;
+		return outQ.first;
+	endmethod
+	method Action enq(tFrom in, Bool cont);
+		inQ.enq(tuple2(in,cont));
 	endmethod
 endmodule
 

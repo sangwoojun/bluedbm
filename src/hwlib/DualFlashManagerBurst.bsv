@@ -49,11 +49,11 @@ function FlashManagerCmd decodeCommand(FlashAddress addr, FlashOp op);
 endfunction
 
 typedef enum {
-	STATE_NULL,
-	STATE_WRITE_READY,
-	STATE_WRITE_DONE,
-	STATE_ERASE_DONE,
-	STATE_ERASE_FAIL
+	STATE_NULL = 0,
+	STATE_WRITE_READY = 1,
+	STATE_WRITE_DONE = 2,
+	STATE_ERASE_DONE = 3,
+	STATE_ERASE_FAIL = 4
 } FlashStatusCode deriving (Bits, Eq);
 
 typedef struct {
@@ -149,9 +149,10 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 	endrule
 
 	for (Integer cidx = 0; cidx < 2; cidx = cidx + 1) begin
-		Vector#(NUM_BUSES, FIFO#(Tuple2#(Bit#(128),Bit#(8)))) busOrderQ <- replicateM(mkFIFO);
+		//TagT needed to return it later
+		//Vector#(NUM_BUSES, FIFO#(Tuple3#(Bit#(128),Bit#(8),TagT))) busOrderQ <- replicateM(mkFIFO);
+		ScatterNIfc#(NUM_BUSES, Tuple3#(Bit#(128),Bit#(8),TagT)) busOrderS <- mkScatterN;
 
-		Vector#(NUM_BUSES, Reg#(Bit#(16))) readDoneCount <- replicateM(mkReg(0));
 		FIFO#(Tuple2#(TagT,Bit#(128))) readDataQ <- mkSizedFIFO(4);
 		rule getRead;
 			let taggedRdata <- flashes[cidx].readWord();
@@ -177,14 +178,15 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 			let data = tpl_2(d_);
 			let tag = tpl_1(d_);
 
-			busOrderQ[bus].enq(tuple2(data, otag));
+			//busOrderQ[bus].enq(tuple3(data, otag,tag));
+			busOrderS.enq(tuple3(data, otag,tag), zeroExtend(bus));
 			
-			if ( readDoneCount[bus] + 1 >= fromInteger((valueOf(PageSizeUser)/16)) ) begin
-				readDoneCount[bus] <= 0;
-				freeCardTagsQ[cidx].enq(tag);
-			end else begin
-				readDoneCount[bus] <= readDoneCount[bus] + 1;
-			end
+		endrule
+
+		MergeNIfc#(NUM_BUSES, TagT) doneTagM <- mkMergeN;
+		rule returnDoneTags;
+			doneTagM.deq;
+			freeCardTagsQ[cidx].enq(doneTagM.first);
 		endrule
 
 		for (Integer bidx = 0; bidx < valueOf(NUM_BUSES); bidx = bidx + 1) begin
@@ -192,12 +194,24 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 			FIFO#(FlashTaggedWord) busBurstQ <- mkSizedFIFO((burstBytes/32)+1);
 			DeSerializerIfc#(128, 2) desword <- mkDeSerializer;
 			FIFO#(Bit#(8)) skiptag <- mkStreamSkip(2,1); // of every two elements, take only idx 1
+			Reg#(Bit#(16)) readDoneBusCount <- mkReg(0);
+
 			rule deserialize;
-				busOrderQ[bidx].deq;
-				let d = busOrderQ[bidx].first;
+				//busOrderQ[bidx].deq;
+				//let d = busOrderQ[bidx].first;
+				busOrderS.get[bidx].deq;
+				let d = busOrderS.get[bidx].first;
 
 				desword.put(tpl_1(d));
 				skiptag.enq(tpl_2(d));
+			
+				if ( readDoneBusCount + 1 >= fromInteger((valueOf(PageSizeUser)/16)) ) begin
+					readDoneBusCount <= 0;
+
+					doneTagM.enq[bidx].enq(tpl_3(d));
+				end else begin
+					readDoneBusCount <= readDoneBusCount + 1;
+				end
 			endrule
 
 			//TODO assert less than 12
@@ -220,9 +234,9 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 					readWordCnt <= readWordCnt + 1;
 				end else if ( readWordCnt +1 < fromInteger(valueOf(PageSizeUser)/32) ) begin
 					readWordCnt <= readWordCnt + 1;
-					$display( "Ignoring end bytes per page" );
+					//$display( "Ignoring end bytes per page" );
 				end else begin
-					$display( "Ignoring end bytes per page" );
+					//$display( "Ignoring end bytes per page" );
 					readWordCnt <= 0;
 				end
 				

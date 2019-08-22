@@ -32,6 +32,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 	BRAM2Port#(Bit#(14), Bit#(32)) pageBuffer <- mkBRAM2Server(defaultValue); // 8KB*8 = 64 KB
 
 
+	FIFOF#(Bit#(32)) feventQ <- mkSizedFIFOF(32);
 	Reg#(Bit#(16)) writeWordLeft <- mkReg(0);
 	rule flashStats ( writeWordLeft == 0 );
 		let stat <- flashman.fevent;
@@ -40,6 +41,9 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 			$display( "Write request!" );
 		end else begin
 			//ignore for now
+			Bit#(8) code = zeroExtend(pack(stat.code));
+			Bit#(8) tag = stat.tag;
+			feventQ.enq(zeroExtend({code,tag}));
 		end
 	endrule
 	rule reqBufferRead (writeWordLeft > 0);
@@ -67,10 +71,12 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 
 	SerializerIfc#(256,8) ser <- mkSerializer;
 	FIFO#(Bit#(8)) reptag <- mkStreamReplicate(8);
+	Reg#(Bit#(32)) readWords <- mkReg(0);
 	rule readFlashData;
 		let taggedData <- flashman.readWord;
-		ser.put(tpl_1(taggedData));
-		reptag.enq(tpl_2(taggedData));
+		readWords <= readWords + 1;
+		//ser.put(tpl_1(taggedData));
+		//reptag.enq(tpl_2(taggedData));
 	endrule
 	Vector#(8,Reg#(Bit#(16))) bramWriteOff <- replicateM(mkReg(0));
 	rule relayFlashRead;
@@ -79,7 +85,11 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 		reptag.deq;
 		let tag = reptag.first;
 		
-		bramWriteOff[tag] <= bramWriteOff[tag] + 1;
+		if ( bramWriteOff[tag] + 1 >= (8192/4) ) begin
+			bramWriteOff[tag] <= 0;
+		end else begin
+			bramWriteOff[tag] <= bramWriteOff[tag] + 1;
+		end
 
 		$display ( "Writing %x to BRAM %d", d, bramWriteOff[tag] );
 
@@ -145,17 +155,24 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 		pcieReadReqQ.deq;
 		let r = pcieReadReqQ.first;
 
-		readReqQ.enq(r);
 
 		let a = r.addr;
 		let offset = (a>>2);
-		pageBuffer.portB.request.put(
-			BRAMRequest{
-			write:False, responseOnWrite:False,
-			address:truncate(offset),
-			datain:?
-			}
-		);
+		if ( offset < (8192/4)*8 ) begin
+			readReqQ.enq(r);
+			pageBuffer.portB.request.put(
+				BRAMRequest{
+				write:False, responseOnWrite:False,
+				address:truncate(offset),
+				datain:?
+				}
+			);
+		end else if ( offset == 16384 && feventQ.notEmpty ) begin
+			feventQ.deq;
+			pcieRespQ.enq(tuple2(r,feventQ.first));
+		end else begin
+			pcieRespQ.enq(tuple2(r,readWords));
+		end
 		//pcie.dataSend(r, truncate(dramReadVal>>noff));
 	endrule
 	rule returnStat;

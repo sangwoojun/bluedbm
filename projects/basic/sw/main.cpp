@@ -69,7 +69,7 @@ int main(int argc, char** argv) {
 	for ( int p = 0; p < 8; p++ ) {
 		tag = p;
 		offset = ((1<<16) | /*cmd*/0 | (tag<<8))*4; //read
-		data = page+p | (block<<8) | (chip<<24) | (bus<<28);
+		data = page | (block<<8) | (chip<<24) | (bus<<28);
 		pcie->userWriteWord(offset, data);
 		printf( "Sending read command\n" );
 	}

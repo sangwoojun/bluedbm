@@ -312,7 +312,7 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 	Vector#(2, FIFO#(Tuple2#(TagT, FlashWord))) cardWriteQ <- replicateM(mkFIFO);
 
 	rule routeCardTarget;
-		if ( writeWordCounter < (8192/16) ) begin
+		if ( writeWordCounter < (8192/32) ) begin
 			dataInQ.deq;
 			let w = dataInQ.first;
 

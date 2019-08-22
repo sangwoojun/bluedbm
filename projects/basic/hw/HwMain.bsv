@@ -31,30 +31,16 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 
 	BRAM2Port#(Bit#(14), Bit#(32)) pageBuffer <- mkBRAM2Server(defaultValue); // 8KB*8 = 64 KB
 
-	FIFO#(Tuple2#(Bit#(1),FlashCmd)) flashCmdQ <- mkFIFO;
 
-
-	rule sendFlashCmd;
-		flashCmdQ.deq;
-		let fcmd_ = flashCmdQ.first;
-		
-		flashes[tpl_1(fcmd_)].sendCmd(tpl_2(fcmd_));
-	endrule
-
-	Reg#(Bit#(1)) writeDst <- mkReg(0);
 	Reg#(Bit#(16)) writeWordLeft <- mkReg(0);
-	FIFO#(Bit#(1)) targetBoardQ <- mkSizedFIFO(8);
-	rule writeReq1;
-		TagT tag <- flashes[0].writeDataReq();
-		writeDst <= 0;
-		writeWordLeft <= 512*4; //32 bits
-		targetBoardQ.enq(0);
-	endrule
-	rule writeReq2;
-		TagT tag <- flashes[1].writeDataReq();
-		writeDst <= 1;
-		writeWordLeft <= 512*4; //32 bits
-		targetBoardQ.enq(1);
+	rule flashStats ( writeWordLeft == 0 );
+		let stat <- flashman.fevent;
+		if ( stat.code == STATE_WRITE_READY ) begin
+			writeWordLeft <= (8192/4); // 32 bits
+			$display( "Write request!" );
+		end else begin
+			//ignore for now
+		end
 	endrule
 	rule reqBufferRead (writeWordLeft > 0);
 		writeWordLeft <= writeWordLeft - 1;
@@ -67,36 +53,16 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 			}
 		);
 	endrule
-	DeSerializerIfc#(32, 4) des <- mkDeSerializer;
+	DeSerializerIfc#(32, 8) des <- mkDeSerializer;
 	rule relayBRAMRead;
 		let v <- pageBuffer.portA.response.get();
 		des.put(v);
 	endrule
-	Reg#(Bit#(16)) flashWriteOff <- mkReg(0);
 
 	Reg#(Bit#(1)) curWriteTarget <- mkReg(0);
 	rule relayFlashWrite;
-		if ( flashWriteOff + 1 <= 512 ) begin
-			flashWriteOff <= flashWriteOff + 1;
-
-			let wd <- des.get;
-
-			Bit#(1) cwt = curWriteTarget;
-			if ( flashWriteOff == 0 ) begin
-				let t = targetBoardQ.first;
-				targetBoardQ.deq;
-				curWriteTarget <= t;
-				cwt = t;
-			end
-			flashes[cwt].writeWord(tuple2(wd,0));
-
-		end else if (flashWriteOff + 1 <= 514 ) begin
-			if (flashWriteOff + 1 >= 514 ) flashWriteOff <= 0;
-			else flashWriteOff <= flashWriteOff + 1;
-
-
-			flashes[curWriteTarget].writeWord(tuple2(0,0));
-		end
+		let wd <- des.get;
+		flashman.writeWord(wd);
 	endrule
 
 	SerializerIfc#(256,8) ser <- mkSerializer;
@@ -125,18 +91,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 			datain:d
 			}
 		);
-
 	endrule
-
-	rule getFlashAck0;
-		let ackStatus <- flashes[0].ackStatus();
-		$display( "ack 0 %x %x", tpl_1(ackStatus), tpl_2(ackStatus) );
-	endrule
-	rule getFlashAck1;
-		let ackStatus <- flashes[1].ackStatus();
-		$display( "ack 1 %x %x", tpl_1(ackStatus), tpl_2(ackStatus) );
-	endrule
-
 
 	SyncFIFOIfc#(Tuple2#(IOReadReq, Bit#(32))) pcieRespQ <- mkSyncFIFOFromCC(16,pcieclk);
 	SyncFIFOIfc#(IOReadReq) pcieReadReqQ <- mkSyncFIFOToCC(16,pcieclk,pcierst);
@@ -169,32 +124,9 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 			Bit#(2) cmd = truncate(off);
 			Bit#(8) tag = truncate(off>>8);
 
-			if ( cmd == 0 ) begin
-				flashman.readPage(tag, d);
-			end else begin
-				FlashOp fcmd = WRITE_PAGE;
-				if ( cmd == 2 ) fcmd = ERASE_BLOCK;
-
-				FlashManagerCmd fcmad = decodeCommand(d, fcmd);
-				//tag = 7b
-
-				//bus = 3b
-				//chip = 3b
-				//block = 16b
-				//page = 8b
-
-				//FIXME now we have 16 busses (two cards)
-
-				FlashCmd fcmdt = FlashCmd{
-					tag: fcmad.tag,
-					op: fcmd,
-					bus: fcmad.bus,
-					chip: fcmad.chip,
-					block: fcmad.block,
-					page: fcmad.page
-					};
-				flashCmdQ.enq(tuple2(fcmad.card,fcmdt));
-			end
+			if ( cmd == 0 ) flashman.readPage(tag, d);
+			else if ( cmd == 1 ) flashman.writePage(tag,d);
+			else flashman.eraseBlock(tag,d);
 		end else begin //data
 			pageBuffer.portA.request.put(
 				BRAMRequest{

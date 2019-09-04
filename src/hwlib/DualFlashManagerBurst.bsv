@@ -31,7 +31,6 @@ typedef struct {
 	Bit#(8) page;
 } FlashManagerCmd deriving (Bits, Eq);
 
-
 function FlashManagerCmd decodeCommand(FlashAddress addr, FlashOp op);
 	return FlashManagerCmd {
 		op: op,
@@ -190,8 +189,11 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 		endrule
 
 		for (Integer bidx = 0; bidx < valueOf(NUM_BUSES); bidx = bidx + 1) begin
-			//TODO if burst is large (KBs), should use BRAMFIFO
-			FIFO#(FlashTaggedWord) busBurstQ <- mkSizedFIFO((burstBytes/32)+1);
+			//if burst is large (KBs), should use BRAMFIFO
+			FIFO#(FlashTaggedWord) busBurstQ;
+			if ( burstBytes > 1024 ) busBurstQ <- mkSizedBRAMFIFO((burstBytes/32)+1);
+			else busBurstQ <- mkSizedFIFO((burstBytes/32)+1);
+
 			DeSerializerIfc#(128, 2) desword <- mkDeSerializer;
 			FIFO#(Bit#(8)) skiptag <- mkStreamSkip(2,1); // of every two elements, take only idx 1
 			Reg#(Bit#(16)) readDoneBusCount <- mkReg(0);

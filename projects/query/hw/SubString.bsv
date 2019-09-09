@@ -10,7 +10,7 @@ import BoolMergeNet::*;
 interface SubStringFindAlignedIfc#(numeric type qlen);
 	method Action queryString(Bit#(TMul#(qlen, 8)) data); // qlen characters
 	method Action dataString(Bit#(TMul#(qlen, 8)) data, Bool last); // qlen characters
-	method ActionValue#(Tuple2#(Bool, Maybe#(Bool))) found;
+	method ActionValue#(Tuple2#(Bool, Maybe#(Bool))) found; // last, maybe(found)
 endinterface
 
 (*synthesize*)

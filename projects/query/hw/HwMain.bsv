@@ -3,6 +3,7 @@ import FIFOF::*;
 import Clocks::*;
 import Vector::*;
 
+import ColumnFilter::*;
 import Serializer::*;
 
 import BRAM::*;
@@ -39,43 +40,41 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 	endrule
 
 
-	FIFO#(Bit#(64)) stringQ <- mkSizedBRAMFIFO(2048);
-	//SubStringFindAlignedIfc#(8) sfa <- mkSubStringFindAligned;
-	SubStringFindAlignedIfc#(8) sfa <- mkSubStringFindAligned8;
-	DeSerializerIfc#(32,2) stringDes <- mkDeSerializer;
+	FIFO#(Bit#(256)) stringWideQ <- mkSizedBRAMFIFO(256);
+	ColumnFilterIfc strf <- mkSubStringFilter;
+
+	//SubStringFindAlignedIfc#(8) sfa <- mkSubStringFindAligned8;
+	DeSerializerIfc#(32,8) stringDes <- mkDeSerializer;
 	Reg#(Bit#(32)) stringInCnt <- mkReg(0);
 	rule loadStringQ;
 		let d <- stringDes.get;
-		stringQ.enq(d);
+		stringWideQ.enq(d);
 		stringInCnt <= stringInCnt + 1;
 
-		if ( stringInCnt == 0 ) sfa.queryString(64'h6f6c6c6568); // 'hello'
+		//if ( stringInCnt == 0 ) sfa.queryString(64'h6f6c6c6568); // 'hello'
+		if ( stringInCnt == 0 ) strf.putQuery(32'h6c6c6568); // 'hello'
+		if ( stringInCnt == 1 ) strf.putQuery(32'h6f); // 'hello'
 	endrule
 
 
 	Reg#(Bit#(32)) stringOutCnt <- mkReg(0);
-	rule relayStringMatch (stringInCnt >= 1024 && stringOutCnt < 1024);
+	rule relayStringMatch (stringInCnt >= 256 && stringOutCnt < 256);
 		stringOutCnt <= stringOutCnt + 1;
-		stringQ.deq;
-		sfa.dataString(stringQ.first, (stringOutCnt == 1024-1)?True:False);
-		if ( stringOutCnt == 1024-1 ) $display( "Enqueueing last");
+		stringWideQ.deq;
+		//sfa.dataString(stringQ.first, (stringOutCnt == 1024-1)?True:False);
+		strf.put(stringWideQ.first, stringOutCnt==256-1);
+		if ( stringOutCnt == 256-1 ) $display( "Enqueueing last");
 	endrule
 
 	Reg#(Bit#(32)) strCount <- mkReg(0);
 	rule getMatchOut;
-		let r_ <- sfa.found;
-		if ( tpl_1(r_) ) begin
-			$display( "Processing done %d", cycles );
-		end
-		if ( isValid(tpl_2(r_)) ) begin
-			let r = fromMaybe(?,tpl_2(r_));
-			if ( r ) begin
-				$display( "%d String found %d", strCount, cycles );
-			end else begin
-				$display( "%d String not found %d", strCount, cycles );
-			end
-			strCount <= strCount + 1;
-		end
+		//let r_ <- sfa.found;
+		let r <- strf.get;
+		$display( "Strf %d %d: %x", strCount, cycles, r );
+	endrule
+	rule getStrfValid;
+		let r <- strf.validBits;
+		$display( "Strf valid: %d", r );
 	endrule
 
 

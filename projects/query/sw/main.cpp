@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
 	strncpy(querystring+16+64, "234jk00982jjsmc", 16);
 	strncpy(querystring+32+64, "5     9999990001j +-/hello32as", 32);
 	strncpy(querystring+128,   "o23hrulKJhlSKJDfnlskjdflskdjli", 32);
-	querystring[8191] = 0;
+	//querystring[8191] = 0;
 
 	for ( int i = 0; i < 8192/4; i++ ) {
 		pcie->userWriteWord((2<<16)*4, ((uint32_t*)querystring)[i]);

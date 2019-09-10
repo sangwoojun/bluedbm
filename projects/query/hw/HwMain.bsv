@@ -16,7 +16,8 @@ import ControllerTypes::*;
 import FlashCtrlVirtex1::*;
 import DualFlashManagerBurst::*;
 
-import SubString::*;
+import QueryProc::*;
+
 
 interface HwMainIfc;
 endinterface
@@ -30,7 +31,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 	Clock pcieclk = pcie.user_clk;
 	Reset pcierst = pcie.user_rst;
 
-	DualFlashManagerBurstIfc flashman <- mkDualFlashManagerBurst(flashes, 128); // 128 bytes for PCIe bursts
+	//DualFlashManagerBurstIfc flashman <- mkDualFlashManagerBurst(flashes, 128); // 128 bytes for PCIe bursts
+	DualFlashManagerBurstIfc flashman <- mkDualFlashManagerBurst(flashes, 8192); // page-size bursts
 
 	BRAM2Port#(Bit#(14), Bit#(32)) pageBuffer <- mkBRAM2Server(defaultValue); // 8KB*8 = 64 KB
 
@@ -76,7 +78,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 		let r <- strf.validBits;
 		$display( "Strf valid: %d", r );
 	endrule
-
 
 
 	FIFOF#(Bit#(32)) feventQ <- mkSizedFIFOF(32);
@@ -169,6 +170,38 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 		pcie.dataSend(tpl_1(r_), tpl_2(r_));
 	endrule
 
+	QueryProcIfc queryproc <- mkQueryProc;
+	
+	FIFO#(Tuple2#(Bit#(32),Bit#(32))) cmdQ1 <- mkSizedFIFO(16);
+	FIFO#(Tuple2#(Bit#(32),Bit#(32))) cmdQ2 <- mkFIFO;
+
+	rule procQueryCmd;
+		let d_ = cmdQ2.first;
+		cmdQ2.deq;
+		let off = tpl_1(d_);
+		let d = tpl_2(d_);
+	endrule
+	rule procFlashCmd;
+		let d_ = cmdQ1.first;
+		cmdQ1.deq;
+		let off = tpl_1(d_);
+		let d = tpl_2(d_);
+
+		Bit#(4) target = truncate(off);
+		if ( target == 0 ) begin // flash
+			Bit#(2) fcmd = truncate(off>>4);
+			Bit#(8) tag = truncate(off>>8);
+			QidType qidx = truncate(off>>16); // only for reads, for now
+
+			if ( fcmd == 0 ) begin
+				flashman.readPage(tag,d);
+				// tag -> qidx map
+				queryproc.setTagQid(tag,qidx);
+			end else if ( fcmd == 1 ) flashman.writePage(tag,d);
+			else flashman.eraseBlock(tag,d);
+		end else cmdQ2.enq(d_);
+	endrule
+
 
 	rule getCmd;
 		pcieWriteQ.deq;
@@ -177,26 +210,18 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 		let a = w.addr;
 		let d = w.data;
 		let off = (a>>2);
-
-		if ( (off>>16) == 1 ) begin // command
-			Bit#(2) cmd = truncate(off);
-			Bit#(8) tag = truncate(off>>8);
-
-			if ( cmd == 0 ) flashman.readPage(tag, d);
-			else if ( cmd == 1 ) flashman.writePage(tag,d);
-			else flashman.eraseBlock(tag,d);
-		end else if ( (off>>16) == 2 ) begin // other stuff
-			stringDes.put(d);
-		end else begin //data
+		Bit#(4) target = truncate(off);
+		if ( target == 1 ) begin // i/o buffer
+			let boff = truncate(off>>4);
 			pageBuffer.portA.request.put(
 				BRAMRequest{
 				write:True,
 				responseOnWrite:False,
-				address:truncate(off),
+				address:truncate(off>>4),
 				datain:d
 				}
 			);
-		end
+		end else cmdQ1.enq(tuple2(zeroExtend(off),d));
 	endrule
 
 	
@@ -204,10 +229,9 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 	rule readStat;
 		pcieReadReqQ.deq;
 		let r = pcieReadReqQ.first;
-
-
 		let a = r.addr;
 		let offset = (a>>2);
+
 		if ( offset < (8192/4)*8 ) begin
 			readReqQ.enq(r);
 			pageBuffer.portB.request.put(

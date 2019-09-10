@@ -9,12 +9,68 @@ import SubString::*;
 // in bluelib
 import Serializer::*;
 
+interface ColumnFilterBoolIfc;
+	method Action put(Bit#(256) d1, Bit#(256) d2);
+	method ActionValue#(Bit#(256)) get;
+	method Action putQuery(Bit#(32) data);
+endinterface
+
+module mkColumnFilterBool (ColumnFilterBoolIfc);
+	Vector#(2,Reg#(Bool)) srcNeg <- replicateM(mkReg(False));
+	Reg#(Bool) joinRel <- mkReg(False); // False: OR, True: AND. Add more when needed later
+	FIFO#(Bit#(256)) inQ <- mkFIFO;
+
+	method Action put(Bit#(256) d1, Bit#(256) d2);
+		if ( srcNeg[0] ) d1 = ~d1;
+		if ( srcNeg[1] ) d2 = ~d2;
+		let j = case (joinRel)
+			True: return d1&d2;
+			False: return d1|d2;
+		endcase;
+		inQ.enq(j);
+	endmethod
+	method ActionValue#(Bit#(256)) get;
+		inQ.deq;
+		return inQ.first;
+	endmethod
+	method Action putQuery(Bit#(32) data);
+		srcNeg[0] <= (data[0]==0?False:True);
+		srcNeg[1] <= (data[1]==0?False:True);
+		joinRel <= (data[2]==0?False:True);
+	endmethod
+endmodule
+
 interface ColumnFilterIfc;
 	method Action putQuery(Bit#(32) data);
 	method Action put(Bit#(256) data, Bool last);
 	method ActionValue#(Bit#(256)) get;
 	method ActionValue#(Bit#(32)) validBits;
 endinterface
+
+module mkNullColumnFilter (ColumnFilterIfc);
+	FIFO#(Bit#(256)) inQ <- mkFIFO;
+	Reg#(Bit#(32)) validBitCounter <- mkReg(0);
+	FIFO#(Bit#(32)) validBitQ <- mkFIFO;
+	method Action putQuery(Bit#(32) data);
+	endmethod
+	method Action put(Bit#(256) data, Bool last);
+		inQ.enq(data);
+		if ( last ) begin
+			validBitCounter <= 0;
+			validBitQ.enq(validBitCounter+256);
+		end else begin
+			validBitCounter <= validBitCounter + 256;
+		end
+	endmethod
+	method ActionValue#(Bit#(256)) get if ( False);
+		inQ.deq;
+		return inQ.first;
+	endmethod
+	method ActionValue#(Bit#(32)) validBits if ( False );
+		validBitQ.deq;
+		return validBitQ.first;
+	endmethod
+endmodule
 
 module mkCompare4BLTEFilter (ColumnFilterIfc); // less than or equal, 4 byte values
 	Reg#(Bit#(32)) query <- mkReg(0);
@@ -73,6 +129,41 @@ module mkCompare4BLTEFilter (ColumnFilterIfc); // less than or equal, 4 byte val
 	method ActionValue#(Bit#(32)) validBits;
 		validBitQ.deq;
 		return validBitQ.first;
+	endmethod
+endmodule
+
+module mkCompare4BLTEFilter2(ColumnFilterIfc);
+	Vector#(2,ColumnFilterIfc) filters <- replicateM(mkCompare4BLTEFilter);
+	Reg#(Bit#(2)) querydirection <- mkReg(0);
+
+	ColumnFilterBoolIfc bjoin <- mkColumnFilterBool;
+	rule joinresult;
+		let d1 <- filters[0].get;
+		let d2 <- filters[1].get;
+		bjoin.put(d1,d2);
+	endrule
+	
+	method Action putQuery(Bit#(32) data);
+		if ( querydirection == 0 ) filters[0].putQuery(data);
+		else if ( querydirection == 1 ) filters[1].putQuery(data);
+		else bjoin.putQuery(data);
+
+		if ( querydirection >= 2 ) querydirection <= 0;
+		else querydirection <= querydirection + 1;
+	endmethod
+	method Action put(Bit#(256) data, Bool last);
+		filters[0].put(data,last);
+		filters[1].put(data,last);
+	endmethod
+	method ActionValue#(Bit#(256)) get;
+		let b <- bjoin.get;
+		return b;
+	endmethod
+	method ActionValue#(Bit#(32)) validBits;
+		let d1 <- filters[0].validBits;
+		let d2 <- filters[1].validBits;
+		let d = (d1<d2)?d1:d2;
+		return d;
 	endmethod
 endmodule
 
@@ -146,15 +237,37 @@ module mkSubStringFilter (ColumnFilterIfc);
 endmodule
 
 module mkSubStringFilter2 (ColumnFilterIfc);
+	Vector#(2,ColumnFilterIfc) filters <- replicateM(mkSubStringFilter);
+	Reg#(Bit#(2)) querydirection <- mkReg(0);
+
+	ColumnFilterBoolIfc bjoin <- mkColumnFilterBool;
+	rule joinresult;
+		let d1 <- filters[0].get;
+		let d2 <- filters[1].get;
+		bjoin.put(d1,d2);
+	endrule
+	
 	method Action putQuery(Bit#(32) data);
+		if ( querydirection == 0 ) filters[0].putQuery(data);
+		else if ( querydirection == 1 ) filters[1].putQuery(data);
+		else bjoin.putQuery(data);
+
+		if ( querydirection >= 2 ) querydirection <= 0;
+		else querydirection <= querydirection + 1;
 	endmethod
 	method Action put(Bit#(256) data, Bool last);
+		filters[0].put(data,last);
+		filters[1].put(data,last);
 	endmethod
 	method ActionValue#(Bit#(256)) get;
-		return ?;
+		let b <- bjoin.get;
+		return b;
 	endmethod
 	method ActionValue#(Bit#(32)) validBits;
-		return ?;
+		let d1 <- filters[0].validBits;
+		let d2 <- filters[1].validBits;
+		let d = (d1<d2)?d1:d2;
+		return d;
 	endmethod
 endmodule
 

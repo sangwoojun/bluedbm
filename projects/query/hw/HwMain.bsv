@@ -6,6 +6,12 @@ import Vector::*;
 import ColumnFilter::*;
 import Serializer::*;
 import BurstIOArbiter::*;
+import PageSortToDram::*;
+
+import PageSorterSingle::*;
+import SortingNetwork::*;
+import SortingNetworkN::*;
+import MergeSortReducerSingle::*;
 
 import BRAM::*;
 import BRAMFIFO::*;
@@ -105,9 +111,29 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 	endrule
 
 	QueryProcIfc queryproc <- mkQueryProc;
-	/// Get queryproc results /////////////////////////////
+	PageSortToDramIfc pagesorter <- mkPageSortToDram;
+
+
+
+	
+	/// Get queryproc results -> DRAM /////////////////////////////
+
 	rule getqres;
 		let kv <- queryproc.processedElement;
+		pagesorter.put(tpl_1(kv), tpl_2(kv));
+	endrule
+
+	rule getPageSorterBurstReq;
+		let b <- pagesorter.dramReq;
+		if ( tpl_1(b)) begin  // write
+			dramArbiter.eps[1].burstWrite(tpl_2(b), tpl_3(b));
+		end else begin
+			dramArbiter.eps[2].burstRead(tpl_2(b), tpl_3(b));
+		end
+	endrule
+	rule relayPageSorterDRAMWrite;
+		let d <- pagesorter.dramWriteData;
+		dramArbiter.eps[1].putData(d);
 	endrule
 
 	/// Flash Read /////////////////////////////////////////
@@ -132,12 +158,19 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 		//Tuple3#(Bool,Bit#(32),Bit#(16)) b <- queryproc.dramReq; // write? offset, cnt
 		if ( tpl_1(b)) begin  // write
 			dramArbiter.eps[0].burstWrite(tpl_2(b), tpl_3(b));
+		end else begin
+			dramArbiter.eps[0].burstRead(tpl_2(b), tpl_3(b));
 		end
 	endrule
 	rule relayFilterBurstData;
 		let d <- queryproc.dramWriteData;
 		dramArbiter.eps[0].putData(d);
 	endrule
+	rule relayFilterDRAMRead;
+		let d <- dramArbiter.eps[0].getData;
+		queryproc.dramReadData(d);
+	endrule
+
 	
 
 

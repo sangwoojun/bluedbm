@@ -5,6 +5,7 @@ import Vector::*;
 
 import ColumnFilter::*;
 import Serializer::*;
+import BurstIOArbiter::*;
 
 import BRAM::*;
 import BRAMFIFO::*;
@@ -42,44 +43,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 	endrule
 
 
-	FIFO#(Bit#(256)) stringWideQ <- mkSizedBRAMFIFO(256);
-	ColumnFilterIfc strf <- mkSubStringFilter;
-
-	//SubStringFindAlignedIfc#(8) sfa <- mkSubStringFindAligned8;
-	DeSerializerIfc#(32,8) stringDes <- mkDeSerializer;
-	Reg#(Bit#(32)) stringInCnt <- mkReg(0);
-	rule loadStringQ;
-		let d <- stringDes.get;
-		stringWideQ.enq(d);
-		stringInCnt <= stringInCnt + 1;
-
-		//if ( stringInCnt == 0 ) sfa.queryString(64'h6f6c6c6568); // 'hello'
-		if ( stringInCnt == 0 ) strf.putQuery(32'h6c6c6568); // 'hello'
-		if ( stringInCnt == 1 ) strf.putQuery(32'h6f); // 'hello'
-	endrule
-
-
-	Reg#(Bit#(32)) stringOutCnt <- mkReg(0);
-	rule relayStringMatch (stringInCnt >= 256 && stringOutCnt < 256);
-		stringOutCnt <= stringOutCnt + 1;
-		stringWideQ.deq;
-		//sfa.dataString(stringQ.first, (stringOutCnt == 1024-1)?True:False);
-		strf.put(stringWideQ.first, stringOutCnt==256-1);
-		if ( stringOutCnt == 256-1 ) $display( "Enqueueing last");
-	endrule
-
-	Reg#(Bit#(32)) strCount <- mkReg(0);
-	rule getMatchOut;
-		//let r_ <- sfa.found;
-		let r <- strf.get;
-		$display( "Strf %d %d: %x", strCount, cycles, r );
-	endrule
-	rule getStrfValid;
-		let r <- strf.validBits;
-		$display( "Strf valid: %d", r );
-	endrule
-
-
+	////////////// Flash event management start //////////////////////////////////////////////
 	FIFOF#(Bit#(32)) feventQ <- mkSizedFIFOF(32);
 	Reg#(Bit#(16)) writeWordLeft <- mkReg(0);
 	rule flashStats ( writeWordLeft == 0 );
@@ -94,6 +58,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 			feventQ.enq(zeroExtend({code,tag}));
 		end
 	endrule
+	////// Flash write from buffer...
 	rule reqBufferRead (writeWordLeft > 0);
 		writeWordLeft <= writeWordLeft - 1;
 
@@ -111,46 +76,72 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 		des.put(v);
 	endrule
 
+
+	//////// DRAM Arbiter management //////////////////////////////////////////
+	BurstIOArbiterIfc#(4,Bit#(512)) dramArbiter <- mkBurstIOArbiter;
+	Reg#(Bit#(32)) curDRAMBurstOffset <- mkReg(0);
+	Reg#(Bit#(16)) curDRAMBurstLeft <- mkReg(0);
+	Reg#(Bool) curDRAMBurstWrite <- mkReg(False);
+	rule relayBurstReq ( curDRAMBurstLeft == 0 );
+		let r <- dramArbiter.getBurstReq;
+		curDRAMBurstWrite <= tpl_1(r);
+		curDRAMBurstOffset <= tpl_2(r);
+		curDRAMBurstLeft <= tpl_3(r);
+	endrule
+	rule sendDRAMCmd(curDRAMBurstLeft > 0);
+		let d <- dramArbiter.getData;
+
+		curDRAMBurstLeft <= curDRAMBurstLeft - 1;
+		curDRAMBurstOffset <= curDRAMBurstOffset + 1;
+		if ( curDRAMBurstWrite ) begin
+			dram.write(zeroExtend(curDRAMBurstOffset)*64, d, 64);
+		end else begin
+			dram.readReq(zeroExtend(curDRAMBurstOffset)*64, 64);
+		end
+	endrule
+	rule relayDRAMRead;
+		let d <- dram.read;
+		dramArbiter.putData(d);
+	endrule
+
+	QueryProcIfc queryproc <- mkQueryProc;
+	/// Get queryproc results /////////////////////////////
+	rule getqres;
+		let kv <- queryproc.processedElement;
+	endrule
+
+	/// Flash Read /////////////////////////////////////////
 	Reg#(Bit#(1)) curWriteTarget <- mkReg(0);
 	rule relayFlashWrite;
 		let wd <- des.get;
 		flashman.writeWord(wd);
 	endrule
 
-	SerializerIfc#(256,8) ser <- mkSerializer;
-	FIFO#(Bit#(8)) reptag <- mkStreamReplicate(8);
-	Reg#(Bit#(32)) readWords <- mkReg(0);
+	DeSerializerIfc#(256,2) flashDes <- mkDeSerializer;
+	FIFO#(Bit#(8)) flashDesTag <- mkStreamSkip(2,0);
 	rule readFlashData;
 		let taggedData <- flashman.readWord;
-		readWords <= readWords + 1;
-
-		//ser.put(tpl_1(taggedData));
-		//reptag.enq(tpl_2(taggedData));
+		queryproc.flashData(tpl_1(taggedData),tpl_2(taggedData));
 	endrule
-	Vector#(8,Reg#(Bit#(16))) bramWriteOff <- replicateM(mkReg(0));
-	rule relayFlashRead;
-		let d <- ser.get;
 
-		reptag.deq;
-		let tag = reptag.first;
-		
-		if ( bramWriteOff[tag] + 1 >= (8192/4) ) begin
-			bramWriteOff[tag] <= 0;
-		end else begin
-			bramWriteOff[tag] <= bramWriteOff[tag] + 1;
+
+
+	/// QueryProc DRAM 
+	rule getFilterBurstReq;
+		let b <- queryproc.dramReq; // write? offset, cnt
+		//Tuple3#(Bool,Bit#(32),Bit#(16)) b <- queryproc.dramReq; // write? offset, cnt
+		if ( tpl_1(b)) begin  // write
+			dramArbiter.eps[0].burstWrite(tpl_2(b), tpl_3(b));
 		end
-
-		$display ( "Writing %x to BRAM %d", d, bramWriteOff[tag] );
-
-		pageBuffer.portA.request.put(
-			BRAMRequest{
-			write:True,
-			responseOnWrite:False,
-			address:truncate(bramWriteOff[tag])+zeroExtend(tag)*(8192/4),
-			datain:d
-			}
-		);
 	endrule
+	rule relayFilterBurstData;
+		let d <- queryproc.dramWriteData;
+		dramArbiter.eps[0].putData(d);
+	endrule
+	
+
+
+	/////////////////////////// PCIe clock crossing start ////////////////////////////////
 
 	SyncFIFOIfc#(Tuple2#(IOReadReq, Bit#(32))) pcieRespQ <- mkSyncFIFOFromCC(16,pcieclk);
 	SyncFIFOIfc#(IOReadReq) pcieReadReqQ <- mkSyncFIFOToCC(16,pcieclk,pcierst);
@@ -170,7 +161,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 		pcie.dataSend(tpl_1(r_), tpl_2(r_));
 	endrule
 
-	QueryProcIfc queryproc <- mkQueryProc;
 	
 	FIFO#(Tuple2#(Bit#(32),Bit#(32))) cmdQ1 <- mkSizedFIFO(16);
 	FIFO#(Tuple2#(Bit#(32),Bit#(32))) cmdQ2 <- mkFIFO;
@@ -245,7 +235,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 			feventQ.deq;
 			pcieRespQ.enq(tuple2(r,feventQ.first));
 		end else begin
-			pcieRespQ.enq(tuple2(r,readWords));
+			pcieRespQ.enq(tuple2(r,32'hffffffff));
 		end
 		//pcie.dataSend(r, truncate(dramReadVal>>noff));
 	endrule

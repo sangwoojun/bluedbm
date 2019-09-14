@@ -17,6 +17,7 @@ typedef 4 PageSorterCnt;
 
 interface PageSortToDramIfc;
 	method Action put(Bit#(32) key, Bit#(32) val);
+	method Action bufferDone(Bit#(8) cnt);
 	method ActionValue#(Tuple3#(Bool,Bit#(32),Bit#(16))) dramReq;
 	method ActionValue#(Bit#(512)) dramWriteData;
 endinterface
@@ -90,14 +91,14 @@ module mkPageSortToDram (PageSortToDramIfc);
 	Reg#(Bit#(3)) desPaddingCnt <- mkReg(0);
 	Reg#(Bit#(3)) desOffset <- mkReg(0);
 	Reg#(Bit#(32)) totalBytes <- mkReg(0);
-	FIFO#(Bit#(32)) totalBytesQ <- mkFIFO;
+	//FIFO#(Bit#(32)) totalBytesQ <- mkFIFO;
 	rule getSRResult (desPaddingCnt == 0);
 		let d <- mergeToDRAM.get;
 		desOffset <= desOffset + 1;
 		if ( tpl_3(d) ) begin
 			desPaddingCnt <= desOffset + 1;
 			totalBytes <= 0;
-			totalBytesQ.enq(totalBytes);
+			//totalBytesQ.enq(totalBytes);
 			desToLast.put(1);
 		end else begin
 			totalBytes <= totalBytes + 8;
@@ -116,18 +117,19 @@ module mkPageSortToDram (PageSortToDramIfc);
 	FIFO#(Bit#(8)) outBufDoneQ <- mkFIFO;
 
 	Reg#(Bit#(8)) curOutBufIdx <- mkReg(0);
-	rule bufferDes;
+	Reg#(Bit#(8)) outBufTail <- mkReg(8'hff);
+	rule bufferDes( curOutBufIdx != outBufTail ); // circular queue. never return more than was taken!
 		let r <- desToDram.get;
 		let l <- desToLast.get;
 		outQ.enq(r);
 		if ( bufferCount +1 > 32 ) begin
 			bufferCount <= bufferCount + 1 - 32;
-			dramReqQ.enq(tuple3(True, zeroExtend(curOutBufIdx)*32, 32)); //FIXME offset
-			curOutBufIdx <= (curOutBufIdx + 1 ) & 8'h3f;
+			dramReqQ.enq(tuple3(True, zeroExtend(curOutBufIdx)*32, 32));
+			curOutBufIdx <= (curOutBufIdx + 1 ) & 8'hff; // 256 buffers // & is actually not needed
 			outBufDoneQ.enq(curOutBufIdx);
 		end else if ( l > 0 ) begin // last element 
 			bufferCount <= 0;
-			dramReqQ.enq(tuple3(True, zeroExtend(curOutBufIdx)*32, bufferCount+1)); //FIXME offset
+			dramReqQ.enq(tuple3(True, zeroExtend(curOutBufIdx)*32, bufferCount+1));
 			curOutBufIdx <= (curOutBufIdx + 1 ) & 8'h3f;
 			outBufDoneQ.enq(curOutBufIdx);
 		end else begin
@@ -138,6 +140,9 @@ module mkPageSortToDram (PageSortToDramIfc);
 
 	method Action put(Bit#(32) key, Bit#(32) val);
 		sortingNetDes.put({key,val});
+	endmethod
+	method Action bufferDone(Bit#(8) cnt);
+		outBufTail <= outBufTail + cnt;
 	endmethod
 	method ActionValue#(Tuple3#(Bool,Bit#(32),Bit#(16))) dramReq;
 		dramReqQ.deq;

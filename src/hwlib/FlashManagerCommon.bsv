@@ -1,76 +1,52 @@
-/**
-IMPORTANT: tags need to be encoded in a certain way now:
-tag[0] board
-tag[3:1] bus
-tag[~7:4] tag
-**/
+package FlashManagerCommon;
+import ControllerTypes::*;
+import FlashCtrlVirtex1::*;
 
-typedef 8 BusCount; // 8 per card in hw, 2 per card in sim
-typedef TMul#(2,BusCount) BBusCount; //Board*bus
-typedef 128 TagCount;
-
-typedef enum {
-	STATE_NULL,
-	STATE_WRITE_READY,
-	STATE_WRITE_DONE,
-	STATE_ERASE_DONE,
-	STATE_ERASE_FAIL
-} FlashStatus deriving (Bits, Eq);
-
+typedef Bit#(32) FlashAddress;
+typedef Bit#(256) FlashWord;
+typedef Tuple2#(FlashWord,Bit#(8)) FlashTaggedWord;
 typedef struct {
 	FlashOp op;
-	
-	Bit#(8) tag;
 
-	Bit#(4) bus;
-	ChipT chip; //Bit#(3)
+	TagT tag; // may have duplicates across cards
+	
+	Bit#(1) card;
+	BusT bus; // NUM_BUSES = 8 for MLC, 2 for BSIM
+	ChipT chip; // ChipsPerBus = 8 for MLC and BSIM
 	Bit#(16) block;
 	Bit#(8) page;
 } FlashManagerCmd deriving (Bits, Eq);
 
+function FlashManagerCmd decodeCommand(FlashAddress addr, FlashOp op);
+	return FlashManagerCmd {
+		op: op,
+
+		tag: 0, // must be configured separately
+
+		// Complete reverse order for parallelism
+		// total 23 + 8 = 31 bits for MLC
+		page: truncate(addr>>(1+16 + valueOf(TLog#(NUM_BUSES))+valueOf(TLog#(ChipsPerBus)))), // 7 + 16 = 23 for MLC
+		block: truncate(addr>>(1+valueOf(TLog#(NUM_BUSES))+valueOf(TLog#(ChipsPerBus)))), // 1+3+3 = 7 for MLC
+		chip: truncate(addr>>(1+valueOf(TLog#(NUM_BUSES)))), // 1+3 = 4 for MLC
+		bus: truncate(addr>>1),
+		card: truncate(addr)
+	};
+endfunction
+
+typedef enum {
+	STATE_NULL = 0,
+	STATE_WRITE_READY = 1,
+	STATE_WRITE_DONE = 2,
+	STATE_ERASE_DONE = 3,
+	STATE_ERASE_FAIL = 4
+} FlashStatusCode deriving (Bits, Eq);
+
 typedef struct {
-	Bit#(4) bus;
-	ChipT chip; //Bit#(3)
-	Bit#(16) block;
-	Bit#(8) page;
-} FlashManagerAddr deriving (Bits,Eq);
+	FlashStatusCode code;
+	Bit#(8) tag;
+} FlashStatus deriving (Bits, Eq);
 
-function FlashManagerAddr decodeFlashAddr(Bit#(32) code);
-	Bit#(16) block = truncate(code);
-	Bit#(8) page = truncate(code>>16);
-	Bit#(4) bus = truncate(code>>24);
-	ChipT chip = truncate(code>>28);
-	return FlashManagerAddr{
-		bus:bus,
-		chip:chip,
-		block:block,
-		page:page
-	};
-endfunction
 
-function FlashManagerCmd decodeFlashCommand(Bit#(64) code);
-	Bit#(4) opcode = code[3:0];
-	Bit#(4) bbus = code[7:4];
-	Bit#(8) tag = code[15:8];
-	Bit#(16) block = code[31:16];
 
-	Bit#(8) page = code[39:32];
-	ChipT chip = truncate(code>>40);
-	let cur_flashop = ERASE_BLOCK;
-	if ( opcode == 0 ) begin
-		cur_flashop = ERASE_BLOCK;
-	end else if ( opcode == 1 ) begin
-		cur_flashop = READ_PAGE;
-	end else if ( opcode == 2 ) begin
-		cur_flashop = WRITE_PAGE;
-	end
 
-	return FlashManagerCmd{
-		op:cur_flashop,
-		tag:tag,
-		bus:bbus,
-		chip:chip,
-		block:block,
-		page:page
-	};
-endfunction
+endpackage: FlashManagerCommon

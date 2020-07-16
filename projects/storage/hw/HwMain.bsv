@@ -11,12 +11,16 @@ import BRAMFIFO::*;
 import PcieCtrl::*;
 import DRAMController::*;
 
+import FlashManagerCommon::*;
 import ControllerTypes::*;
-import FlashCtrlVirtex1::*;
+//import FlashCtrlVirtex1::*;
 import DualFlashManagerBurst::*;
+import FlashOrderedInterface::*;
 
 interface HwMainIfc;
 endinterface
+
+typedef 64 UserTagCnt;
 
 module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) flashes) 
 	(HwMainIfc);
@@ -27,7 +31,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 	Clock pcieclk = pcie.user_clk;
 	Reset pcierst = pcie.user_rst;
 
-	DualFlashManagerBurstIfc flashman <- mkDualFlashManagerBurst(flashes, 8192); // 8192 bytes for page
+	DualFlashManagerBurstIfc flashman <- mkDualFlashManagerBurst(flashes, 128); // small burst, will group pages again
+	FlashOrderedInterfaceIfc flashifc <- mkFlashOrderedInterface(flashman); // provides ordered interface
 
 	BRAM2Port#(Bit#(14), Bit#(32)) pageBuffer <- mkBRAM2Server(defaultValue); // 8KB*8 = 64 KB
 
@@ -35,15 +40,15 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 	FIFOF#(Bit#(32)) feventQ <- mkSizedFIFOF(32);
 	Reg#(Bit#(16)) writeWordLeft <- mkReg(0);
 	rule flashStats ( writeWordLeft == 0 );
-		let stat <- flashman.fevent;
-		if ( stat.code == STATE_WRITE_READY ) begin
+		let stat <- flashifc.fevent;
+		if ( stat == STATE_WRITE_READY ) begin
 			writeWordLeft <= (8192/4); // 32 bits
 			$display( "Write request!" );
 		end else begin
 			//ignore for now
-			Bit#(8) code = zeroExtend(pack(stat.code));
-			Bit#(8) tag = stat.tag;
-			feventQ.enq(zeroExtend({code,tag}));
+			//Bit#(8) code = zeroExtend(pack(stat.code));
+			//Bit#(8) tag = stat.tag;
+			//feventQ.enq(zeroExtend({code,tag}));
 		end
 	endrule
 	rule reqBufferRead (writeWordLeft > 0);
@@ -66,14 +71,14 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 	Reg#(Bit#(1)) curWriteTarget <- mkReg(0);
 	rule relayFlashWrite;
 		let wd <- des.get;
-		flashman.writeWord(wd);
+		flashifc.writeWord(wd);
 	endrule
 
 	SerializerIfc#(256,8) ser <- mkSerializer;
 	FIFO#(Bit#(8)) reptag <- mkStreamReplicate(8);
 	Reg#(Bit#(32)) readWords <- mkReg(0);
 	rule readFlashData;
-		let taggedData <- flashman.readWord;
+		Bit#(256) word <- flashifc.readWord;
 		readWords <= readWords + 1;
 		//ser.put(tpl_1(taggedData));
 		//reptag.enq(tpl_2(taggedData));
@@ -132,11 +137,10 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 
 		if ( (off>>11) > 0 ) begin // command
 			Bit#(2) cmd = truncate(off);
-			Bit#(8) tag = truncate(off>>8);
 
-			if ( cmd == 0 ) flashman.readPage(tag, d);
-			else if ( cmd == 1 ) flashman.writePage(tag,d);
-			else flashman.eraseBlock(tag,d);
+			if ( cmd == 0 ) flashifc.readPage(d);
+			else if ( cmd == 1 ) flashifc.writePage(d);
+			else flashifc.eraseBlock(d);
 		end else begin //data
 			pageBuffer.portA.request.put(
 				BRAMRequest{

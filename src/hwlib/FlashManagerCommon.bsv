@@ -18,6 +18,12 @@ typedef struct {
 } FlashManagerCmd deriving (Bits, Eq);
 
 function FlashManagerCmd decodeCommand(FlashAddress addr, FlashOp op);
+	
+	// card + bus + chipsperbus
+	Integer blockOff = (1+valueOf(TLog#(NUM_BUSES))+valueOf(TLog#(ChipsPerBus))); // 1+3+3 = 7 for MLC
+	Integer blockBits = valueOf(TLog#(BlocksPerCE));
+
+	Integer blockMask = exp(2,(blockBits))-1;
 	return FlashManagerCmd {
 		op: op,
 
@@ -25,8 +31,8 @@ function FlashManagerCmd decodeCommand(FlashAddress addr, FlashOp op);
 
 		// Complete reverse order for parallelism
 		// total 23 + 8 = 31 bits for MLC
-		page: truncate(addr>>(1+16 + valueOf(TLog#(NUM_BUSES))+valueOf(TLog#(ChipsPerBus)))), // 7 + 16 = 23 for MLC
-		block: truncate(addr>>(1+valueOf(TLog#(NUM_BUSES))+valueOf(TLog#(ChipsPerBus)))), // 1+3+3 = 7 for MLC
+		page: truncate(addr>>(1+blockBits+ valueOf(TLog#(NUM_BUSES))+valueOf(TLog#(ChipsPerBus)))), // 7 + 12 = 19 for MLC
+		block: fromInteger(blockMask)&truncate(addr>>(1+valueOf(TLog#(NUM_BUSES))+valueOf(TLog#(ChipsPerBus)))), // 1+3+3 = 7 for MLC
 		chip: truncate(addr>>(1+valueOf(TLog#(NUM_BUSES)))), // 1+3 = 4 for MLC
 		bus: truncate(addr>>1),
 		card: truncate(addr)

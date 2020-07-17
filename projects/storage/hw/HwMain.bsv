@@ -2,6 +2,7 @@ import FIFO::*;
 import FIFOF::*;
 import Clocks::*;
 import Vector::*;
+import Connectable::*;
 
 import Serializer::*;
 
@@ -31,8 +32,16 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 	Clock pcieclk = pcie.user_clk;
 	Reset pcierst = pcie.user_rst;
 
-	DualFlashManagerBurstIfc flashman <- mkDualFlashManagerBurst(flashes, 128); // small burst, will group pages again
-	FlashOrderedInterfaceIfc flashifc <- mkFlashOrderedInterface(flashman); // provides ordered interface
+	DualFlashManagerBurstIfc flashman <- mkDualFlashManagerBurst(flashes, 64); // small burst, will group pages again
+	FlashOrderedInterfaceIfc flashifc <- mkFlashOrderedInterface; // provides ordered interface
+	mkConnection(flashifc.hw.fevent, flashman.fevent);
+	mkConnection(flashifc.hw.readWord, flashman.readWord);
+	mkConnection(flashifc.hw.writeWord, flashman.writeWord);
+	mkConnection(flashifc.hw.readPage, flashman.readPage);
+	mkConnection(flashifc.hw.writePage, flashman.writePage);
+	mkConnection(flashifc.hw.eraseBlock, flashman.eraseBlock);
+
+	FlashOrderedInterfaceUserIfc flashuser = flashifc.user;
 
 	BRAM2Port#(Bit#(14), Bit#(32)) pageBuffer <- mkBRAM2Server(defaultValue); // 8KB*8 = 64 KB
 
@@ -40,7 +49,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 	FIFOF#(Bit#(32)) feventQ <- mkSizedFIFOF(32);
 	Reg#(Bit#(16)) writeWordLeft <- mkReg(0);
 	rule flashStats ( writeWordLeft == 0 );
-		let stat <- flashifc.fevent;
+		let stat_ <- flashuser.fevent;
+		let stat = tpl_1(stat_);
 		if ( stat == STATE_WRITE_READY ) begin
 			writeWordLeft <= (8192/4); // 32 bits
 			$display( "Write request!" );
@@ -71,15 +81,18 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 	Reg#(Bit#(1)) curWriteTarget <- mkReg(0);
 	rule relayFlashWrite;
 		let wd <- des.get;
-		flashifc.writeWord(wd);
+		flashuser.writeWord(wd);
 	endrule
 
 	SerializerIfc#(256,8) ser <- mkSerializer;
 	FIFO#(Bit#(8)) reptag <- mkStreamReplicate(8);
 	Reg#(Bit#(32)) readWords <- mkReg(0);
+
+	Reg#(Bit#(256)) readBuffer <- mkReg(0);
 	rule readFlashData;
-		Bit#(256) word <- flashifc.readWord;
+		Bit#(256) word <- flashuser.readWord;
 		readWords <= readWords + 1;
+		readBuffer <= word;
 		//ser.put(tpl_1(taggedData));
 		//reptag.enq(tpl_2(taggedData));
 	endrule
@@ -138,9 +151,9 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 		if ( (off>>11) > 0 ) begin // command
 			Bit#(2) cmd = truncate(off);
 
-			if ( cmd == 0 ) flashifc.readPage(d);
-			else if ( cmd == 1 ) flashifc.writePage(d);
-			else flashifc.eraseBlock(d);
+			if ( cmd == 0 ) flashuser.readPage(d);
+			else if ( cmd == 1 ) flashuser.writePage(d);
+			else flashuser.eraseBlock(d);
 		end else begin //data
 			pageBuffer.portA.request.put(
 				BRAMRequest{
@@ -175,7 +188,9 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 			feventQ.deq;
 			pcieRespQ.enq(tuple2(r,feventQ.first));
 		end else begin
-			pcieRespQ.enq(tuple2(r,readWords));
+			//pcieRespQ.enq(tuple2(r,readWords));
+			pcieRespQ.enq(tuple2(r,truncate(readBuffer)));
+			readBuffer <= readBuffer>>32;
 		end
 		//pcie.dataSend(r, truncate(dramReadVal>>noff));
 	endrule

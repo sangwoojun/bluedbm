@@ -18,9 +18,9 @@ import Serializer::*;
 import Assert::*;
 
 interface DualFlashManagerBurstIfc;
-	method Action readPage(Bit#(8) tag, FlashAddress page);
-	method Action writePage(Bit#(8) tag, FlashAddress page);
-	method Action eraseBlock(Bit#(8) tag, FlashAddress block);
+	method Action readPage(Tuple2#(Bit#(8), FlashAddress) data);
+	method Action writePage(Tuple2#(Bit#(8), FlashAddress) data);
+	method Action eraseBlock(Tuple2#(Bit#(8), FlashAddress) data);
 	method ActionValue#(FlashStatus) fevent;
 	method ActionValue#(FlashTaggedWord) readWord;
 	method Action writeWord(FlashWord data);
@@ -332,13 +332,19 @@ module mkDualFlashManagerBurst#(Vector#(2,FlashCtrlUser) flashes, Integer burstB
 	////////*///////////////// End Flash Write //////////*/
 	//////////////////////////////////////////////////////////////////////
 
-	method Action readPage(Bit#(8) tag, FlashAddress page);
+	method Action readPage(Tuple2#(Bit#(8), FlashAddress) data);
+		Bit#(8) tag = tpl_1(data);
+		let page = tpl_2(data);
 		flashCmdQ.enq(tuple2(tag, decodeCommand(page, READ_PAGE)));
 	endmethod
-	method Action writePage(Bit#(8) tag, FlashAddress page);
+	method Action writePage(Tuple2#(Bit#(8), FlashAddress) data);
+		Bit#(8) tag = tpl_1(data);
+		let page = tpl_2(data);
 		flashCmdQ.enq(tuple2(tag, decodeCommand(page, WRITE_PAGE)));
 	endmethod
-	method Action eraseBlock(Bit#(8) tag, FlashAddress block);
+	method Action eraseBlock(Tuple2#(Bit#(8), FlashAddress) data);
+		Bit#(8) tag = tpl_1(data);
+		let block = tpl_2(data);
 		flashCmdQ.enq(tuple2(tag, decodeCommand(block, ERASE_BLOCK)));
 	endmethod
 

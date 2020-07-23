@@ -15,8 +15,7 @@ import DRAMController::*;
 import FlashManagerCommon::*;
 import ControllerTypes::*;
 //import FlashCtrlVirtex1::*;
-import DualFlashManagerBurst::*;
-import FlashOrderedInterface::*;
+import DualFlashManagerOrdered::*;
 
 interface HwMainIfc;
 endinterface
@@ -32,16 +31,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 	Clock pcieclk = pcie.user_clk;
 	Reset pcierst = pcie.user_rst;
 
-	DualFlashManagerBurstIfc flashman <- mkDualFlashManagerBurst(flashes, 64); // small burst, will group pages again
-	FlashOrderedInterfaceIfc flashifc <- mkFlashOrderedInterface; // provides ordered interface
-	mkConnection(flashifc.hw.fevent, flashman.fevent);
-	mkConnection(flashifc.hw.readWord, flashman.readWord);
-	mkConnection(flashifc.hw.writeWord, flashman.writeWord);
-	mkConnection(flashifc.hw.readPage, flashman.readPage);
-	mkConnection(flashifc.hw.writePage, flashman.writePage);
-	mkConnection(flashifc.hw.eraseBlock, flashman.eraseBlock);
-
-	FlashOrderedInterfaceUserIfc flashuser = flashifc.user;
+	DualFlashManagerOrderedIfc flashuser <- mkDualFlashManagerOrdered(flashes); 
 
 	BRAM2Port#(Bit#(14), Bit#(32)) pageBuffer <- mkBRAM2Server(defaultValue); // 8KB*8 = 64 KB
 
@@ -49,9 +39,9 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 	FIFOF#(Bit#(32)) feventQ <- mkSizedFIFOF(32);
 	Reg#(Bit#(16)) writeWordLeft <- mkReg(0);
 	rule flashStats ( writeWordLeft == 0 );
-		let stat_ <- flashuser.fevent;
-		let stat = tpl_1(stat_);
-		if ( stat == STATE_WRITE_READY ) begin
+		let stat <- flashuser.fevent;
+		//let stat = tpl_1(stat_);
+		if ( stat.code == STATE_WRITE_READY ) begin
 			writeWordLeft <= (8192/4); // 32 bits
 			$display( "Write request!" );
 		end else begin

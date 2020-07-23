@@ -74,7 +74,6 @@ module mkDualFlashManagerOrdered#(Vector#(2,FlashCtrlUser) flashes) (DualFlashMa
 		);
 		cmd.tag = newtag;
 		
-		reorderChain[cmd.card].req(truncate(newtag), fromInteger(valueOf(PageSizeUser)/16));
 
 		flashCmdUpdatedTagQ.enq(cmd);
 	endrule
@@ -93,8 +92,11 @@ module mkDualFlashManagerOrdered#(Vector#(2,FlashCtrlUser) flashes) (DualFlashMa
 			block: cmd.block,
 			page: cmd.page
 		});
-		reqCardOrderQ.enq(cmd.card);
-		reqCardTagOrderQ[cmd.card].enq(cmd.tag);
+		if ( cmd.op == READ_PAGE ) begin 
+			reorderChain[cmd.card].req(truncate(cmd.tag), fromInteger(valueOf(PageSizeUser)/16));
+			reqCardTagOrderQ[cmd.card].enq(cmd.tag);
+			reqCardOrderQ.enq(cmd.card);
+		end
 	endrule
 
 
@@ -245,6 +247,7 @@ module mkDualFlashManagerOrdered#(Vector#(2,FlashCtrlUser) flashes) (DualFlashMa
 		end
 	endrule
 
+	//Vector#(2, BLBurstOrderChainIfc#(ReadTagCntPerCard, TDiv#(PageSizeUser,16), Bit#(128))) writeReorderChain <- replicateM(mkBLBurstOrderChain(readTagCntPerCard));
 	FIFO#(FlashWord) dataInQ <- mkFIFO;
 	FIFO#(FlashWord) dataInBypassQ <- mkSizedFIFO(4);
 	Reg#(Bit#(16)) writeWordCounter <- mkReg(0);

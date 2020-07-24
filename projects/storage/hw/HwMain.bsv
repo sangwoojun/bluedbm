@@ -36,19 +36,16 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 	BRAM2Port#(Bit#(14), Bit#(32)) pageBuffer <- mkBRAM2Server(defaultValue); // 8KB*8 = 64 KB
 
 
-	FIFOF#(Bit#(32)) feventQ <- mkSizedFIFOF(32);
+	FIFOF#(Bit#(32)) eraseDoneQ <- mkFIFOF;
 	Reg#(Bit#(16)) writeWordLeft <- mkReg(0);
-	rule flashStats ( writeWordLeft == 0 );
-		let stat <- flashuser.fevent;
-		//let stat = tpl_1(stat_);
-		if ( stat.code == STATE_WRITE_READY ) begin
-			writeWordLeft <= (8192/4); // 32 bits
-			$display( "Write request!" );
-		end else begin
-			//ignore for now
-			//Bit#(8) code = zeroExtend(pack(stat.code));
-			//Bit#(8) tag = stat.tag;
-			//feventQ.enq(zeroExtend({code,tag}));
+	rule flashStats;// ( writeWordLeft == 0 );
+		let stat <- flashuser.doneStat;
+		if ( stat.code == ERASE_DONE ) begin
+			$display( "ERASE DONE @ %x", stat.addr );
+			eraseDoneQ.enq({1'b0,truncate(stat.addr)});
+		end else if (stat.code == ERASE_ERROR) begin
+			$display( "ERASE ERROR @ %x", stat.addr );
+			eraseDoneQ.enq({1'b1,truncate(stat.addr)});
 		end
 	endrule
 	rule reqBufferRead (writeWordLeft > 0);
@@ -75,7 +72,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 	endrule
 
 	SerializerIfc#(256,8) ser <- mkSerializer;
-	FIFO#(Bit#(8)) reptag <- mkStreamReplicate(8);
 	Reg#(Bit#(32)) readWords <- mkReg(0);
 
 	Reg#(Bit#(256)) readBuffer <- mkReg(0);
@@ -83,29 +79,21 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 		Bit#(256) word <- flashuser.readWord;
 		readWords <= readWords + 1;
 		readBuffer <= word;
-		//ser.put(tpl_1(taggedData));
-		//reptag.enq(tpl_2(taggedData));
+		ser.put(word);
 	endrule
-	Vector#(8,Reg#(Bit#(16))) bramWriteOff <- replicateM(mkReg(0));
+	Reg#(Bit#(16)) bramWriteOff <- mkReg(0);
 	rule relayFlashRead;
 		let d <- ser.get;
 
-		reptag.deq;
-		let tag = reptag.first;
-		
-		if ( bramWriteOff[tag] + 1 >= (8192/4) ) begin
-			bramWriteOff[tag] <= 0;
-		end else begin
-			bramWriteOff[tag] <= bramWriteOff[tag] + 1;
-		end
+		bramWriteOff <= bramWriteOff + 1;
 
-		$display ( "Writing %x to BRAM %d", d, bramWriteOff[tag] );
+		$display ( "Writing %x to BRAM %d", d, bramWriteOff );
 
 		pageBuffer.portA.request.put(
 			BRAMRequest{
 			write:True,
 			responseOnWrite:False,
-			address:truncate(bramWriteOff[tag])+zeroExtend(tag)*(8192/4),
+			address:truncate(bramWriteOff),
 			datain:d
 			}
 		);
@@ -174,9 +162,9 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2,FlashCtrlUser) fl
 				datain:?
 				}
 			);
-		end else if ( offset == 16384 && feventQ.notEmpty ) begin
-			feventQ.deq;
-			pcieRespQ.enq(tuple2(r,feventQ.first));
+		end else if ( offset == 16384 && eraseDoneQ.notEmpty ) begin
+			eraseDoneQ.deq;
+			pcieRespQ.enq(tuple2(r,eraseDoneQ.first));
 		end else begin
 			//pcieRespQ.enq(tuple2(r,readWords));
 			pcieRespQ.enq(tuple2(r,truncate(readBuffer)));

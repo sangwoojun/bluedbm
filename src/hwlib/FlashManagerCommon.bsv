@@ -52,6 +52,11 @@ typedef struct {
 	Bit#(8) tag;
 } FlashStatus deriving (Bits, Eq);
 
+typedef struct {
+	StatusT code;
+	FlashAddress addr;
+} DoneStatus deriving (Bits, Eq);
+
 
 
 

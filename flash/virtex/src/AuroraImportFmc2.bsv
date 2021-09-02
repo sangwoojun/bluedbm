@@ -4,8 +4,6 @@ import FIFO::*;
 import FIFOF::*;
 import Clocks :: *;
 import DefaultValue :: *;
-import Xilinx :: *;
-import XilinxCells :: *;
 
 import AuroraCommon::*;
 

@@ -4,8 +4,6 @@ package AuroraCommon;
 import FIFO::*;
 import Clocks :: *;
 import DefaultValue :: *;
-import Xilinx :: *;
-import XilinxCells :: *;
 
 typedef 8 AuroraExtCount;
 typedef 4 AuroraExtQuad;

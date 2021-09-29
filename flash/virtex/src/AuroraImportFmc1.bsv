@@ -2,8 +2,9 @@ package AuroraImportFmc1;
 
 import FIFO::*;
 import FIFOF::*;
-import Clocks :: *;
-import DefaultValue :: *;
+import Clocks::*;
+import ClockImport::*;
+import DefaultValue::*;
 
 import AuroraCommon::*;
 
@@ -40,15 +41,17 @@ module mkAuroraIntra1#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk50) (AuroraIfc
 	Reset defaultReset <- exposeCurrentReset;
 	MakeResetIfc rst50ifc <- mkReset(8, True, clk50);
 	MakeResetIfc rst50ifc2 <- mkReset(16384, True, clk50);
-	//Reset rst50 = rst50ifc.new_rst;
+	
 	Reset rst50 <- mkAsyncReset(2, defaultReset, clk50);
 	Reset rst50_2 = rst50ifc2.new_rst;
 	Reset rst50_2a <- mkAsyncReset(2, rst50_2, clk50);
-	Clock fmc1_gtx_clk_i <- mkClockIBUFDS_GTE2(defaultValue,True, gtx_clk_p, gtx_clk_n);
-	//Clock fmc1_gtx_clk_i <- mkClockIBUFDS_GTE2(True, gtx_clk_p, gtx_clk_n);
+
+	ClockGenIfc clk_200mhz_import <- mkClockIBUFDS_GTE2Import(gtx_clk_p, gtx_clk_n);
+	Clock gtx_clk_200mhz = clk_200mhz_import.gen_clk;
+	Clock fmc1_gtx_clk_i = gtx_clk_200mhz;
+
 	AuroraImportIfc#(4) aurora1IntraImport;
 	aurora1IntraImport <- mkAuroraImport_8b10b_fmc1(fmc1_gtx_clk_i, clk50, rst50, /*rst50*/rst50_2a);
-	//aurora1IntraImport <- mkAuroraImport_8b10b_fmc2(fmc1_gtx_clk_i, clk50, rst50, /*rst50*/rst50_2a);
 
 	Reg#(Bit#(32)) auroraResetCounter <- mkReg(0); //, clocked_by clk50, reset_by rst50ifc.new_rst);
 	rule resetAurora;

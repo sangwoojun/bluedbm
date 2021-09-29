@@ -11,10 +11,8 @@ import FIFO::*;
 import Vector::*;
 
 import Clocks :: *;
+import ClockImport :: *;
 import DefaultValue :: *;
-import Xilinx :: *;
-import XilinxCells :: *;
-import ConnectalXilinxCells::*;
 
 import AuroraExtImport::*;
 import AuroraCommon::*;
@@ -31,11 +29,9 @@ module mkAuroraExt117#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk50) (AuroraExt
 	MakeResetIfc rst50ifc2 <- mkReset(8, True, clk50);
 	Reset rst50_2 = rst50ifc2.new_rst;
 	//Reset rst50_2 <- mkAsyncReset(2, defaultReset, clk50);
-	Clock auroraExt_gtx_clk <- mkClockIBUFDS_GTE2(
-`ifdef ClockDefaultParam
-						      defaultValue,
-`endif
-						      True, gtx_clk_p, gtx_clk_n);
+	ClockGenIfc clk_200mhz_import <- mkClockIBUFDS_GTE2Import(gtx_clk_p, gtx_clk_n);
+	Clock gtx_clk_200mhz = clk_200mhz_import.gen_clk;
+	Clock auroraExt_gtx_clk = gtx_clk_200mhz;
 
 	AuroraExtImportIfc#(AuroraExtPerQuad) auroraExtImport <- mkAuroraExtImport117(auroraExt_gtx_clk, clk50, rst50, rst50_2);
 `else

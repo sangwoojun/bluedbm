@@ -91,7 +91,7 @@ module mkProjectTop #(
 
 
 
-	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, dramController.user, flashes, clocked_by pcie.user_clk, reset_by pcie.user_reset);
+	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, dramController.user, flashes, clocked_by user_clock, reset_by user_reset);
 
 
 

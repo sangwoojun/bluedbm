@@ -19,14 +19,13 @@ import DDR3Controller::*;
 import DDR3Common::*;
 import DRAMController::*;
 
-import HwMain::*;
-
-import AuroraImportFmc1::*;
-import ControllerTypes::*;
-import FlashCtrlVirtex1::*;
-import FlashCtrlVirtex2::*;
-import FlashCtrlModel::*;
+// Aurora stuff
 import AuroraCommon::*;
+import AuroraExtImport::*;
+import AuroraExtImport117::*;
+import AuroraImportFmc1::*;
+
+import HwMain::*;
 
 interface TopIfc;
 	(* always_ready *)
@@ -37,9 +36,11 @@ interface TopIfc;
 	interface DDR3_Pins_1GB pins_ddr3;
 	
 	(* always_ready *)
-	interface Aurora_Pins#(4) aurora_fmc1;
+	interface Vector#(AuroraExtPerQuad, Aurora_Pins#(1)) aurora_ext;
 	(* always_ready *)
-	interface Aurora_Pins#(4) aurora_fmc2;
+	interface Aurora_Clock_Pins aurora_quad_117;
+	(* always_ready *)
+	interface Aurora_Clock_Pins aurora_quad_119;
 endinterface
 
 (* no_default_clock, no_default_reset *)
@@ -48,10 +49,10 @@ module mkProjectTop #(
 	Clock sys_clk_p, Clock sys_clk_n,
 	Reset pcie_rst_n,
 
-	Clock aurora_clk_fmc1_gtx_clk_n_v,
-	Clock aurora_clk_fmc1_gtx_clk_p_v,
-	Clock aurora_clk_fmc2_gtx_clk_n_v,
-	Clock aurora_clk_fmc2_gtx_clk_p_v
+	Clock aurora_clk_117_gtx_clk_n_v,
+	Clock aurora_clk_117_gtx_clk_p_v,
+	Clock aurora_clk_119_gtx_clk_n_v,
+	Clock aurora_clk_119_gtx_clk_p_v
 
 	) 
 		(TopIfc);
@@ -83,15 +84,15 @@ module mkProjectTop #(
 	Reset user_reset = rst200;
 
 
-	Vector#(2,FlashCtrlUser) flashes;
-	FlashCtrlVirtexIfc flashCtrl1 <- mkFlashCtrlVirtex1(aurora_clk_fmc1_gtx_clk_p_v, aurora_clk_fmc1_gtx_clk_n_v, sys_clk_200mhz_buf, clocked_by user_clock, reset_by user_reset);
-	FlashCtrlVirtexIfc flashCtrl2 <- mkFlashCtrlVirtex2(aurora_clk_fmc2_gtx_clk_p_v, aurora_clk_fmc2_gtx_clk_n_v, sys_clk_200mhz_buf, clocked_by user_clock, reset_by user_reset);
-	flashes[0] = flashCtrl1.user;
-	flashes[1] = flashCtrl2.user;
+	Vector#(2,AuroraExtUserIfc) auroraExts;
+	AuroraExtIfc auroraExt117 <- mkAuroraExt117(aurora_clk_117_gtx_clk_p_v, aurora_clk_117_gtx_clk_n_v, sys_clk_200mhz_buf, clocked_by user_clock, reset_by user_reset);
+	AuroraExtIfc auroraExt119 <- mkAuroraExt(aurora_clk_117_gtx_clk_p_v, aurora_clk_119_gtx_clk_n_v, sys_clk_200mhz_buf, clocked_by user_clock, reset_by user_reset);
+	auroraExts[0] = auroraExt117.user;
+	auroraExts[1] = auroraExt119.user;
 
 
 
-	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, dramController.user, flashes, clocked_by user_clock, reset_by user_reset);
+	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, dramController.user, auroraExts, clocked_by user_clock, reset_by user_reset);
 
 
 
@@ -102,8 +103,8 @@ module mkProjectTop #(
 
 	interface DDR3_Pins_1GB pins_ddr3 = ddr3_ctrl.ddr3;
 	
-	interface Aurora_Pins aurora_fmc1 = flashCtrl1.aurora;
-	interface Aurora_Pins aurora_fmc2 = flashCtrl2.aurora;
+	interface Aurora_Clock_Pins aurora_117 = auroraExt117.aurora;
+	interface Aurora_Clock_Pins aurora_119 = auroraExt119.aurora;
 
 	method Bit#(4) led;
 		//return leddata;
@@ -119,18 +120,12 @@ module mkProjectTop_bsim (Empty);
 	let ddr3_ctrl_user <- mkDDR3Simulator;
 	DRAMControllerIfc dramController <- mkDRAMController(ddr3_ctrl_user);
 	
-	FlashCtrlVirtexIfc flashCtrl1 <- mkFlashCtrlModel(curclk, curclk, curclk);
-	FlashCtrlVirtexIfc flashCtrl2 <- mkFlashCtrlModel(curclk, curclk, curclk);
-	Vector#(2,FlashCtrlUser) flashes;
-	flashes[0] = flashCtrl1.user;
-	flashes[1] = flashCtrl2.user;
+	AuroraExtIfc auroraExt117 <- mkAuroraExt117(curclk, curclk, curclk);
+	AuroraExtIfc auroraExt119 <- mkAuroraExt(curclk, curclk, curclk);
+	Vector#(2,AuroraExtUserIfc) auroraExts;
+	auroraExts[0] = auroraExt117.user;
+	auroraExts[1] = auroraExt119.user;
 
-	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, dramController.user, flashes);
+	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, dramController.user, auroraExts);
 	
-	rule flushAlwaysEn;
-		flashCtrl1.aurora.rxn_in(1);
-		flashCtrl1.aurora.rxp_in(1);
-		flashCtrl2.aurora.rxn_in(1);
-		flashCtrl2.aurora.rxp_in(1);
-	endrule
 endmodule

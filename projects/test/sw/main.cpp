@@ -5,13 +5,23 @@
 #include "bdbmpcie.h"
 #include "dmasplitter.h"
 
+//------------------------------------------------------------------
+//DEFINITION of Global Vars
+//------------------------------------------------------------------
+int myid;
+
+//------------------------------------------------------------------
+//FUNCTIONS
+//------------------------------------------------------------------
 double timespec_diff_sec( timespec start, timespec end ) {
 	double t = end.tv_sec - start.tv_sec;
 	t += ((double)(end.tv_nsec - start.tv_nsec)/1000000000L);
 	return t;
 }
 
-
+//------------------------------------------------------------------
+//MAIN
+//------------------------------------------------------------------
 int main(int argc, char** argv) {
 	printf( "Software startec\n" ); fflush(stdout);
 	BdbmPcie* pcie = BdbmPcie::getInstance();
@@ -23,6 +33,26 @@ int main(int argc, char** argv) {
 		printf( "Magic number is incorrect (0xc001d00d)\n" );
 		return -1;
 	}
+	
+	//Getting my ID
+	char hostname[32];
+	gethostname(hostname, 32);
+
+	char* userhostid = getenv("BDBM_ID");
+	if ( userhostid != NULL ) {
+			myid = atoi(userhostid);
+	}
+	else {
+		myid = atoi(hostname+strlen("bdbm"));
+		if ( strstr(hostname, "bdbm") == NULL ) {
+			myid = 1;
+		}
+	}
+
+	fprintf(stderr, "Main: myid=%d\n", myid);
+
+	//Start AuroraExt
+	auroraifc_start(myid);
 
 	timespec start;
 	timespec now;

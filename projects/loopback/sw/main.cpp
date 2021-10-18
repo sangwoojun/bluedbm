@@ -27,9 +27,10 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
+	pcie->userWriteWord(0, port); //designate input port of AuroraExt
+
 	int readCount = 0;
 	for ( int i = 0; i < 1024; i ++ ) {
-		pcie->userWriteWord(0, port);
 		int d_1 = pcie->userWriteWord(0, 0xdeadbeef);
 		if ( d_1 == 0 ) {
 			printf( "Read: %x\n", pcie->userReadWord(0) );

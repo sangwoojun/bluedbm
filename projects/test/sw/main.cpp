@@ -34,11 +34,13 @@ int main(int argc, char** argv) {
 		if ( d_1 == 0 ) {
 			printf( "Read: %x\n", pcie->userReadWord(0) );
 			readCount ++;
+			pcie->userWriteWord(0, 0xdeadbeef);
 		}
 		int d_2 = pcie->userWriteWord(0, 0xcafef00d);
 		if ( d_2 == 0 ) {
 			printf( "Read: %x\n", pcie->userReadWord(0) );
 			readCount ++;
+			pcie->userWriteWord(0, 0xcafef00d);
 		}
 	}
 

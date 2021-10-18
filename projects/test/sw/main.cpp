@@ -5,24 +5,17 @@
 #include "bdbmpcie.h"
 #include "dmasplitter.h"
 
-//------------------------------------------------------------------
-//DEFINITION of Global Vars
-//------------------------------------------------------------------
-int myid;
+static const uint32_t port = 0;
 
-//------------------------------------------------------------------
-//FUNCTIONS
-//------------------------------------------------------------------
 double timespec_diff_sec( timespec start, timespec end ) {
 	double t = end.tv_sec - start.tv_sec;
 	t += ((double)(end.tv_nsec - start.tv_nsec)/1000000000L);
 	return t;
 }
 
-//------------------------------------------------------------------
-//MAIN
-//------------------------------------------------------------------
+
 int main(int argc, char** argv) {
+
 	printf( "Software startec\n" ); fflush(stdout);
 	BdbmPcie* pcie = BdbmPcie::getInstance();
 
@@ -33,47 +26,25 @@ int main(int argc, char** argv) {
 		printf( "Magic number is incorrect (0xc001d00d)\n" );
 		return -1;
 	}
-	
-	//Getting my ID
-	char hostname[32];
-	gethostname(hostname, 32);
 
-	char* userhostid = getenv("BDBM_ID");
-	if ( userhostid != NULL ) {
-			myid = atoi(userhostid);
-	}
-	else {
-		myid = atoi(hostname+strlen("bdbm"));
-		if ( strstr(hostname, "bdbm") == NULL ) {
-			myid = 1;
+	int readCount = 0;
+	for ( int i = 0; i < 1024; i ++ ) {
+		pcie->userWriteWord(0, port);
+		int d_1 = pcie->userWriteWord(0, 0xdeadbeef);
+		if ( d_1 == 0 ) {
+			printf( "Read: %x\n", pcie->userReadWord(0) );
+			readCount ++;
+		}
+		int d_2 = pcie->userWriteWord(0, 0xcafef00d);
+		if ( d_2 == 0 ) {
+			printf( "Read: %x\n", pcie->userReadWord(0) );
+			readCount ++;
 		}
 	}
 
-	fprintf(stderr, "Main: myid=%d\n", myid);
+	for ( int i = 0; i < 1024-readCount; i ++ ) {
+		printf( "Read: %x\n", pcie->userReadWord(0) );
+	}
 
-	//Start AuroraExt
-	auroraifc_start(myid);
-
-	timespec start;
-	timespec now;
-
-	clock_gettime(CLOCK_REALTIME, & start);
-
-	pcie->userWriteWord(0, 0xdeadbeef);
-	
-	clock_gettime(CLOCK_REALTIME, & now);
-	double diff = timespec_diff_sec(start, now);
-
-	printf( "read: %x\n", pcie->userReadWord(0) );
-	printf( "Write elapsed: %f\n", diff );
-	fflush(stdout);
-
-	clock_gettime(CLOCK_REALTIME, & start);
-
-	pcie->userReadWord(0);
-	clock_gettime(CLOCK_REALTIME, & now);
-	diff = timespec_diff_sec(start, now);
-	printf( "Read elapsed: %f\n", diff );
-	
 	return 0;
 }

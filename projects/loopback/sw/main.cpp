@@ -12,6 +12,10 @@
 // AuroraExt119
 // 4 means X1Y24, 5 means X1Y25
 // 3 means X1Y26, 6 means X1Y27
+// Current Connections
+// X1Y16 <=> X1Y17
+// X1Y18 <=> X1Y24
+// X1Y19 <=> X1Y25
 
 double timespec_diff_sec( timespec start, timespec end ) {
 	double t = end.tv_sec - start.tv_sec;

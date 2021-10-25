@@ -1,5 +1,3 @@
-/*
-*/
 
 import Clocks::*;
 import ClockImport::*;
@@ -21,9 +19,9 @@ import DRAMController::*;
 
 // Aurora stuff
 import AuroraCommon::*;
-import AuroraExtImport::*;
+import AuroraExtImportCommon::*;
+import AuroraExtImport119::*;
 import AuroraExtImport117::*;
-import AuroraImportFmc1::*;
 
 import HwMain::*;
 
@@ -36,11 +34,9 @@ interface TopIfc;
 	interface DDR3_Pins_1GB pins_ddr3;
 	
 	(* always_ready *)
-	interface Vector#(AuroraExtPerQuad, Aurora_Pins#(1)) aurora_ext;
+	interface Vector#(AuroraExtPerQuad, Aurora_Pins#(1)) aurora_ext_117;
 	(* always_ready *)
-	interface Aurora_Clock_Pins aurora_quad_117;
-	(* always_ready *)
-	interface Aurora_Clock_Pins aurora_quad_119;
+	interface Vector#(AuroraExtPerQuad, Aurora_Pins#(1)) auroro_ext_119;
 endinterface
 
 (* no_default_clock, no_default_reset *)
@@ -48,12 +44,6 @@ module mkProjectTop #(
 	Clock pcie_clk_p, Clock pcie_clk_n, Clock emcclk,
 	Clock sys_clk_p, Clock sys_clk_n,
 	Reset pcie_rst_n,
-
-	Clock aurora_clk_117_gtx_clk_n_v,
-	Clock aurora_clk_117_gtx_clk_p_v,
-	Clock aurora_clk_119_gtx_clk_n_v,
-	Clock aurora_clk_119_gtx_clk_p_v
-
 	) 
 		(TopIfc);
 
@@ -85,8 +75,8 @@ module mkProjectTop #(
 
 
 	Vector#(2,AuroraExtUserIfc) auroraExts;
-	AuroraExtIfc auroraExt117 <- mkAuroraExt117(aurora_clk_117_gtx_clk_p_v, aurora_clk_117_gtx_clk_n_v, sys_clk_200mhz_buf, clocked_by user_clock, reset_by user_reset);
-	AuroraExtIfc auroraExt119 <- mkAuroraExt(aurora_clk_117_gtx_clk_p_v, aurora_clk_119_gtx_clk_n_v, sys_clk_200mhz_buf, clocked_by user_clock, reset_by user_reset);
+	AuroraExtIfc auroraExt117 <- mkAuroraExt117(sys_clk_p, sys_clk_n, user_clock, clocked_by user_clock, reset_by user_reset);
+	AuroraExtIfc auroraExt119 <- mkAuroraExt119(sys_clk_p, sys_clk_n, sys_clk_200mhz_buf, clocked_by user_clock, reset_by user_reset);
 	auroraExts[0] = auroraExt117.user;
 	auroraExts[1] = auroraExt119.user;
 
@@ -103,8 +93,8 @@ module mkProjectTop #(
 
 	interface DDR3_Pins_1GB pins_ddr3 = ddr3_ctrl.ddr3;
 	
-	interface Aurora_Clock_Pins aurora_117 = auroraExt117.aurora;
-	interface Aurora_Clock_Pins aurora_119 = auroraExt119.aurora;
+	interface Vector#(AuroraExtPerQuad, Aurora_Pins#(1))  aurora_ext_117 = auroraExt117.aurora;
+	interface Vector#(AuroraExtPerQuad, Aurora_Pins#(1))  aurora_ext_119 = auroraExt119.aurora;
 
 	method Bit#(4) led;
 		//return leddata;
@@ -121,7 +111,7 @@ module mkProjectTop_bsim (Empty);
 	DRAMControllerIfc dramController <- mkDRAMController(ddr3_ctrl_user);
 	
 	AuroraExtIfc auroraExt117 <- mkAuroraExt117(curclk, curclk, curclk);
-	AuroraExtIfc auroraExt119 <- mkAuroraExt(curclk, curclk, curclk);
+	AuroraExtIfc auroraExt119 <- mkAuroraExt119(curclk, curclk, curclk);
 	Vector#(2,AuroraExtUserIfc) auroraExts;
 	auroraExts[0] = auroraExt117.user;
 	auroraExts[1] = auroraExt119.user;

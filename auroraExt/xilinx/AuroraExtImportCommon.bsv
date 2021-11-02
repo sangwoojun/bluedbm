@@ -143,12 +143,12 @@ module mkAuroraExtImport_bsim#(Clock gtx_clk_in, Clock init_clk, Reset init_rst_
 	rule m0 if ( bdpiRecvAvailable(nodeIdx, fromInteger(i) ));
 		let d = bdpiRead(nodeIdx, fromInteger(i));
 		mirrorQ[i].enq(d);
-	   //$display( "(%t) AuroraExtImport \t\tread %x %d", $time, d, i );
+	   	//$display( "(%t) AuroraExtImport \t\tread %x %d", $time, d, i );
 	endrule
 	rule w0 if ( bdpiSendAvailable(nodeIdx, fromInteger(i)));
 		let d = writeQ[i].first;
 		if ( bdpiWrite(nodeIdx, fromInteger(i), d) ) begin
-		   //$display( "(%t) AuroraExtImport \t\twrite %x %d", $time, d, i );
+		  	//$display( "(%t) AuroraExtImport \t\twrite %x %d", $time, d, i );
 			writeQ[i].deq;
 		end
 	endrule

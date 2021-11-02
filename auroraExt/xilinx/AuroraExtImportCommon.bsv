@@ -1,9 +1,3 @@
-/***********************************
-NOTE: txdiffctrl_in in
-./aurora_64b66b_X1Y2?/example_design/gt/aurora_64b66b_X1Y2?_wrapper.v
-was changed to 1100 for higher voltage
-***********************************/
-
 package AuroraExtImportCommon;
 
 import FIFO::*;
@@ -27,26 +21,9 @@ import "BDPI" function Bool bdpiWrite(Bit#(8) nidx, Bit#(8) pidx, Bit#(64) data)
 typedef 4 AuroraExtPerQuad;
 
 typedef 64 AuroraPhysWidth;
-typedef TSub#(AuroraPhysWidth, 1) AuroraFCWidth;
+typedef TSub#(AuroraPhysWidth, 2) AuroraFCWidth;
+typedef Bit#(AuroraPhysWidth) AuroraIfcType;
 typedef Bit#(AuroraFCWidth) AuroraFC;
-
-
-// 
-typedef 5 HeaderFieldSz;
-typedef Bit#(HeaderFieldSz) HeaderField;
-typedef TMul#(HeaderFieldSz, 3) HeaderSz; // src, dst, ptype
-typedef TMul#(AuroraFCWidth, 3) PacketSz; // 128 might be a bit suboptimal...
-typedef TSub#(PacketSz, HeaderSz) PayloadSz;
-typedef Bit#(PayloadSz) Payload;
-
-typedef struct {
-	HeaderField src;
-	HeaderField dst;
-	HeaderField ptype;
-//	HeaderField bytes; // TODO so that less flits can be used if payload is smaller
-	Payload payload;
-} AuroraPacket deriving (Bits,Eq);
-
 
 interface AuroraExtIfc;
 	interface Vector#(AuroraExtPerQuad, Aurora_Pins#(1)) aurora;
@@ -55,27 +32,17 @@ interface AuroraExtIfc;
 endinterface
 
 interface AuroraExtUserIfc;
-	method Action send(AuroraPacket data);
-	method ActionValue#(AuroraPacket) receive;
-   	// method Action send(AuroraIfcType data);
-	// method ActionValue#(AuroraIfcType) receive;
-
+	method Action send(AuroraIfcType data);
+	method ActionValue#(AuroraIfcType) receive;
+   	
 	method Bit#(1) lane_up;
 	method Bit#(1) channel_up;
-	//interface Clock clk;
-	//interface Reset rst;
 endinterface
 
 
 module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock uclk, Reset urst, Integer idx) (AuroraExtUserIfc);
-	Integer recvQDepth = 200;
-	Integer windowSize = 100;
-
-	FIFO#(AuroraFC) recvQ <- mkSizedBRAMFIFO(recvQDepth);
-
-	SyncFIFOIfc#(AuroraPacket) outPacketQ <- mkSyncFIFOToCC(8, uclk, urst);
-	SyncFIFOIfc#(AuroraPacket) inPacketQ <- mkSyncFIFOFromCC(8, uclk);
-
+	Integer recvQDepth = 128;
+	Integer windowSize = 64;
 
 	Reg#(Bit#(16)) maxInFlightUp <- mkReg(0);
 	Reg#(Bit#(16)) maxInFlightDown <- mkReg(0);
@@ -83,98 +50,78 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 	Reg#(Bit#(16)) curInQDown <- mkReg(0);
 	Reg#(Bit#(16)) curSendBudgetUp <- mkReg(0);
 	Reg#(Bit#(16)) curSendBudgetDown <- mkReg(0);
-
-	FIFO#(AuroraFC) sendQ <- mkSizedFIFO(32);
-
+	
+	//-------------------------------------------------------------------------------------
+	// Rules for Sending
+	//-------------------------------------------------------------------------------------
+	SyncFIFOIfc#(AuroraIfcType) outPacketQ <- mkSyncFIFOToCC(8, uclk, urst);
+	FIFO#(AuroraIfcType) sendQ <- mkSizedFIFO(32);
 	rule sendPacket;
 		let curSendBudget = curSendBudgetUp - curSendBudgetDown;
 		if ((maxInFlightUp-maxInFlightDown)
 			+(curInQUp-curInQDown)
 			+fromInteger(windowSize) < fromInteger(recvQDepth)) begin
 		
-			//flowControlQ.enq(fromInteger(windowSize));
-			user.send({fromInteger(windowSize),1'b1});
+			user.send({fromInteger(windowSize), 2'b01});
 			maxInFlightUp <= maxInFlightUp + fromInteger(windowSize);
 		end else if ( curSendBudget > 0 ) begin
 			sendQ.deq;
-			user.send({sendQ.first, 1'b0});
+			user.send(sendQ.first);
 			curSendBudgetDown <= curSendBudgetDown + 1;
 		end
 	endrule
 
-	rule recvPacket;
-		let d <- user.receive;
-	   //$display( "(%t) %m, AuroraExtFlowControl idx = %d, received %x", $time, idx, d );
-		Bit#(1) control = d[0];
-		AuroraFC data = truncate(d>>1);
-
-		if ( control == 1 ) begin
-			curSendBudgetUp <= curSendBudgetUp + truncate(data);
-		end else begin
-			recvQ.enq(data);
-			curInQUp <= curInQUp + 1;
-			maxInFlightDown <= maxInFlightDown + 1;
-		end
-	endrule
-
-	// Flow control end
-	//////////////////////////////////////////////////// TODO maybe separate gearbox into separate module?
-	// Gearbox start
-
-	Integer headInternalOffset = valueOf(AuroraFCWidth) - valueOf(HeaderSz);
-
-	Reg#(Bit#(2)) outPacketOffset <- mkReg(0);
-	Reg#(Bit#(2)) inPacketOffset <- mkReg(0);
-	Vector#(3, Reg#(AuroraFC)) vOutFlits <- replicateM(mkReg(0)); 
-	Reg#(AuroraPacket) inPacketBuffer <- mkReg(?);
-
+	Reg#(Maybe#(AuroraFC)) outPacketBuffer <- mkReg(tagged Invalid);
 	rule serOutPacket;
-		if ( outPacketOffset == 0 ) begin
+		if ( isValid(outPacketBuffer) ) begin
+			let d = fromMaybe(?, outPacketBuffer);
+			outPacketBuffer <= tagged Invalid;
+			sendQ.enq({d, 2'b10});
+		end else begin
 			outPacketQ.deq;
 			let d = outPacketQ.first;
-			AuroraFC d1 = {truncate(d.payload), d.ptype, d.dst, d.src};
-			AuroraFC d2 = truncate(d.payload>>headInternalOffset);
-			AuroraFC d3 = truncate(d.payload>>(headInternalOffset+valueOf(AuroraFCWidth)));
-			vOutFlits[0] <= d1; vOutFlits[1] <= d2; vOutFlits[2] <= d3;
-			sendQ.enq(d1);
-			outPacketOffset <= 1;
-		end
-		else if ( outPacketOffset == 1 ) begin
-			sendQ.enq(vOutFlits[1]);
-			outPacketOffset <= 2;
-		end else begin
-			sendQ.enq(vOutFlits[2]);
-			outPacketOffset <= 0;
+			outPacketBuffer <= tagged Valid truncate(d>>valueof(AuroraFCWidth));
+			sendQ.enq({truncate(d), 2'b00});
 		end
 	endrule
 
+	//-------------------------------------------------------------------------------------
+	// Rules for receiving
+	//-------------------------------------------------------------------------------------
+	SyncFIFOIfc#(AuroraIfcType) inPacketQ <- mkSyncFIFOFromCC(8, uclk);
+	FIFO#(AuroraIfcType) recvQ <- mkSizedBRAMFIFO(recvQDepth);
+	Reg#(AuroraFC) inPacketBuffer <- mkReg(0);
+	rule recvPacket;
+		let d <- user.receive;
+	   	//$display( "(%t) %m, AuroraExtFlowControl idx = %d, received %x", $time, idx, d );
+		Bit#(1) control = d[0];
+		Bit#(1) header = d[1];
+		AuroraFC curData = truncateLSB(d);
+
+		if ( control == 1 ) begin
+			curSendBudgetUp <= curSendBudgetUp + truncate(curData);
+		end else begin 
+			if ( header == 1 ) begin
+				let pasData = inPacketBuffer;
+				recvQ.enq({curData, pasData});
+				curInQUp <= curInQUp + 1;
+				maxInFlightDown <= maxInFlightDown + 1;
+			end else begin
+				inPacketBuffer <= curData;
+			end
+		end
+	endrule
+ 
 	rule desInPacket;
 		curInQDown <= curInQDown + 1;
 		recvQ.deq;
-
-		let d = recvQ.first;
-		if ( inPacketOffset == 0 ) begin
-			inPacketOffset <= 1;
-			HeaderField src = truncate(d);
-			HeaderField dst = truncate(d>>valueOf(HeaderFieldSz));
-			HeaderField ptype = truncate(d>>(valueOf(HeaderFieldSz)*2));
-			Bit#(TSub#(AuroraFCWidth, HeaderSz)) payload = truncate(d>>(valueOf(HeaderFieldSz)*3));
-			inPacketBuffer <= AuroraPacket{src: src, dst:dst, ptype:ptype, payload: zeroExtend(payload)};
-		end else if ( inPacketOffset == 1 ) begin
-			inPacketOffset <= 2;
-			Payload t = inPacketBuffer.payload | (zeroExtend(d) <<headInternalOffset);
-			inPacketBuffer <= AuroraPacket{src: inPacketBuffer.src, dst:inPacketBuffer.dst, ptype:inPacketBuffer.ptype, payload: t};
-		end else begin
-			inPacketOffset <= 0;
-			Payload t = inPacketBuffer.payload | (zeroExtend(d) <<(headInternalOffset+valueOf(AuroraFCWidth)));
-			inPacketQ.enq(AuroraPacket{src: inPacketBuffer.src, dst:inPacketBuffer.dst, ptype:inPacketBuffer.ptype, payload: t});
-		end
+		inPacketQ.enq(recvQ.first);
 	endrule
 	
-	method Action send(AuroraPacket data);
+	method Action send(AuroraIfcType data);
 		outPacketQ.enq(data);
 	endmethod
-	method ActionValue#(AuroraPacket) receive;
+	method ActionValue#(AuroraIfcType) receive;
 		inPacketQ.deq;
 		return inPacketQ.first;
 	endmethod

@@ -9,7 +9,6 @@ import DefaultValue :: *;
 
 import AuroraExtImportCommon::*;
 import AuroraCommon::*;
-import AuroraExtGearbox::*;
 
 (* synthesize *)
 module mkAuroraExt119#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk50) (AuroraExtIfc);
@@ -20,9 +19,9 @@ module mkAuroraExt119#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk50) (AuroraExt
 	//Clock clk50 = auroraExtClockDiv5.slowClock;
 	Reset rst50 <- mkAsyncReset(2, defaultReset, clk50);
 
-	ClockGenIfc clk_200mhz_import <- mkClockIBUFDS_GTE2Import(gtx_clk_p, gtx_clk_n);
+	ClockGenIfc clk_200mhz_import <- mkClockIBUFDSImport(gtx_clk_p, gtx_clk_n);
 	Clock gtx_clk_200mhz = clk_200mhz_import.gen_clk;
-	Clock auroraExt_gtx_clk_i = gtx_clk_200mhz;
+	Clock auroraExt_gtx_clk = gtx_clk_200mhz;
 
 	MakeResetIfc rstgtpifc2 <- mkReset(8, True, auroraExt_gtx_clk);
 	Reset rstgtp = rstgtpifc2.new_rst;

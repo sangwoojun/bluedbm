@@ -11,32 +11,24 @@ import AuroraExtImportCommon::*;
 import AuroraCommon::*;
 
 (* synthesize *)
-module mkAuroraExt119#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk50) (AuroraExtIfc);
+module mkAuroraExt119#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk200) (AuroraExtIfc);
 	Reset defaultReset <- exposeCurrentReset;
 	Clock defaultClock <- exposeCurrentClock;
 `ifndef BSIM
-	//ClockDividerIfc auroraExtClockDiv5 <- mkDCMClockDivider(5, 4, clocked_by clk250);
-	//Clock clk50 = auroraExtClockDiv5.slowClock;
-	Reset rst50 <- mkAsyncReset(2, defaultReset, clk50);
+	ClockDividerIfc auroraExtClockDiv4 <- mkDCMClockDivider(4, 4, clocked_by clk200);
+	Clock clk50 = auroraExtClockDiv4.slowClock;
 
-	ClockGenIfc clk_200mhz_import <- mkClockIBUFDSImport(gtx_clk_p, gtx_clk_n);
+	MakeResetIfc rst50ifc2 <- mkReset(8, True, clk50);
+	Reset rst50 <- mkAsyncReset(2, defaultReset, clk50);
+	Reset rst50_2 = rst50ifc2.new_rst;
+
+	ClockGenIfc clk_200mhz_import <- mkClockIBUFDS_GTE2Import(gtx_clk_p, gtx_clk_n);
 	Clock gtx_clk_200mhz = clk_200mhz_import.gen_clk;
 	Clock auroraExt_gtx_clk = gtx_clk_200mhz;
 
-	MakeResetIfc rstgtpifc2 <- mkReset(8, True, auroraExt_gtx_clk);
-	Reset rstgtp = rstgtpifc2.new_rst;
-	AuroraExtImportIfc#(AuroraExtPerQuad) auroraExtImport <- mkAuroraExtImport119(auroraExt_gtx_clk, clk50, rst50, rstgtp);
+	AuroraExtImportIfc#(AuroraExtPerQuad) auroraExtImport <- mkAuroraExtImport119(auroraExt_gtx_clk, clk50, rst50, rst50_2);
 `else
-	Clock clk_aurora_user <- mkAbsoluteClock(0, 8);
-   	Reset rst_aurora_user <- mkSyncResetFromCR(3, clk_aurora_user);
-
-	AuroraExtImportIfc#(AuroraExtPerQuad) auroraExtImport <- mkAuroraExtImport_bsim(defaultClock, defaultClock, defaultReset, defaultReset, 
-		clocked_by clk_aurora_user, reset_by rst_aurora_user);
-   	SyncFIFOIfc#(HeaderField) nodeIdxQ <- mkSyncFIFOFromCC(8, clk_aurora_user);
-   	rule doSetIdx;
-      		let idx <- toGet(nodeIdxQ).get();
-      		auroraExtImport.setNodeIdx(zeroExtend(idx));
-   	endrule
+	AuroraExtImportIfc#(AuroraExtPerQuad) auroraExtImport <- mkAuroraExtImport_bsim(defaultClock, defaultClock, defaultReset, defaultReset);
 `endif
 
 	Vector#(AuroraExtPerQuad, AuroraExtUserIfc) auroraExt;
@@ -72,12 +64,10 @@ module mkAuroraExt119#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk50) (AuroraExt
 	Vector#(AuroraExtPerQuad, AuroraExtUserIfc) userifcs;
 	for ( Integer idx = 0; idx < valueOf(AuroraExtPerQuad); idx = idx + 1 ) begin
 		userifcs[idx] = interface AuroraExtUserIfc;
-					method Action send(AuroraPacket data);
-                                   	//method Action send(AuroraIfcType data);
+					method Action send(AuroraIfcType data);
 				      		auroraExt[idx].send(data);
 			           	endmethod
-	                           	method ActionValue#(AuroraPacket) receive;
-                                   	//method ActionValue#(Aurora) receive;
+	                           	method ActionValue#(AuroraIfcType) receive;
 						let d <- auroraExt[idx].receive;
                       	   			//$display( "(%t) %m, AuroraExt[%d] received %x", $time, idx, d );
 						return d;
@@ -88,12 +78,6 @@ module mkAuroraExt119#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk50) (AuroraExt
 	end
 	interface user = userifcs;
 	interface Vector aurora = auroraPins;
-	method Action setNodeIdx(HeaderField idx);
-		`ifdef BSIM
-	   	//auroraExtImport.setNodeIdx(zeroExtend(idx));
-           	nodeIdxQ.enq(zeroExtend(idx));
-		`endif
-	endmethod
 endmodule
 
 

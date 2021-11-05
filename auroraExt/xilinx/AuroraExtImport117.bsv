@@ -7,28 +7,28 @@ import Clocks :: *;
 import ClockImport :: *;
 import DefaultValue :: *;
 
-import AuroraExtImportCommon::*;
 import AuroraCommon::*;
+import AuroraExtImportCommon::*;
 
 (* synthesize *)
-module mkAuroraExt117#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk50) (AuroraExtIfc);
+module mkAuroraExt117#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk200) (AuroraExtIfc);
 	Reset defaultReset <- exposeCurrentReset;
 	Clock defaultClock <- exposeCurrentClock;
 `ifndef BSIM
-	//ClockDividerIfc auroraExtClockDiv5 <- mkDCMClockDivider(5, 4, clocked_by clk250);
-	//Clock clk50 = auroraExtClockDiv5.slowClock;
+	ClockDividerIfc auroraExtClockDiv4 <- mkDCMClockDivider(4, 4, clocked_by clk200);
+	Clock clk50 = auroraExtClockDiv4.slowClock;
+
+	MakeResetIfc rst50ifc2 <- mkReset(8, True, clk50)
 	Reset rst50 <- mkAsyncReset(2, defaultReset, clk50);
-	MakeResetIfc rst50ifc2 <- mkReset(8, True, clk50);
-	Reset rst50_2 = rst50ifc2.new_rst;
-	//Reset rst50_2 <- mkAsyncReset(2, defaultReset, clk50);
-	ClockGenIfc clk_200mhz_import <- mkClockIBUFDSImport(gtx_clk_p, gtx_clk_n);
+	Reset rst50_2 <- rst50ifc2.new_rst;
+	
+	ClockGenIfc clk_200mhz_import <- mkClockIBUFDS_GTE2Import(gtx_clk_p, gtx_clk_n);
 	Clock gtx_clk_200mhz = clk_200mhz_import.gen_clk;
 	Clock auroraExt_gtx_clk = gtx_clk_200mhz;
 
 	AuroraExtImportIfc#(AuroraExtPerQuad) auroraExtImport <- mkAuroraExtImport117(auroraExt_gtx_clk, clk50, rst50, rst50_2);
 `else
 	AuroraExtImportIfc#(AuroraExtPerQuad) auroraExtImport <- mkAuroraExtImport_bsim(defaultClock, defaultClock, defaultReset, defaultReset);
-
 `endif
 	Vector#(AuroraExtPerQuad, AuroraExtUserIfc) auroraExt;
    	Vector#(AuroraExtPerQuad, Aurora_Pins#(1)) auroraPins;
@@ -53,16 +53,16 @@ module mkAuroraExt117#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk50) (AuroraExt
 	Vector#(AuroraExtPerQuad, AuroraExtUserIfc) userifcs;
 	for ( Integer idx = 0; idx < valueOf(AuroraExtPerQuad); idx = idx + 1 ) begin
 		userifcs[idx] = interface AuroraExtUserIfc;
-			method Action send(AuroraIfcType data);
-				auroraExt[idx].send(data);
-			endmethod
-			method ActionValue#(AuroraIfcType) receive;
-				let d <- auroraExt[idx].receive;
-				return d;
-			endmethod
-			method Bit#(1) lane_up = auroraExt[idx].lane_up;
-			method Bit#(1) channel_up = auroraExt[idx].channel_up;
-		endinterface: AuroraExtUserIfc;
+					method Action send(AuroraIfcType data);
+						auroraExt[idx].send(data);
+					endmethod
+					method ActionValue#(AuroraIfcType) receive;
+						let d <- auroraExt[idx].receive;
+						return d;
+					endmethod
+					method Bit#(1) lane_up = auroraExt[idx].lane_up;
+					method Bit#(1) channel_up = auroraExt[idx].channel_up;
+				endinterface: AuroraExtUserIfc;
 	end
 	interface user = userifcs;
 	interface Vector aurora = auroraPins;

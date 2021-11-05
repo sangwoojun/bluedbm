@@ -27,11 +27,11 @@ typedef Bit#(AuroraFCWidth) AuroraFC;
 
 typedef struct {
 	Bit#(1) inQuad;
-	Bit#(1) outQuad;
 	Bit#(3) inPort;
+	Bit#(1) outQuad;
 	Bit#(3) outPort;
 	AuroraIfcType payload;
-} AuroraPack deriving (Bits, Eq);
+} AuroraPacket deriving (Bits, Eq);
 
 interface AuroraExtIfc;
 	interface Vector#(AuroraExtPerQuad, Aurora_Pins#(1)) aurora;

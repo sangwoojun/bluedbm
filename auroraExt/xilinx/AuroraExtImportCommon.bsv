@@ -25,6 +25,14 @@ typedef TSub#(AuroraPhysWidth, 2) AuroraFCWidth;
 typedef Bit#(AuroraPhysWidth) AuroraIfcType;
 typedef Bit#(AuroraFCWidth) AuroraFC;
 
+typedef struct {
+	Bit#(1) inQuad;
+	Bit#(1) outQuad;
+	Bit#(3) inPort;
+	Bit#(3) outPort;
+	AuroraIfcType payload;
+} AuroraPack deriving (Bits, Eq);
+
 interface AuroraExtIfc;
 	interface Vector#(AuroraExtPerQuad, Aurora_Pins#(1)) aurora;
 	interface Vector#(AuroraExtPerQuad, AuroraExtUserIfc) user;

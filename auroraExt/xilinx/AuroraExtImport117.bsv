@@ -15,7 +15,7 @@ module mkAuroraExt117#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk200) (AuroraEx
 	Reset defaultReset <- exposeCurrentReset;
 	Clock defaultClock <- exposeCurrentClock;
 `ifndef BSIM
-	ClockDividerIfc auroraExtClockDiv4 <- mkDCMClockDivider(4, 4, clocked_by clk200);
+	ClockDividerIfc auroraExtClockDiv4 <- mkDCMClockDivider(4, 5, clocked_by clk200);
 	Clock clk50 = auroraExtClockDiv4.slowClock;
 
 	MakeResetIfc rst50ifc2 <- mkReset(8, True, clk50)

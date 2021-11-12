@@ -37,27 +37,15 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
-	pcie->userWriteWord(0, PORT); //designate input port of AuroraExt
+	pcie->userWriteWord(0, 0); //designate input port of AuroraExt
+	printf( "Send port number\n" );
+	fflush(stdout);
 
-	int readCount = 0;
-	for ( int i = 0; i < 1024; i ++ ) {
-		int d_1 = pcie->userWriteWord(1, 0xdeadbeef);
-		if ( d_1 == 0 ) {
-			printf( "Read: %x\n", pcie->userReadWord(0) );
-			readCount ++;
-			pcie->userWriteWord(1, 0xdeadbeef);
-		}
-		int d_2 = pcie->userWriteWord(1, 0xcafef00d);
-		if ( d_2 == 0 ) {
-			printf( "Read: %x\n", pcie->userReadWord(0) );
-			readCount ++;
-			pcie->userWriteWord(1, 0xcafef00d);
-		}
-	}
+	pcie->userWriteWord(1, 0xdeadbeef);
+	pcie->userWriteWord(1, 0xcafef00d);
 
-	for ( int i = 0; i < 1024-readCount; i ++ ) {
-		printf( "Read: %x\n", pcie->userReadWord(0) );
-	}
-
+	printf( "Read(1/2): %x\n", pcie->userReadWord(0) );
+	printf( "Read(2/2): %x\n", pcie->userReadWord(0) );
+	
 	return 0;
 }

@@ -21,6 +21,7 @@ import AuroraCommon::*;
 import AuroraExtImportCommon::*;
 import AuroraExtImport119::*;
 import AuroraExtImport117::*;
+import XilinxCells::*;
 
 import HwMain::*;
 
@@ -70,12 +71,15 @@ module mkProjectTop #(
 	Clock user_clock = sys_clk_200mhz_buf;
 	Reset user_reset = rst200;
 
+	ClockDividerIfc auroraExtClockDiv4 <- mkDCMClockDivider(4, 5, clocked_by user_clock);
+	Clock clk50 = auroraExtClockDiv4.slowClock;
 
-	AuroraExtIfc auroraQuad117 <- mkAuroraExt117(aurora_117_gtx_clk_p, aurora_117_gtx_clk_n, user_clock, clocked_by user_clock, reset_by user_reset);
-	AuroraExtIfc auroraQuad119 <- mkAuroraExt119(aurora_119_gtx_clk_p, aurora_119_gtx_clk_n, user_clock, clocked_by user_clock, reset_by user_reset);
+	Vector#(2, AuroraExtIfc) auroraQuad;
+	auroraQuad[0] <- mkAuroraExt117(aurora_117_gtx_clk_p, aurora_117_gtx_clk_n, clk50, clocked_by user_clock, reset_by user_reset);
+	auroraQuad[1] <- mkAuroraExt119(aurora_119_gtx_clk_p, aurora_119_gtx_clk_n, clk50, clocked_by user_clock, reset_by user_reset);
 
 
-	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, dramController.user, auroraQuad117, auroraQuad119, clocked_by user_clock, reset_by user_reset);
+	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, dramController.user, auroraQuad, clocked_by user_clock, reset_by user_reset);
 
 
 	//ReadOnly#(Bit#(4)) leddata <- mkNullCrossingWire(noClock, pcieCtrl.leds);
@@ -98,10 +102,31 @@ module mkProjectTop_bsim (Empty);
 	
 	let ddr3_ctrl_user <- mkDDR3Simulator;
 	DRAMControllerIfc dramController <- mkDRAMController(ddr3_ctrl_user);
+
+	Vector#(2, AuroraExtIfc) auroraQuads;
+	auroraQuads[0] <- mkAuroraExt117(curclk, curclk, curclk);
+	auroraQuads[1] <- mkAuroraExt119(curclk, curclk, curclk);
 	
-	AuroraExtIfc auroraQuad117 <- mkAuroraExt117(curclk, curclk, curclk);
-	AuroraExtIfc auroraQuad119 <- mkAuroraExt119(curclk, curclk, curclk);
+	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, dramController.user, auroraQuads);
 	
-	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, dramController.user, auroraQuad117, auroraQuad119);
-	
+	rule auroraExtAlwaysEn;
+		auroraQuads[0].aurora[0].rxn_in(1);
+		auroraQuads[0].aurora[0].rxp_in(1);
+		auroraQuads[0].aurora[1].rxn_in(1);
+		auroraQuads[0].aurora[1].rxp_in(1);
+		auroraQuads[0].aurora[2].rxn_in(1);
+		auroraQuads[0].aurora[2].rxp_in(1);
+		auroraQuads[0].aurora[3].rxn_in(1);
+		auroraQuads[0].aurora[3].rxp_in(1);
+
+		auroraQuads[1].aurora[0].rxn_in(1);
+		auroraQuads[1].aurora[0].rxp_in(1);
+		auroraQuads[1].aurora[1].rxn_in(1);
+		auroraQuads[1].aurora[1].rxp_in(1);
+		auroraQuads[1].aurora[2].rxn_in(1);
+		auroraQuads[1].aurora[2].rxp_in(1);
+		auroraQuads[1].aurora[3].rxn_in(1);
+		auroraQuads[1].aurora[3].rxp_in(1);
+
+	endrule	
 endmodule

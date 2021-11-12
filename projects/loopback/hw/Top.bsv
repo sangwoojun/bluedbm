@@ -71,8 +71,8 @@ module mkProjectTop #(
 	Reset user_reset = rst200;
 
 	Vector#(2, AuroraExtIfc) auroraQuad;
-	auroraQuad[0] <- mkAuroraExt117(aurora_117_gtx_clk_p, aurora_117_gtx_clk_n, clk200, clocked_by user_clock, reset_by user_reset);
-	auroraQuad[1] <- mkAuroraExt119(aurora_119_gtx_clk_p, aurora_119_gtx_clk_n, clk200, clocked_by user_clock, reset_by user_reset);
+	auroraQuad[0] <- mkAuroraExt117(aurora_117_gtx_clk_p, aurora_117_gtx_clk_n, user_clock, clocked_by user_clock, reset_by user_reset);
+	auroraQuad[1] <- mkAuroraExt119(aurora_119_gtx_clk_p, aurora_119_gtx_clk_n, user_clock, clocked_by user_clock, reset_by user_reset);
 
 
 	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, dramController.user, auroraQuad, clocked_by user_clock, reset_by user_reset);

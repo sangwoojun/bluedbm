@@ -10,21 +10,38 @@ import DefaultValue :: *;
 import AuroraCommon::*;
 import AuroraExtImportCommon::*;
 
-import XilinxCells::*;
+interface ClockDiv4Ifc;
+	interface Clock slowClock;
+endinterface
+(* synthesize *)
+module mkClockDiv4#(Clock fastClock) (ClockDiv4Ifc);
+	MakeResetIfc fastReset <- mkReset(8, True, fastClock);
+	ClockDividerIfc clockdiv4 <- mkClockDivider(4, clocked_by fastClock, reset_by fastReset.new_rst);
+
+	interface slowClock = clockdiv4.slowClock;
+endmodule
 
 (* synthesize *)
-module mkAuroraExt117#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk50) (AuroraExtIfc);
+module mkAuroraExt117#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk200) (AuroraExtIfc);
 	Reset defaultReset <- exposeCurrentReset;
 	Clock defaultClock <- exposeCurrentClock;
 `ifndef BSIM
 	//ClockDividerIfc auroraExtClockDiv4 <- mkDCMClockDivider(4, 5, clocked_by clk200);
 	//Clock clk50 = auroraExtClockDiv4.slowClock;
-	Reset rst50 <- mkAsyncReset(2, defaultReset, clk50);
-	
+	ClockDiv4Ifc auroraExt117ClockDiv <- mkClockDiv4(clk200);
+	Clock clk50 = auroraExt117ClockDiv.slowClock;
+
 	ClockGenIfc clk_200mhz_import <- mkClockIBUFDS_GTE2Import(gtx_clk_p, gtx_clk_n);
 	Clock gtx_clk_200mhz = clk_200mhz_import.gen_clk;
 	Clock auroraExt_gtx_clk = gtx_clk_200mhz;
-	
+
+	MakeResetIfc rst50ifc <- mkReset(8, True, clk50);
+	MakeResetIfc rst50ifc2 <- mkReset(16384, True, clk50);
+	Reset rst50 <- mkAsyncReset(2, defaultReset, clk50);
+	Reset rst50_2 = rst50ifc.new_rst;
+	Reset rst50_3 = rst50ifc2.new_rst;
+	Reset rst50_3a <- mkAsyncReset(2, rst50_3, clk50);
+		
 	MakeResetIfc rstgtpifc2 <- mkReset(8, True, auroraExt_gtx_clk);
 	Reset rstgtp = rstgtpifc2.new_rst;
 

@@ -21,7 +21,6 @@ import AuroraCommon::*;
 import AuroraExtImportCommon::*;
 import AuroraExtImport119::*;
 import AuroraExtImport117::*;
-import XilinxCells::*;
 
 import HwMain::*;
 
@@ -71,12 +70,9 @@ module mkProjectTop #(
 	Clock user_clock = sys_clk_200mhz_buf;
 	Reset user_reset = rst200;
 
-	ClockDividerIfc auroraExtClockDiv4 <- mkDCMClockDivider(4, 5, clocked_by user_clock);
-	Clock clk50 = auroraExtClockDiv4.slowClock;
-
 	Vector#(2, AuroraExtIfc) auroraQuad;
-	auroraQuad[0] <- mkAuroraExt117(aurora_117_gtx_clk_p, aurora_117_gtx_clk_n, clk50, clocked_by user_clock, reset_by user_reset);
-	auroraQuad[1] <- mkAuroraExt119(aurora_119_gtx_clk_p, aurora_119_gtx_clk_n, clk50, clocked_by user_clock, reset_by user_reset);
+	auroraQuad[0] <- mkAuroraExt117(aurora_117_gtx_clk_p, aurora_117_gtx_clk_n, clk200, clocked_by user_clock, reset_by user_reset);
+	auroraQuad[1] <- mkAuroraExt119(aurora_119_gtx_clk_p, aurora_119_gtx_clk_n, clk200, clocked_by user_clock, reset_by user_reset);
 
 
 	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, dramController.user, auroraQuad, clocked_by user_clock, reset_by user_reset);

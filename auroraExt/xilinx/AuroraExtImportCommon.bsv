@@ -43,18 +43,18 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 	Integer recvQDepth = 128;
 	Integer windowSize = 64;
 
-	Reg#(Bit#(16)) maxInFlightUp <- mkReg(0, clocked_by uclk, reset_by urst);
-	Reg#(Bit#(16)) maxInFlightDown <- mkReg(0, clocked_by uclk, reset_by urst);
-	Reg#(Bit#(16)) curInQUp <- mkReg(0, clocked_by uclk, reset_by urst);
-	Reg#(Bit#(16)) curInQDown <- mkReg(0, clocked_by uclk, reset_by urst);
-	Reg#(Bit#(16)) curSendBudgetUp <- mkReg(0, clocked_by uclk, reset_by urst);
-	Reg#(Bit#(16)) curSendBudgetDown <- mkReg(0, clocked_by uclk, reset_by urst);
+	Reg#(Bit#(16)) maxInFlightUp <- mkReg(0);
+	Reg#(Bit#(16)) maxInFlightDown <- mkReg(0);
+	Reg#(Bit#(16)) curInQUp <- mkReg(0);
+	Reg#(Bit#(16)) curInQDown <- mkReg(0);
+	Reg#(Bit#(16)) curSendBudgetUp <- mkReg(0);
+	Reg#(Bit#(16)) curSendBudgetDown <- mkReg(0);
 	
 	//-------------------------------------------------------------------------------------
 	// Rules for Sending
 	//-------------------------------------------------------------------------------------
-	SyncFIFOIfc#(AuroraIfcType) outPacketQ <- mkSyncFIFOToCC(2, uclk, urst);
-	FIFO#(AuroraIfcType) sendQ <- mkSizedFIFO(32, clocked_by uclk, reset_by urst);
+	SyncFIFOIfc#(AuroraIfcType) outPacketQ <- mkSyncFIFOToCC(8, uclk, urst);
+	FIFO#(AuroraIfcType) sendQ <- mkSizedFIFO(32);
 	rule sendPacket;
 		let curSendBudget = curSendBudgetUp - curSendBudgetDown;
 		if ((maxInFlightUp-maxInFlightDown)
@@ -70,7 +70,7 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 		end
 	endrule
 
-	Reg#(Maybe#(AuroraFC)) outPacketBuffer <- mkReg(tagged Invalid, clocked_by uclk, reset_by urst);
+	Reg#(Maybe#(AuroraFC)) outPacketBuffer <- mkReg(tagged Invalid);
 	rule serOutPacket;
 		if ( isValid(outPacketBuffer) ) begin
 			let d = fromMaybe(?, outPacketBuffer);
@@ -87,9 +87,9 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 	//-------------------------------------------------------------------------------------
 	// Rules for receiving
 	//-------------------------------------------------------------------------------------
-	SyncFIFOIfc#(AuroraIfcType) inPacketQ <- mkSyncFIFOFromCC(4, uclk);
-	FIFO#(AuroraIfcType) recvQ <- mkSizedBRAMFIFO(recvQDepth, clocked_by uclk, reset_by urst);
-	Reg#(AuroraFC) inPacketBuffer <- mkReg(0, clocked_by uclk, reset_by urst);
+	SyncFIFOIfc#(AuroraIfcType) inPacketQ <- mkSyncFIFOFromCC(8, uclk);
+	FIFO#(AuroraIfcType) recvQ <- mkSizedBRAMFIFO(recvQDepth);
+	Reg#(AuroraFC) inPacketBuffer <- mkReg(0);
 	rule recvPacket;
 		let d <- user.receive;
 	   	//$display( "(%t) %m, AuroraExtFlowControl idx = %d, received %x", $time, idx, d );

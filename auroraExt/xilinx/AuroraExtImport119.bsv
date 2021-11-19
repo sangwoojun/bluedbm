@@ -10,6 +10,8 @@ import DefaultValue :: *;
 import AuroraExtImportCommon::*;
 import AuroraCommon::*;
 
+import XilinxCells::*;
+
 interface ClockDiv4Ifc;
 	interface Clock slowClock;
 endinterface
@@ -69,15 +71,15 @@ module mkAuroraExt119#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk200) (AuroraEx
 
 	auroraExt[0] <- mkAuroraExtFlowControl(auroraExtImport.user0
 		, defaultClock, defaultReset, 0
-		, clocked_by auroraClk[0], reset_by auroraRst[0] );
+	       	, clocked_by auroraClk[0], reset_by auroraRst[0] );
 	auroraExt[1] <- mkAuroraExtFlowControl(auroraExtImport.user1
 		, defaultClock, defaultReset, 1
-		, clocked_by auroraClk[1], reset_by auroraRst[1] );
+	       	, clocked_by auroraClk[1], reset_by auroraRst[1] );
 	auroraExt[2] <- mkAuroraExtFlowControl(auroraExtImport.user2
 		, defaultClock, defaultReset, 2
 		, clocked_by auroraClk[2], reset_by auroraRst[2] );
 	auroraExt[3] <- mkAuroraExtFlowControl(auroraExtImport.user3
-		, defaultClock, defaultReset, 3
+		, defaultClock, defaultReset, 3 
 		, clocked_by auroraClk[3], reset_by auroraRst[3] );
 
 	Vector#(AuroraExtPerQuad, AuroraExtUserIfc) userifcs;

@@ -43,45 +43,56 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		let w <- pcie.dataReceive;
 		let d = w.data;
 		let a = w.addr;
-		$display( "Data received: %x", d );
-		if ( a == 0 ) begin
+
+		if ( a == 0 ) begin // command
 			case ( d ) matches
 				{ 0 } : begin 
 					inQuad <= 0;
 					inPort <= 0;
 					outQuad <= 0;
 					outPort <= 1;
-					$display( "Designating port done!" );
+					$display( "Designating input port done as X1Y16!" );
+					$display( "Output port should be X1Y17" );
 					end
 				{ 1 } : begin
 					inQuad <= 0;
 					inPort <= 1;
 					outQuad <= 0;
 					outPort <= 0;
+					$display( "Designating input port done as X1Y17" );
+					$display( "Output port should be X1Y16" );
 					end
 				{ 2 } : begin
 					inQuad <= 0;
 					inPort <= 2;
 					outQuad <= 1;
 					outPort <= 0;
+					$display( "Designating input port done as X1Y18" );
+					$display( "Output port should be X1Y24" );
 					end
 				{ 3 } : begin
 					inQuad <= 0;
 					inPort <= 3;
 					outQuad <= 1;
 					outPort <= 1;
+					$display( "Designating input port done as X1Y19" );
+					$display( "Output port should be X1Y25" );
 					end
 				{ 4 } : begin
 					inQuad <= 1;
 					inPort <= 0;
 					outQuad <= 0;
 					outPort <= 2;
+					$display( "Designating input port done as X1Y24" );
+					$display( "Output port should be X1Y18" );
 					end
 				{ 5 } : begin
 					inQuad <= 1;
 					inPort <= 1;
 					outQuad <= 0;
 					outPort <= 3;
+					$display( "Designating input port done as X1Y25" );
+					$display( "Output port should be X1Y19" );
 					end
 			endcase
 		end else begin
@@ -92,7 +103,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				AuroraIfcType inPayload = (inPayloadBuffer<<32)|zeroExtend(d);		
 				inputPortQ.enq(inPayload);
 				inPayloadBufferCnt <= 0;
-				$display( "Enqing data: %x", inPayload );
 			end
 		end
 	endrule
@@ -106,7 +116,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	rule recvPacket;
 		let d <- auroraQuads[inQuad].user[inPort].receive;
 		outputPortQ.enq(d);
-		$display( "Received data: %x", d );
 	endrule
 
 	rule echoRead;

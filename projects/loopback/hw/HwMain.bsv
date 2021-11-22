@@ -27,20 +27,25 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	Clock pcieclk = pcie.user_clk;
 	Reset pcierst = pcie.user_rst;
 
-	SyncFIFOIfc#(AuroraIfcType) inputPortQ <- mkSyncFIFOToCC(32, pcieclk, pcierst);
-	SyncFIFOIfc#(AuroraIfcType) outputPortQ <- mkSyncFIFOToCC(32, pcieclk, pcierst);
-
-	Reg#(AuroraIfcType) inPayloadBuffer <- mkReg(0);
-	Reg#(Bit#(32)) outPayloadBuffer <- mkReg(0);
 	Reg#(Bit#(1)) inQuad <- mkReg(0);
 	Reg#(Bit#(3)) inPort <- mkReg(0);
 	Reg#(Bit#(1)) outQuad <- mkReg(0);
 	Reg#(Bit#(3)) outPort <- mkReg(0);
+	//--------------------------------------------------------------------------------------------
+	//Write Request
+	//--------------------------------------------------------------------------------------------
+	SyncFIFOIfc#(IOWrite) pcieWriteQ <- mkSyncFIFOToCC(16, pcieclk, pcierst);
+	FIFO#(AuroraIfcType) inputPortQ <- mkFIFO;
+	Reg#(AuroraIfcType) inPayloadBuffer <- mkReg(0);
 	Reg#(Bit#(1)) inPayloadBufferCnt <- mkReg(0);
-	Reg#(Bit#(1)) outPayloadBufferCnt <- mkReg(0);
-	
-	rule recvWrite;
+	rule getWriteReq;
 		let w <- pcie.dataReceive;
+		pcieWriteQ.enq(w);
+	endrule
+	rule getCmd;
+		pcieWriteQ.deq;
+		let w = pcieWriteQ.first;
+
 		let d = w.data;
 		let a = w.addr;
 
@@ -106,30 +111,47 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			end
 		end
 	endrule
-	
-	rule relayInput;
+	rule relayPayload;
 		inputPortQ.deq;
 		let d = inputPortQ.first;
 		auroraQuads[inQuad].user[inPort].send(d);
 	endrule
-	
-	rule recvPacket;
+	//--------------------------------------------------------------------------------------
+	//Read Request
+	//--------------------------------------------------------------------------------------
+	SyncFIFOIfc#(Tuple2#(IOReadReq, Bit#(32))) pcieRespQ <- mkSyncFIFOFromCC(16, pcieclk);
+	SyncFIFOIfc#(IOReadReq) pcieReadReqQ <- mkSyncFIFOToCC(16, pcieclk, pcierst);
+	FIFO#(AuroraIfcType) outputPortQ <- mkFIFO;
+	Reg#(Bit#(32)) outPayloadBuffer <- mkReg(0);
+	Reg#(Bit#(1)) outPayloadBufferCnt <- mkReg(0);
+	rule getPacket;
 		let d <- auroraQuads[inQuad].user[inPort].receive;
 		outputPortQ.enq(d);
 	endrule
-
-	rule echoRead;
+	rule getReadReq;
 		let r <- pcie.dataReq;
+		pcieReadReqQ.enq(r);
+	endrule
+	rule getReadStat;
+		pcieReadReqQ.deq;
+		let r = pcieReadReqQ.first;
+
 		let a = r.addr;
 		if (outPayloadBufferCnt == 0 ) begin
 			outputPortQ.deq;
 			let d = outputPortQ.first;
-			pcie.dataSend(r, truncate(d));
+			pcieRespQ.enq(tuple2(r, truncate(d)));
 			outPayloadBuffer <= truncate(outputPortQ.first>>32);
 			outPayloadBufferCnt <= outPayloadBufferCnt + 1;
 		end else begin
-			pcie.dataSend(r, outPayloadBuffer);
+			pcieRespQ.enq(tuple2(r, outPayloadBuffer));
+			outPayloadBufferCnt <= 0;
 		end
 	endrule
-	
+	rule returnReadResp;
+		let r_ = pcieRespQ.first;
+		pcieRespQ.deq;
+
+		pcie.dataSend(tpl_1(r_), tpl_2(r_));
+	endrule
 endmodule

@@ -31,6 +31,11 @@ interface TopIfc;
 	method Bit#(4) led;
 	
 	interface DDR3_Pins_1GB pins_ddr3;
+
+	(* always_ready *)
+	interface Vector#(AuroraExtPerQuad, Aurora_Pins#(1)) aurora_117;
+	(* always_ready *)
+	interface Vector#(AuroraExtPerQuad, Aurora_Pins#(1)) aurora_119;
 endinterface
 
 (* no_default_clock, no_default_reset *)
@@ -84,6 +89,9 @@ module mkProjectTop #(
 	interface PcieImportPins pcie_pins = pcie.pins;
 
 	interface DDR3_Pins_1GB pins_ddr3 = ddr3_ctrl.ddr3;
+	
+	interface Vector aurora_117 = auroraQuad[0].aurora;
+	interface Vector aurora_119 = auroraQuad[1].aurora;
 	
 	method Bit#(4) led;
 		//return leddata;

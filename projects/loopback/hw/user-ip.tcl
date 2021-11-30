@@ -26,5 +26,4 @@ read_ip $auroraextdir/core/aurora_64b66b_X1Y18/aurora_64b66b_X1Y18.xci
 read_ip $auroraextdir/core/aurora_64b66b_X1Y19/aurora_64b66b_X1Y19.xci
 read_verilog [ glob $auroraextdir/xilinx/*.v ]
 read_xdc $auroraextdir/xilinx/aurora_64b66b_exdes.xdc
-read_xdc $auroraextdir/xilinx/aurora_64b66b_exdes_119.xdc
 ############# end AuroraExt Stuff

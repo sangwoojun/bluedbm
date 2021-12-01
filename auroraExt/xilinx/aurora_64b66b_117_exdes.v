@@ -559,8 +559,6 @@ always @(posedge user_clk_i)
 	 .s_axi_tx_tvalid(tx_tvalid_i),
 	 .s_axi_tx_tready(tx_tready_i),
 
-	 .do_cc(do_cc_i),
-
 	 // RX AXI4-S Interface
 	 .m_axi_rx_tvalid(rx_tvalid_i),
 
@@ -587,7 +585,6 @@ always @(posedge user_clk_i)
 	 .init_clk_out          (INIT_CLK_i),
 	 .user_clk_out          (user_clk_i),
 
-	 .reset(reset_i),
 	 .reset_pb(RESET),
 	 .gt_rxcdrovrden_in(gt_rxcdrovrden_i),
 	 .power_down(power_down_i),

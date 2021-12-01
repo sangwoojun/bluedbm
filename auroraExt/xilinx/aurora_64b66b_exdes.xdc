@@ -83,7 +83,7 @@
 
 	#set_false_path -to [get_pins -hier -filter {NAME =~ */auroraExtImport/aurora_64b66b_block_i/gen_code_reset_logic[?].support_reset_logic_i/reset_debounce_r_reg[0]/S}]
 
-	create_clock -name aurora_init_clk_i -period 20.0 [get_pins *auroraExtClockDiv5_slowbuf/O]
+	create_clock -name aurora_init_clk_i -period 20.0 [get_pins *auroraExt119/clk50/O]
 	create_clock -name GTXQ0_left_119_i -period 1.600	 [get_pins *auroraExt119/auroraExt_gtx_clk/O]
 	
 	#create_clock -name init_clk_117_i -period 20.0 [get_pins portalTop_hwmain_auroraExtClockDiv5_slowbuf/O]

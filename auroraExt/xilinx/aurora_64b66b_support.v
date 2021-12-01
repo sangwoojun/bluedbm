@@ -82,8 +82,7 @@
 	 output [0:CORE_COUNT] s_axi_tx_tready, 
 
 	 output [0:CORE_COUNT] m_axi_rx_tvalid, 
-	 //input [0:CORE_COUNT]  do_cc, 
-
+	
 	 // GTX Serial I/O
 	 input [0:CORE_COUNT]  rxp, 
 	 input [0:CORE_COUNT]  rxn, 
@@ -103,7 +102,6 @@
 	 output                init_clk_out, 
 	 output [0:CORE_COUNT] user_clk_out, 
 
-	 //input [0:CORE_COUNT]  reset, 
 	 input                 reset_pb, 
 
 	 input                 gt_rxcdrovrden_in, 
@@ -112,8 +110,6 @@
 	 input [2:0]           loopback,
 	 input                 pma_init, 
 	 input                 drp_clk_in,
-
-	 //-------------------- AXI4-Lite Interface -------------------------------
 
 	 //-------------------- Write Address Channel --------------------------
 	 input                 init_clk_in,
@@ -132,14 +128,6 @@
 	// clock
 	(* KEEP = "TRUE" *) wire               INIT_CLK_i;
  
-	wire [31:0]   s_axi_awaddr = 32'h0;
-	wire  [31:0]   s_axi_araddr = 32'h0;
-	wire  [31:0]   s_axi_wdata = 32'h0; // 16'h0 ?
-	wire           s_axi_awvalid = 1'b0; 
-	wire           s_axi_rready = 1'b0; 
-	wire           s_axi_bready = 1'b0; 
-	wire           s_axi_arvalid = 1'b0; 
-	wire           s_axi_wvalid = 1'b0; 
 	wire   [7:0]   qpll_drpaddr_in = 8'h0;
 	wire   [15:0]  qpll_drpdi_in = 16'h0;
 	wire           qpll_drpen_in = 1'b0; 
@@ -236,7 +224,6 @@
 	aurora_64b66b_support_reset_logic support_reset_logic_i
 	(
 		.RESET(reset_pb), //in
-		//.USER_CLK(user_clk_i[coreidx]), //in
 		.USER_CLK(user_clk_i[0]), //in
 		.INIT_CLK(INIT_CLK_i), //in
 		.GT_RESET_IN(pma_init), //in
@@ -253,7 +240,6 @@
          .s_axi_tx_tvalid(s_axi_tx_tvalid[0]),
          .s_axi_tx_tready(s_axi_tx_tready[0]),
 
-         //.do_cc(do_cc[0]),
         // RX AXI4-S Interface
          .m_axi_rx_tdata(m_axi_rx_tdata0),
          .m_axi_rx_tvalid(m_axi_rx_tvalid[0]),
@@ -281,7 +267,6 @@
          .mmcm_not_locked(mmcm_not_locked_i[0]),
          .user_clk(user_clk_i[0]),
          .sync_clk(sync_clk_i[0]),
-      //.reset(reset[0]),
          .reset_pb(sysreset_from_support[0]),
          .gt_rxcdrovrden_in(gt_rxcdrovrden_in),
          .power_down(power_down),
@@ -297,21 +282,6 @@
        .gt_qplllock_in       (gt_qplllock_i        ), 
        .gt_qpllrefclklost_in (gt_qpllrefclklost_i  ),       
 //---}
-     // ---------- AXI4-Lite input signals ---------------
-         .s_axi_awaddr(s_axi_awaddr),
-         .s_axi_awvalid(s_axi_awvalid), 
-         .s_axi_awready(), 
-         .s_axi_wdata(s_axi_wdata),
-         .s_axi_wvalid(s_axi_wvalid), 
-         .s_axi_wready(), 
-         .s_axi_bvalid(), 
-         .s_axi_bready(s_axi_bready), 
-         .s_axi_araddr(s_axi_araddr),
-         .s_axi_arvalid(s_axi_arvalid), 
-         .s_axi_arready(), 
-         .s_axi_rdata(),
-         .s_axi_rvalid(), 
-         .s_axi_rready(s_axi_rready), 
     //---------------------- GTXE2 COMMON DRP Ports ----------------------
          .qpll_drpaddr_in(qpll_drpaddr_in),
          .qpll_drpdi_in(qpll_drpdi_in),
@@ -334,7 +304,6 @@ aurora_64b66b_X1Y25 aurora_64b66b_X1Y25_i
          .s_axi_tx_tvalid(s_axi_tx_tvalid[1]), // in //separate
          .s_axi_tx_tready(s_axi_tx_tready[1]), // out // separate
 
-      //.do_cc(do_cc[1]), // in // separate
         // RX AXI4-S Interface
          .m_axi_rx_tdata(m_axi_rx_tdata1), //out separate
          .m_axi_rx_tvalid(m_axi_rx_tvalid[1]), //out separate
@@ -367,7 +336,6 @@ aurora_64b66b_X1Y25 aurora_64b66b_X1Y25_i
          .user_clk(user_clk_i[0]),
          .sync_clk(sync_clk_i[0]),
 
-      //.reset(reset[1]),
          .reset_pb(sysreset_from_support[1]),
          .gt_rxcdrovrden_in(gt_rxcdrovrden_in),
          .power_down(power_down),
@@ -383,21 +351,6 @@ aurora_64b66b_X1Y25 aurora_64b66b_X1Y25_i
        .gt_qplllock_in       (gt_qplllock_i        ), 
        .gt_qpllrefclklost_in (gt_qpllrefclklost_i  ),       
 //---}
-     // ---------- AXI4-Lite input signals ---------------
-         .s_axi_awaddr(s_axi_awaddr),
-         .s_axi_awvalid(s_axi_awvalid), 
-         .s_axi_awready(), 
-         .s_axi_wdata(s_axi_wdata),
-         .s_axi_wvalid(s_axi_wvalid), 
-         .s_axi_wready(), 
-         .s_axi_bvalid(), 
-         .s_axi_bready(s_axi_bready), 
-         .s_axi_araddr(s_axi_araddr),
-         .s_axi_arvalid(s_axi_arvalid), 
-         .s_axi_arready(), 
-         .s_axi_rdata(),
-         .s_axi_rvalid(), 
-         .s_axi_rready(s_axi_rready), 
     //---------------------- GTXE2 COMMON DRP Ports ----------------------
          .qpll_drpaddr_in(qpll_drpaddr_in),
          .qpll_drpdi_in(qpll_drpdi_in),
@@ -419,7 +372,6 @@ aurora_64b66b_X1Y26 aurora_64b66b_X1Y26_i
          .s_axi_tx_tvalid(s_axi_tx_tvalid[2]), // in //separate
          .s_axi_tx_tready(s_axi_tx_tready[2]), // out // separate
 
-      //.do_cc(do_cc[2]), // in // separate
         // RX AXI4-S Interface
          .m_axi_rx_tdata(m_axi_rx_tdata2), //out separate
          .m_axi_rx_tvalid(m_axi_rx_tvalid[2]), //out separate
@@ -452,7 +404,6 @@ aurora_64b66b_X1Y26 aurora_64b66b_X1Y26_i
          .user_clk(user_clk_i[0]),
          .sync_clk(sync_clk_i[0]),
 
-      //.reset(reset[2]),
          .reset_pb(sysreset_from_support[2]),
          .gt_rxcdrovrden_in(gt_rxcdrovrden_in),
          .power_down(power_down),
@@ -468,21 +419,6 @@ aurora_64b66b_X1Y26 aurora_64b66b_X1Y26_i
        .gt_qplllock_in       (gt_qplllock_i        ), 
        .gt_qpllrefclklost_in (gt_qpllrefclklost_i  ),       
 //---}
-     // ---------- AXI4-Lite input signals ---------------
-         .s_axi_awaddr(s_axi_awaddr),
-         .s_axi_awvalid(s_axi_awvalid), 
-         .s_axi_awready(), 
-         .s_axi_wdata(s_axi_wdata),
-         .s_axi_wvalid(s_axi_wvalid), 
-         .s_axi_wready(), 
-         .s_axi_bvalid(), 
-         .s_axi_bready(s_axi_bready), 
-         .s_axi_araddr(s_axi_araddr),
-         .s_axi_arvalid(s_axi_arvalid), 
-         .s_axi_arready(), 
-         .s_axi_rdata(),
-         .s_axi_rvalid(), 
-         .s_axi_rready(s_axi_rready), 
     //---------------------- GTXE2 COMMON DRP Ports ----------------------
          .qpll_drpaddr_in(qpll_drpaddr_in),
          .qpll_drpdi_in(qpll_drpdi_in),
@@ -504,7 +440,6 @@ aurora_64b66b_X1Y27 aurora_64b66b_X1Y27_i
          .s_axi_tx_tvalid(s_axi_tx_tvalid[3]), // in //separate
          .s_axi_tx_tready(s_axi_tx_tready[3]), // out // separate
 
-      //.do_cc(do_cc[3]), // in // separate
         // RX AXI4-S Interface
          .m_axi_rx_tdata(m_axi_rx_tdata3), //out separate
          .m_axi_rx_tvalid(m_axi_rx_tvalid[3]), //out separate
@@ -537,7 +472,6 @@ aurora_64b66b_X1Y27 aurora_64b66b_X1Y27_i
          .user_clk(user_clk_i[0]),
          .sync_clk(sync_clk_i[0]),
 
-      //.reset(reset[3]),
          .reset_pb(sysreset_from_support[3]),
          .gt_rxcdrovrden_in(gt_rxcdrovrden_in),
          .power_down(power_down),
@@ -553,21 +487,6 @@ aurora_64b66b_X1Y27 aurora_64b66b_X1Y27_i
        .gt_qplllock_in       (gt_qplllock_i        ), 
        .gt_qpllrefclklost_in (gt_qpllrefclklost_i  ),       
 //---}
-     // ---------- AXI4-Lite input signals ---------------
-         .s_axi_awaddr(s_axi_awaddr),
-         .s_axi_awvalid(s_axi_awvalid), 
-         .s_axi_awready(), 
-         .s_axi_wdata(s_axi_wdata),
-         .s_axi_wvalid(s_axi_wvalid), 
-         .s_axi_wready(), 
-         .s_axi_bvalid(), 
-         .s_axi_bready(s_axi_bready), 
-         .s_axi_araddr(s_axi_araddr),
-         .s_axi_arvalid(s_axi_arvalid), 
-         .s_axi_arready(), 
-         .s_axi_rdata(),
-         .s_axi_rvalid(), 
-         .s_axi_rready(s_axi_rready), 
     //---------------------- GTXE2 COMMON DRP Ports ----------------------
          .qpll_drpaddr_in(qpll_drpaddr_in),
          .qpll_drpdi_in(qpll_drpdi_in),

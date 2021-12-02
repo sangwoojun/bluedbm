@@ -64,11 +64,11 @@
 ################################################################################
  
  	# Shared across cores
-	set_property LOC A10 [get_ports aurora_quad119_gtx_clk_p_v]
-	set_property LOC A9 [get_ports aurora_quad119_gtx_clk_n_v]
+	set_property LOC A10 [get_ports aurora_quad119_gtx_clk_p]
+	set_property LOC A9 [get_ports aurora_quad119_gtx_clk_n]
 	
-	set_property LOC K8 [get_ports aurora_quad117_gtx_clk_p_v]
-	set_property LOC K7 [get_ports aurora_quad117_gtx_clk_n_v]
+	set_property LOC K8 [get_ports aurora_quad117_gtx_clk_p]
+	set_property LOC K7 [get_ports aurora_quad117_gtx_clk_n]
 
         #create_clock -name TS_aurora119_init_clk_i -period 8.0 [get_pins host_ep7/CLK_epClock125]
         create_clock -name TS_aurora119_init_clk_i -period 8.0 [get_pins host_ep7/CLK_epClock125]

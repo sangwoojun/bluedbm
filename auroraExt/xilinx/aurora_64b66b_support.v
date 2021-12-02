@@ -107,11 +107,10 @@
 	 input                 gt_rxcdrovrden_in, 
 
 	 input                 power_down, 
-	 input [2:0]           loopback,
+	 input  [2:0]          loopback,
 	 input                 pma_init, 
 	 input                 drp_clk_in,
 
-	 //-------------------- Write Address Channel --------------------------
 	 input                 init_clk_in,
 	 output [0:CORE_COUNT] sys_reset_out,
 
@@ -120,14 +119,13 @@
  );
 
 
+//********************************Wire Declarations***************************
 
-
-
-
+	//System Interface
 
 	// clock
 	(* KEEP = "TRUE" *) wire               INIT_CLK_i;
- 
+
 	wire   [7:0]   qpll_drpaddr_in = 8'h0;
 	wire   [15:0]  qpll_drpdi_in = 16'h0;
 	wire           qpll_drpen_in = 1'b0; 
@@ -207,7 +205,6 @@
 	);
 	//  outputs
 	assign init_clk_out          =  INIT_CLK_i;
-	//assign user_clk_out          =  user_clk_i;
 	assign user_clk_out[0]          =  user_clk_i[0];
 	assign user_clk_out[1]          =  user_clk_i[0];
 	assign user_clk_out[2]          =  user_clk_i[0];
@@ -316,7 +313,6 @@ aurora_64b66b_X1Y25 aurora_64b66b_X1Y25_i
  
          //GTX Reference Clock Interface
          .refclk1_in(refclk1_in),
-
          .hard_err(hard_err[1]), // out, separate
          .soft_err(soft_err[1]), // out, separaate
 
@@ -364,6 +360,7 @@ aurora_64b66b_X1Y25 aurora_64b66b_X1Y25_i
          .tx_out_clk(tx_out_clk[1])
      );
 //----- Instance of _xci -----]
+
 //----- Instance of _xci -----[
 aurora_64b66b_X1Y26 aurora_64b66b_X1Y26_i
      (
@@ -384,7 +381,6 @@ aurora_64b66b_X1Y26 aurora_64b66b_X1Y26_i
  
          //GTX Reference Clock Interface
          .refclk1_in(refclk1_in),
-
          .hard_err(hard_err[2]), // out, separate
          .soft_err(soft_err[2]), // out, separaate
 
@@ -432,6 +428,7 @@ aurora_64b66b_X1Y26 aurora_64b66b_X1Y26_i
          .tx_out_clk(tx_out_clk[2])
      );
 //----- Instance of _xci -----]
+
 //----- Instance of _xci -----[
 aurora_64b66b_X1Y27 aurora_64b66b_X1Y27_i
      (
@@ -452,7 +449,6 @@ aurora_64b66b_X1Y27 aurora_64b66b_X1Y27_i
  
          //GTX Reference Clock Interface
          .refclk1_in(refclk1_in),
-
          .hard_err(hard_err[3]), // out, separate
          .soft_err(soft_err[3]), // out, separaate
 

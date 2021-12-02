@@ -68,6 +68,7 @@
 	/// TODO: gt_to_common_qpllreset_i assignment needs to be changed with more cores!
 	)
 	(
+	 // TX & RX AXI Inferface
 	 input  [0:63]     s_axi_tx_tdata0, 
 	 output [0:63]     m_axi_rx_tdata0, 
 	 input  [0:63]     s_axi_tx_tdata1, 
@@ -80,7 +81,6 @@
 
 	 input [0:CORE_COUNT] s_axi_tx_tvalid,
 	 output [0:CORE_COUNT] s_axi_tx_tready, 
-
 	 output [0:CORE_COUNT] m_axi_rx_tvalid, 
 	 
 	 // GTX Serial I/O
@@ -107,12 +107,11 @@
 	 input              gt_rxcdrovrden_in, 
 
 	 input              power_down, 
-	 input   [2:0]      loopback,
+	 input  [2:0]       loopback,
 	 input              pma_init, 
 	 input    	    drp_clk_in,
 
-	 //-------------------- Write Address Channel --------------------------
-	 input               init_clk_in,
+	 input                 init_clk_in,
 	 output [0:CORE_COUNT] sys_reset_out,
 
 	 // GTX Reference Clock Interface
@@ -120,14 +119,13 @@
  );
 
 
+//*****************************Wire Declarations******************************
 
-
-
-
+	//System Interface
 
 	// clock
 	(* KEEP = "TRUE" *) wire               INIT_CLK_i;
- 
+
 	wire   [7:0]   qpll_drpaddr_in = 8'h0;
 	wire   [15:0]  qpll_drpdi_in = 16'h0;
 	wire           qpll_drpen_in = 1'b0; 
@@ -207,7 +205,6 @@
 	);
 	//  outputs
 	assign init_clk_out          =  INIT_CLK_i;
-	//assign user_clk_out          =  user_clk_i;
 	assign user_clk_out[0]          =  user_clk_i[0];
 	assign user_clk_out[1]          =  user_clk_i[0];
 	assign user_clk_out[2]          =  user_clk_i[0];
@@ -252,8 +249,6 @@
  
          //GTX Reference Clock Interface
          .refclk1_in(refclk1_in),
-
-
          .hard_err(hard_err[0]),
          .soft_err(soft_err[0]),
 
@@ -316,7 +311,6 @@ aurora_64b66b_X1Y17 aurora_64b66b_X1Y17_i
  
          //GTX Reference Clock Interface
          .refclk1_in(refclk1_in),
-
          .hard_err(hard_err[1]), // out, separate
          .soft_err(soft_err[1]), // out, separaate
 
@@ -364,6 +358,7 @@ aurora_64b66b_X1Y17 aurora_64b66b_X1Y17_i
          .tx_out_clk(tx_out_clk[1])
      );
 //----- Instance of _xci -----]
+
 //----- Instance of _xci -----[
 aurora_64b66b_X1Y18 aurora_64b66b_X1Y18_i
      (
@@ -384,7 +379,6 @@ aurora_64b66b_X1Y18 aurora_64b66b_X1Y18_i
  
          //GTX Reference Clock Interface
          .refclk1_in(refclk1_in),
-
          .hard_err(hard_err[2]), // out, separate
          .soft_err(soft_err[2]), // out, separaate
 
@@ -432,6 +426,7 @@ aurora_64b66b_X1Y18 aurora_64b66b_X1Y18_i
          .tx_out_clk(tx_out_clk[2])
      );
 //----- Instance of _xci -----]
+
 //----- Instance of _xci -----[
 aurora_64b66b_X1Y19 aurora_64b66b_X1Y19_i
      (
@@ -452,7 +447,6 @@ aurora_64b66b_X1Y19 aurora_64b66b_X1Y19_i
  
          //GTX Reference Clock Interface
          .refclk1_in(refclk1_in),
-
          .hard_err(hard_err[3]), // out, separate
          .soft_err(soft_err[3]), // out, separaate
 
@@ -500,7 +494,7 @@ aurora_64b66b_X1Y19 aurora_64b66b_X1Y19_i
          .tx_out_clk(tx_out_clk[3])
      );
 //----- Instance of _xci -----]
- 
+
 
 
  endmodule

@@ -44,8 +44,8 @@ module mkProjectTop #(
 	Clock sys_clk_p, Clock sys_clk_n,
 	Reset pcie_rst_n,
 
-	Clock aurora_quad117_gtx_clk_p, Clock aurora_quad117_gtx_clk_n,
-	Clock aurora_quad119_gtx_clk_p, Clock aurora_quad119_gtx_clk_n
+	Clock aurora_quad117_gtx_clk_p_v, Clock aurora_quad117_gtx_clk_n_v,
+	Clock aurora_quad119_gtx_clk_p_v, Clock aurora_quad119_gtx_clk_n_v
 	) 
 	(TopIfc);
 
@@ -76,8 +76,8 @@ module mkProjectTop #(
 	Reset user_reset = rst200;
 
 	Vector#(2, AuroraExtIfc) auroraQuad;
-	auroraQuad[0] <- mkAuroraExt117(aurora_quad117_gtx_clk_p, aurora_quad117_gtx_clk_n, sys_clk_200mhz_buf, clocked_by user_clock, reset_by user_reset);
-	auroraQuad[1] <- mkAuroraExt119(aurora_quad119_gtx_clk_p, aurora_quad119_gtx_clk_n, sys_clk_200mhz_buf, clocked_by user_clock, reset_by user_reset);
+	auroraQuad[0] <- mkAuroraExt117(aurora_quad117_gtx_clk_p_v, aurora_quad117_gtx_clk_n_v, sys_clk_200mhz_buf, clocked_by user_clock, reset_by user_reset);
+	auroraQuad[1] <- mkAuroraExt119(aurora_quad119_gtx_clk_p_v, aurora_quad119_gtx_clk_n_v, sys_clk_200mhz_buf, clocked_by user_clock, reset_by user_reset);
 
 
 	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, dramController.user, auroraQuad, clocked_by user_clock, reset_by user_reset);

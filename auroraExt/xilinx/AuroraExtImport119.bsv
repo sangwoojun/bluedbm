@@ -70,17 +70,13 @@ module mkAuroraExt119#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk200) (AuroraEx
 	auroraRst[3] = auroraExtImport.aurora_rst3;
 
 	auroraExt[0] <- mkAuroraExtFlowControl(auroraExtImport.user0
-		, defaultClock, defaultReset, 0
-	       	, clocked_by auroraClk[0], reset_by auroraRst[0] );
+		, auroraClk[0], auroraRst[0], 0);
 	auroraExt[1] <- mkAuroraExtFlowControl(auroraExtImport.user1
-		, defaultClock, defaultReset, 1
-	       	, clocked_by auroraClk[1], reset_by auroraRst[1] );
+		, auroraClk[1], auroraRst[1], 1);
 	auroraExt[2] <- mkAuroraExtFlowControl(auroraExtImport.user2
-		, defaultClock, defaultReset, 2
-		, clocked_by auroraClk[2], reset_by auroraRst[2] );
+		, auroraClk[2], auroraRst[2], 2);
 	auroraExt[3] <- mkAuroraExtFlowControl(auroraExtImport.user3
-		, defaultClock, defaultReset, 3 
-		, clocked_by auroraClk[3], reset_by auroraRst[3] );
+		, auroraClk[3], auroraRst[3], 3);
 
 	Vector#(AuroraExtPerQuad, AuroraExtUserIfc) userifcs;
 	for ( Integer idx = 0; idx < valueOf(AuroraExtPerQuad); idx = idx + 1 ) begin

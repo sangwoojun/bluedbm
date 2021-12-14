@@ -67,33 +67,33 @@
 set_property LOC K7 [get_ports CLK_aurora_quad117_gtx_clk_n_v]
 set_property LOC K8 [get_ports CLK_aurora_quad117_gtx_clk_p_v]
 
-set_false_path -from [get_cells -hier -filter {NAME =~ *auroraExt117/rst50/*}]
+set_false_path -from [get_cells -hier -filter {NAME =~ *auroraQuad_0/rst50/*}]
 #set_false_path -to [get_pins -hier -filter {NAME =~ *auroraExt119/auroraExt_*_outPacketQ/*/CLR}]
 #set_false_path -to [get_pins -hier -filter {NAME =~ *auroraExt119/auroraExt_*_outPacketQ/*/PRE}]
-set_false_path -to [get_pins -hier -filter {NAME =~ *auroraExt117/rst50/*/CLR}]
+set_false_path -to [get_pins -hier -filter {NAME =~ *auroraQuad_0/rst50/*/CLR}]
 
 ## Quad119
 set_property LOC A9 [get_ports CLK_aurora_quad119_gtx_clk_n_v]
 set_property LOC A10 [get_ports CLK_aurora_quad119_gtx_clk_p_v]
 
-set_false_path -from [get_cells -hier -filter {NAME =~ *auroraExt119/rst50/*}]
+set_false_path -from [get_cells -hier -filter {NAME =~ *auroraQuad_1/rst50/*}]
 #set_false_path -to [get_pins -hier -filter {NAME =~ *auroraExt119/auroraExt_*_outPacketQ/*/CLR}]
 #set_false_path -to [get_pins -hier -filter {NAME =~ *auroraExt119/auroraExt_*_outPacketQ/*/PRE}]
-set_false_path -to [get_pins -hier -filter {NAME =~ *auroraExt119/rst50/*/CLR}]
+set_false_path -to [get_pins -hier -filter {NAME =~ *auroraQuad_1/rst50/*/CLR}]
 
 ## Board constraint (50MHz clk)
-create_clock -name aurora_117_init_clk_i -period 20.0 [get_pins -hier -regexp .*auroraExt117ClockDiv/Q]
-create_clock -name aurora_119_init_clk_i -period 20.0 [get_pins -hier -regexp .*auroraExt119ClockDiv/Q]
+create_clock -name aurora_117_init_clk_i -period 20.0 [get_pins *auroraQuad_0/auroraExt117ClockDiv/clockdiv4/cntr_reg[1]/Q]
+create_clock -name aurora_119_init_clk_i -period 20.0 [get_pins *auroraQuad_1/auroraExt119ClockDiv/clockdiv4/cntr_reg[1]/Q]
 
 ## Ref clks
-create_clock -name GTXQ0_left_117_i -period 1.600 [get_pins *auroraExt117/auroraExt_gtx_clk/O]
-create_clock -name GTXQ0_left_119_i -period 1.600 [get_pins *auroraExt119/auroraExt_gtx_clk/O]
+create_clock -name GTXQ0_left_117_i -period 1.600 [get_pins *auroraQuad_0/auroraExt_gtx_clk/*]
+create_clock -name GTXQ0_left_119_i -period 1.600 [get_pins *auroraQuad_1/auroraExt_gtx_clk/*]
 
 ## Aurora clks
-create_clock -name TS_117_user_clk_i_all -period 6.400 [get_pins portalTop_hwmain_auroraExt117/auroraExtImport/aurora_64b66b_block_i/clock_module_i/user_clk_net_i/O]
-create_clock -name TS_117_sync_clk_i_all -period 3.200 [get_pins portalTop_hwmain_auroraExt117/auroraExtImport/aurora_64b66b_block_i/clock_module_i/sync_clock_net_i/O]
-create_clock -name TS_119_user_clk_i_all -period 6.400 [get_pins portalTop_hwmain_auroraExt119/auroraExtImport/aurora_64b66b_block_i/clock_module_i/user_clk_net_i/O]
-create_clock -name TS_119_sync_clk_i_all -period 3.200 [get_pins portalTop_hwmain_auroraExt119/auroraExtImport/aurora_64b66b_block_i/clock_module_i/sync_clock_net_i/O]
+create_clock -name TS_117_user_clk_i_all -period 6.400 [get_pins *auroraQuad_0/auroraExtImport/aurora_64b66b_block_i/clock_module_i/user_clk_net_i/O]
+create_clock -name TS_117_sync_clk_i_all -period 3.200 [get_pins *auroraQuad_0/auroraExtImport/aurora_64b66b_block_i/clock_module_i/sync_clock_net_i/O]
+create_clock -name TS_119_user_clk_i_all -period 6.400 [get_pins *auroraQuad_1/auroraExtImport/aurora_64b66b_block_i/clock_module_i/user_clk_net_i/O]
+create_clock -name TS_119_sync_clk_i_all -period 3.200 [get_pins *auroraQuad_1/auroraExtImport/aurora_64b66b_block_i/clock_module_i/sync_clock_net_i/O]
 
 ## CDC from 50Mhz "board clk" to aurora user clk
 # 117
@@ -102,8 +102,8 @@ set_false_path -from [get_clocks TS_117_user_clk_i_all] -to [get_clocks aurora_1
 set_false_path -from [get_clocks aurora_117_init_clk_i] -to [get_clocks TS_117_sync_clk_i_all]
 set_false_path -from [get_clocks TS_117_sync_clk_i_all] -to [get_clocks aurora_117_init_clk_i]
 
-set_max_delay -from [get_clocks clk_125mhz] -to [get_clocks aurora_117_init_clk_i] -datapath_only 8.0
-set_max_delay -from [get_clocks aurora_117_init_clk_i] -to [get_clocks clk_125mhz] -datapath_only 8.0
+set_max_delay -from [get_clocks pcie_clk_125mhz] -to [get_clocks aurora_117_init_clk_i] -datapath_only 8.0
+set_max_delay -from [get_clocks aurora_117_init_clk_i] -to [get_clocks pcie_clk_125mhz] -datapath_only 8.0
 
 # 119
 set_false_path -from [get_clocks aurora_119_init_clk_i] -to [get_clocks TS_119_user_clk_i_all]
@@ -111,23 +111,23 @@ set_false_path -from [get_clocks TS_119_user_clk_i_all] -to [get_clocks aurora_1
 set_false_path -from [get_clocks aurora_119_init_clk_i] -to [get_clocks TS_119_sync_clk_i_all]
 set_false_path -from [get_clocks TS_119_sync_clk_i_all] -to [get_clocks aurora_119_init_clk_i]
 
-set_max_delay -from [get_clocks clk_125mhz] -to [get_clocks aurora_119_init_clk_i] -datapath_only 8.0
-set_max_delay -from [get_clocks aurora_119_init_clk_i] -to [get_clocks clk_125mhz] -datapath_only 8.0
+set_max_delay -from [get_clocks pcie_clk_125mhz] -to [get_clocks aurora_119_init_clk_i] -datapath_only 8.0
+set_max_delay -from [get_clocks aurora_119_init_clk_i] -to [get_clocks pcie_clk_125mhz] -datapath_only 8.0
 
 ## CDC from pcie 125Mhz clk to aurora user clk
 # 117
-set_max_delay -from [get_clocks clk_125mhz] -to [get_clocks TS_117_user_clk_i_all] -datapath_only 8.0
-set_max_delay -from [get_clocks TS_117_user_clk_i_all] -to [get_clocks clk_125mhz] -datapath_only 8.0
+set_max_delay -from [get_clocks pcie_clk_125mhz] -to [get_clocks TS_117_user_clk_i_all] -datapath_only 8.0
+set_max_delay -from [get_clocks TS_117_user_clk_i_all] -to [get_clocks pcie_clk_125mhz] -datapath_only 8.0
 
 # 119
-set_max_delay -from [get_clocks clk_125mhz] -to [get_clocks TS_119_user_clk_i_all] -datapath_only 8.0
-set_max_delay -from [get_clocks TS_119_user_clk_i_all] -to [get_clocks clk_125mhz] -datapath_only 8.0
+set_max_delay -from [get_clocks pcie_clk_125mhz] -to [get_clocks TS_119_user_clk_i_all] -datapath_only 8.0
+set_max_delay -from [get_clocks TS_119_user_clk_i_all] -to [get_clocks pcie_clk_125mhz] -datapath_only 8.0
 
 
 ######################################## Quad 119
 ################ 24
 set_false_path -to [get_pins -hier *aurora_64b66b_X1Y24_cdc_to*/D]
-set_property LOC GTXE2_CHANNEL_X1Y24 [get_cells  portalTop_hwmain_auroraExt119/auroraExtImport/aurora_64b66b_block_i/aurora_64b66b_X1Y24_i/inst/aurora_64b66b_X1Y24_wrapper_i/aurora_64b66b_X1Y24_multi_gt_i/aurora_64b66b_X1Y24_gtx_inst/gtxe2_i]
+set_property LOC GTXE2_CHANNEL_X1Y24 [get_cells  *auroraQuad_1/auroraExtImport/aurora_64b66b_block_i/aurora_64b66b_X1Y24_i/inst/aurora_64b66b_X1Y24_wrapper_i/aurora_64b66b_X1Y24_multi_gt_i/aurora_64b66b_X1Y24_gtx_inst/gtxe2_i]
 
 
 set_property LOC E2 [get_ports { aurora_119_0_TXP }]
@@ -137,7 +137,7 @@ set_property LOC D7 [get_ports { aurora_119_0_rxn_i }]
 	
 ################# 25
 set_false_path -to [get_pins -hier *aurora_64b66b_X1Y25_cdc_to*/D]
-set_property LOC GTXE2_CHANNEL_X1Y25 [get_cells  portalTop_hwmain_auroraExt119/auroraExtImport/aurora_64b66b_block_i/aurora_64b66b_X1Y25_i/inst/aurora_64b66b_X1Y25_wrapper_i/aurora_64b66b_X1Y25_multi_gt_i/aurora_64b66b_X1Y25_gtx_inst/gtxe2_i]
+set_property LOC GTXE2_CHANNEL_X1Y25 [get_cells  *auroraQuad_1/auroraExtImport/aurora_64b66b_block_i/aurora_64b66b_X1Y25_i/inst/aurora_64b66b_X1Y25_wrapper_i/aurora_64b66b_X1Y25_multi_gt_i/aurora_64b66b_X1Y25_gtx_inst/gtxe2_i]
 
 
 set_property LOC D4 [get_ports { aurora_119_1_TXP }]
@@ -147,7 +147,7 @@ set_property LOC C5 [get_ports { aurora_119_1_rxn_i }]
 
 ################# 26
 set_false_path -to [get_pins -hier *aurora_64b66b_X1Y26_cdc_to*/D]
-set_property LOC GTXE2_CHANNEL_X1Y26 [get_cells  portalTop_hwmain_auroraExt119/auroraExtImport/aurora_64b66b_block_i/aurora_64b66b_X1Y26_i/inst/aurora_64b66b_X1Y26_wrapper_i/aurora_64b66b_X1Y26_multi_gt_i/aurora_64b66b_X1Y26_gtx_inst/gtxe2_i]
+set_property LOC GTXE2_CHANNEL_X1Y26 [get_cells  *auroraQuad_1/auroraExtImport/aurora_64b66b_block_i/aurora_64b66b_X1Y26_i/inst/aurora_64b66b_X1Y26_wrapper_i/aurora_64b66b_X1Y26_multi_gt_i/aurora_64b66b_X1Y26_gtx_inst/gtxe2_i]
 
 
 set_property LOC C2 [get_ports { aurora_119_2_TXP }]
@@ -157,7 +157,7 @@ set_property LOC B7 [get_ports { aurora_119_2_rxn_i }]
 
 ################# 27
 set_false_path -to [get_pins -hier *aurora_64b66b_X1Y27_cdc_to*/D]
-set_property LOC GTXE2_CHANNEL_X1Y27 [get_cells  portalTop_hwmain_auroraExt119/auroraExtImport/aurora_64b66b_block_i/aurora_64b66b_X1Y27_i/inst/aurora_64b66b_X1Y27_wrapper_i/aurora_64b66b_X1Y27_multi_gt_i/aurora_64b66b_X1Y27_gtx_inst/gtxe2_i]
+set_property LOC GTXE2_CHANNEL_X1Y27 [get_cells  *auroraQuad_1/auroraExtImport/aurora_64b66b_block_i/aurora_64b66b_X1Y27_i/inst/aurora_64b66b_X1Y27_wrapper_i/aurora_64b66b_X1Y27_multi_gt_i/aurora_64b66b_X1Y27_gtx_inst/gtxe2_i]
 
 
 set_property LOC B4 [get_ports { aurora_119_3_TXP }]
@@ -168,7 +168,7 @@ set_property LOC A5 [get_ports { aurora_119_3_rxn_i }]
 
 ######################################## Quad 117
 set_false_path -to [get_pins -hier *aurora_64b66b_X1Y16_cdc_to*/D]
-set_property LOC GTXE2_CHANNEL_X1Y16 [get_cells  portalTop_hwmain_auroraExt117/auroraExtImport/aurora_64b66b_block_i/aurora_64b66b_X1Y16_i/inst/aurora_64b66b_X1Y16_wrapper_i/aurora_64b66b_X1Y16_multi_gt_i/aurora_64b66b_X1Y16_gtx_inst/gtxe2_i]
+set_property LOC GTXE2_CHANNEL_X1Y16 [get_cells  *auroraQuad_0/auroraExtImport/aurora_64b66b_block_i/aurora_64b66b_X1Y16_i/inst/aurora_64b66b_X1Y16_wrapper_i/aurora_64b66b_X1Y16_multi_gt_i/aurora_64b66b_X1Y16_gtx_inst/gtxe2_i]
 
 
 set_property LOC N2 [get_ports { aurora_117_0_TXP }]
@@ -178,7 +178,7 @@ set_property LOC P7 [get_ports { aurora_117_0_rxn_i }]
 	
 ################# 17
 set_false_path -to [get_pins -hier *aurora_64b66b_X1Y17_cdc_to*/D]
-set_property LOC GTXE2_CHANNEL_X1Y17 [get_cells  portalTop_hwmain_auroraExt117/auroraExtImport/aurora_64b66b_block_i/aurora_64b66b_X1Y17_i/inst/aurora_64b66b_X1Y17_wrapper_i/aurora_64b66b_X1Y17_multi_gt_i/aurora_64b66b_X1Y17_gtx_inst/gtxe2_i]
+set_property LOC GTXE2_CHANNEL_X1Y17 [get_cells  *auroraQuad_0/auroraExtImport/aurora_64b66b_block_i/aurora_64b66b_X1Y17_i/inst/aurora_64b66b_X1Y17_wrapper_i/aurora_64b66b_X1Y17_multi_gt_i/aurora_64b66b_X1Y17_gtx_inst/gtxe2_i]
 
 
 set_property LOC M4 [get_ports { aurora_117_1_TXP }]
@@ -188,7 +188,7 @@ set_property LOC N5 [get_ports { aurora_117_1_rxn_i }]
 
 ################# 18
 set_false_path -to [get_pins -hier *aurora_64b66b_X1Y18_cdc_to*/D]
-set_property LOC GTXE2_CHANNEL_X1Y18 [get_cells  portalTop_hwmain_auroraExt117/auroraExtImport/aurora_64b66b_block_i/aurora_64b66b_X1Y18_i/inst/aurora_64b66b_X1Y18_wrapper_i/aurora_64b66b_X1Y18_multi_gt_i/aurora_64b66b_X1Y18_gtx_inst/gtxe2_i]
+set_property LOC GTXE2_CHANNEL_X1Y18 [get_cells  *auroraQuad_0/auroraExtImport/aurora_64b66b_block_i/aurora_64b66b_X1Y18_i/inst/aurora_64b66b_X1Y18_wrapper_i/aurora_64b66b_X1Y18_multi_gt_i/aurora_64b66b_X1Y18_gtx_inst/gtxe2_i]
 
 
 set_property LOC L2 [get_ports { aurora_117_2_TXP }]
@@ -198,7 +198,7 @@ set_property LOC L5 [get_ports { aurora_117_2_rxn_i }]
 
 ################# 19
 set_false_path -to [get_pins -hier *aurora_64b66b_X1Y19_cdc_to*/D]
-set_property LOC GTXE2_CHANNEL_X1Y19 [get_cells  portalTop_hwmain_auroraExt117/auroraExtImport/aurora_64b66b_block_i/aurora_64b66b_X1Y19_i/inst/aurora_64b66b_X1Y19_wrapper_i/aurora_64b66b_X1Y19_multi_gt_i/aurora_64b66b_X1Y19_gtx_inst/gtxe2_i]
+set_property LOC GTXE2_CHANNEL_X1Y19 [get_cells  *auroraQuad_0/auroraExtImport/aurora_64b66b_block_i/aurora_64b66b_X1Y19_i/inst/aurora_64b66b_X1Y19_wrapper_i/aurora_64b66b_X1Y19_multi_gt_i/aurora_64b66b_X1Y19_gtx_inst/gtxe2_i]
 
 
 set_property LOC K4 [get_ports { aurora_117_3_TXP }]

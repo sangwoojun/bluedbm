@@ -9,11 +9,9 @@ import BRAMFIFO::*;
 import AuroraCommon::*;
 
 typedef 64 AuroraPhysWidth;
-typedef TSub#(AuroraPhysWidth, 2) BodySz;
-typedef TMul#(BodySz,2) AuroraIfcWidth;
-typedef Bit#(AuroraIfcWidth) AuroraIfcType;
-
-typedef TDiv#(AuroraIfcWidth, 2) AuroraIfcWidthH;
+typedef TSub#(AuroraPhysWidth, 2) AuroraFCWidth;
+typedef Bit#(AuroraPhysWidth) AuroraIfcType;
+typedef Bit#(AuroraFCWidth) AuroraFC;
 
 interface AuroraExtFlowControlIfc;
 	method Action send(AuroraIfcType data);
@@ -22,138 +20,94 @@ interface AuroraExtFlowControlIfc;
 	method Bit#(1) channel_up;
 	method Bit#(1) lane_up;
 endinterface
-module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) auroraExt, Clock aclk, Reset arst) (AuroraExtFlowControlIfc);
-	//Clock aclk = auroraExt.aurora_clk;
-	//Reset arst = auroraExt.aurora_rst;
 
+module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock uclk, Reset urst, Integer idx) (AuroraExtFlowControlIfc);
 	Integer recvQDepth = 128;
 	Integer windowSize = 64;
-	SyncFIFOIfc#(AuroraIfcType) recvQ <- mkSyncFIFOToCC(2, aclk, arst);
+
+	Reg#(Bit#(16)) maxInFlightUp <- mkReg(0);
+	Reg#(Bit#(16)) maxInFlightDown <- mkReg(0);
+	Reg#(Bit#(16)) curInQUp <- mkReg(0);
+	Reg#(Bit#(16)) curInQDown <- mkReg(0);
+	Reg#(Bit#(16)) curSendBudgetUp <- mkReg(0);
+	Reg#(Bit#(16)) curSendBudgetDown <- mkReg(0);
 	
-	//SyncFIFOIfc#(Bit#(AuroraIfcWidthH)) recvQt <- mkSyncFIFOToCC(2, aclk, arst);
-	//SyncFIFOIfc#(Bit#(AuroraIfcWidthH)) recvQb <- mkSyncFIFOToCC(2, aclk, arst);
-	FIFO#(AuroraIfcType) recvBufferQ <- mkSizedFIFO(recvQDepth, clocked_by aclk, reset_by arst);
-	FIFO#(AuroraIfcType) recvQ2 <- mkFIFO;
-
-	Reg#(Bit#(16)) maxInFlightUp <- mkReg(0, clocked_by aclk, reset_by arst);
-	Reg#(Bit#(16)) maxInFlightDown <- mkReg(0, clocked_by aclk, reset_by arst);
-	Reg#(Bit#(16)) curInQUp <- mkReg(0, clocked_by aclk, reset_by arst);
-	Reg#(Bit#(16)) curInQDown <- mkReg(0, clocked_by aclk, reset_by arst);
-	FIFOF#(Bit#(8)) flowControlQ <- mkFIFOF(clocked_by aclk, reset_by arst);
-	rule emitFlowControlPacket
-		((maxInFlightUp-maxInFlightDown)
-		+(curInQUp-curInQDown)
-		+fromInteger(windowSize) < fromInteger(recvQDepth));
-
-		flowControlQ.enq(fromInteger(windowSize));
-		maxInFlightUp <= maxInFlightUp + fromInteger(windowSize);
-	endrule
-
-	Reg#(Bit#(16)) curSendBudgetUp <- mkReg(0, clocked_by aclk, reset_by arst);
-	Reg#(Bit#(16)) curSendBudgetDown <- mkReg(0, clocked_by aclk, reset_by arst);
-
-
-	SyncFIFOIfc#(AuroraIfcType) sendQ <- mkSyncFIFOFromCC(4, aclk);
-	//SyncFIFOIfc#(Bit#(AuroraIfcWidthH)) sendQt <- mkSyncFIFOFromCC(4, aclk);
-	//SyncFIFOIfc#(Bit#(AuroraIfcWidthH)) sendQb <- mkSyncFIFOFromCC(4, aclk);
-
-	FIFO#(Bit#(AuroraPhysWidth)) auroraOutQ <- mkFIFO(clocked_by aclk, reset_by arst);
-	rule flushAuroraOutQ;
-		auroraOutQ.deq;
-		auroraExt.send(auroraOutQ.first);
-	endrule
-	Reg#(Maybe#(Bit#(BodySz))) packetSendBuffer <- mkReg(tagged Invalid, clocked_by aclk, reset_by arst);
-	rule sendPacketPart;
+	//-------------------------------------------------------------------------------------
+	// Rules for Sending
+	//-------------------------------------------------------------------------------------
+	SyncFIFOIfc#(AuroraIfcType) outPacketQ <- mkSyncFIFOToCC(8, uclk, urst);
+	FIFO#(AuroraIfcType) sendQ <- mkSizedFIFO(32);
+	rule sendPacket;
 		let curSendBudget = curSendBudgetUp - curSendBudgetDown;
-		if ( flowControlQ.notEmpty ) begin
-			flowControlQ.deq;
-			auroraOutQ.enq({2'b01, zeroExtend(flowControlQ.first)});
-		end else
-		if ( curSendBudget > 0 ) begin
-			if ( isValid(packetSendBuffer) ) begin
-				let btpl = fromMaybe(?, packetSendBuffer);
-				//auroraIntraImport.user.send({2'b10,
-				auroraOutQ.enq({2'b10,
-					btpl});
-				packetSendBuffer <= tagged Invalid;
-				curSendBudgetDown <= curSendBudgetDown + 1;
-			end else begin
-				sendQ.deq;
-				//sendQt.deq;
-				//sendQb.deq;
-				//let data = {sendQb.first, sendQt.first};
-				let data = sendQ.first;
-				packetSendBuffer <= tagged Valid 
-					truncate(data>>valueOf(BodySz));
-				auroraOutQ.enq({2'b00,truncate(data)});
-			end
+		if ((maxInFlightUp-maxInFlightDown)
+			+(curInQUp-curInQDown)
+			+fromInteger(windowSize) < fromInteger(recvQDepth)) begin
+		
+			user.send({fromInteger(windowSize), 2'b01});
+			maxInFlightUp <= maxInFlightUp + fromInteger(windowSize);
+		end else if ( curSendBudget > 0 ) begin
+			sendQ.deq;
+			user.send(sendQ.first);
+			curSendBudgetDown <= curSendBudgetDown + 1;
 		end
 	endrule
 
-	FIFO#(Bit#(AuroraPhysWidth)) auroraInQ <- mkFIFO(clocked_by aclk, reset_by arst);
-	rule fillAuroraInQ;
-		let d <- auroraExt.receive;
-		auroraInQ.enq(d);
+	Reg#(Maybe#(AuroraFC)) outPacketBuffer <- mkReg(tagged Invalid);
+	rule serOutPacket;
+		if ( isValid(outPacketBuffer) ) begin
+			let d = fromMaybe(?, outPacketBuffer);
+			outPacketBuffer <= tagged Invalid;
+			sendQ.enq({d, 2'b10});
+		end else begin
+			outPacketQ.deq;
+			let d = outPacketQ.first;
+			outPacketBuffer <= tagged Valid truncate(d>>valueof(AuroraFCWidth));
+			sendQ.enq({truncate(d), 2'b00});
+		end
 	endrule
-	Reg#(Maybe#(Bit#(BodySz))) packetRecvBuffer <- mkReg(tagged Invalid, clocked_by aclk, reset_by arst);
-	rule recvPacketPart;
-		let crdata = auroraInQ.first;
-		auroraInQ.deq;
-		Bit#(BodySz) cdata = truncate(crdata);
-		Bit#(8) header = truncate(crdata>>valueOf(BodySz));
-		Bit#(1) idx = header[1];
-		Bit#(1) control = header[0];
+
+	//-------------------------------------------------------------------------------------
+	// Rules for receiving
+	//-------------------------------------------------------------------------------------
+	SyncFIFOIfc#(AuroraIfcType) inPacketQ <- mkSyncFIFOFromCC(8, uclk);
+	FIFO#(AuroraIfcType) recvQ <- mkSizedBRAMFIFO(recvQDepth);
+	Reg#(AuroraFC) inPacketBuffer <- mkReg(0);
+	rule recvPacket;
+		let d <- user.receive;
+	   	//$display( "(%t) %m, AuroraExtFlowControl idx = %d, received %x", $time, idx, d );
+		Bit#(1) control = d[0];
+		Bit#(1) header = d[1];
 
 		if ( control == 1 ) begin
-			curSendBudgetUp <= curSendBudgetUp + truncate(cdata);
-		end else
-		if ( isValid(packetRecvBuffer) ) begin
-			let pdata = fromMaybe(0, packetRecvBuffer);
-			if ( idx == 1 ) begin
-				packetRecvBuffer <= tagged Invalid;
-				recvBufferQ.enq( {cdata, pdata} );
-
-				maxInFlightDown <= maxInFlightDown + 1;
+			AuroraFC curData = truncateLSB(d);
+			curSendBudgetUp <= curSendBudgetUp + truncate(curData);
+		end else begin 
+			if ( header == 1 ) begin
+				let pasData = inPacketBuffer;
+				Bit#(2) curData = truncateLSB(d);
+				recvQ.enq({curData, pasData});
 				curInQUp <= curInQUp + 1;
+				maxInFlightDown <= maxInFlightDown + 1;
+			end else begin
+				AuroraFC curData = truncateLSB(d);
+				inPacketBuffer <= curData;
 			end
-			else begin
-				packetRecvBuffer <= tagged Valid cdata;
-			end
-		end
-		else begin
-			if ( idx == 0 ) 
-				packetRecvBuffer <= tagged Valid cdata;
 		end
 	endrule
-	rule flushReadBuffer;
+ 
+	rule desInPacket;
 		curInQDown <= curInQDown + 1;
-
-		recvBufferQ.deq;
-		recvQ.enq(recvBufferQ.first);
-		//recvQt.enq(truncate(recvBufferQ.first));
-		//recvQb.enq(truncate(recvBufferQ.first>>valueOf(AuroraIfcWidthH)));
-	endrule
-	rule flushReadBuffer2;
 		recvQ.deq;
-		//recvQt.deq;
-		//recvQb.deq;
-
-		//recvQ2.enq({recvQb.first,recvQt.first});
-		recvQ2.enq(recvQ.first);
+		inPacketQ.enq(recvQ.first);
 	endrule
-
 	
 	method Action send(AuroraIfcType data);
-		sendQ.enq(data);
-
-		//sendQt.enq(truncate(data));
-		//sendQb.enq(truncate(data>>valueOf(AuroraIfcWidthH)));
+		outPacketQ.enq(data);
 	endmethod
 	method ActionValue#(AuroraIfcType) receive;
-		recvQ2.deq;
-		return recvQ2.first;
+		inPacketQ.deq;
+		return inPacketQ.first;
 	endmethod
-	method Bit#(1) channel_up = auroraExt.channel_up;
-	method Bit#(1) lane_up = auroraExt.lane_up;
+	method Bit#(1) channel_up = user.channel_up;
+	method Bit#(1) lane_up = user.lane_up;
 endmodule
-

@@ -7,8 +7,9 @@ import Clocks :: *;
 import ClockImport :: *;
 import DefaultValue :: *;
 
-import AuroraExtImportCommon::*;
 import AuroraCommon::*;
+import AuroraExtGearbox::*;
+import AuroraExtImport117::*;
 
 import XilinxCells::*;
 
@@ -52,7 +53,7 @@ module mkAuroraExt119#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk200) (AuroraEx
 	AuroraExtImportIfc#(AuroraExtPerQuad) auroraExtImport <- mkAuroraExtImport_bsim(defaultClock, defaultClock, defaultReset, defaultReset);
 `endif
 
-	Vector#(AuroraExtPerQuad, AuroraExtUserIfc) auroraExt;
+	Vector#(AuroraExtPerQuad, AuroraExtFlowControlIfc) auroraExt;
 	Vector#(AuroraExtPerQuad, Aurora_Pins#(1)) auroraPins;
 	Vector#(AuroraExtPerQuad, Clock) auroraClk;
 	Vector#(AuroraExtPerQuad, Reset) auroraRst;

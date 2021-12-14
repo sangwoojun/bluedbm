@@ -8,9 +8,31 @@ import ClockImport :: *;
 import DefaultValue :: *;
 
 import AuroraCommon::*;
-import AuroraExtImportCommon::*;
+import AuroraExtGearbox::*;
+import GetPut::*;
 
 import XilinxCells::*;
+
+
+import "BDPI" function Bool bdpiSendAvailable(Bit#(8) nidx, Bit#(8) pidx);
+import "BDPI" function Bool bdpiRecvAvailable(Bit#(8) nidx, Bit#(8) pidx);
+import "BDPI" function Bit#(64) bdpiRead(Bit#(8) nidx, Bit#(8) pidx);
+import "BDPI" function Bool bdpiWrite(Bit#(8) nidx, Bit#(8) pidx, Bit#(64) data);
+
+typedef 4 AuroraExtPerQuad;
+
+interface AuroraExtIfc;
+	interface Vector#(AuroraExtPerQuad, Aurora_Pins#(1)) aurora;
+	interface Vector#(AuroraExtPerQuad, AuroraExtUserIfc) user;
+endinterface
+
+interface AuroraExtUserIfc;
+	method Action send(AuroraIfcType data);
+	method ActionValue#(AuroraIfcType) receive;
+
+	method Bit#(1) lane_up;
+	method Bit#(1) channel_up;
+endinterface
 
 interface ClockDiv4Ifc;
 	interface Clock slowClock;
@@ -51,7 +73,7 @@ module mkAuroraExt117#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk200) (AuroraEx
 `else
 	AuroraExtImportIfc#(AuroraExtPerQuad) auroraExtImport <- mkAuroraExtImport_bsim(defaultClock, defaultClock, defaultReset, defaultReset);
 `endif
-	Vector#(AuroraExtPerQuad, AuroraExtUserIfc) auroraExt;
+	Vector#(AuroraExtPerQuad, AuroraExtFlowControlIfc) auroraExt;
    	Vector#(AuroraExtPerQuad, Aurora_Pins#(1)) auroraPins;
    	Vector#(AuroraExtPerQuad, Clock) auroraClk;
 	Vector#(AuroraExtPerQuad, Reset) auroraRst;
@@ -265,5 +287,77 @@ module mkAuroraExtImport117#(Clock gtx_clk_in, Clock init_clk, Reset init_rst_n,
 		user3_soft_err,
 		user3_data_err_count
 		);
+endmodule
+
+module mkAuroraExtImport_bsim#(Clock gtx_clk_in, Clock init_clk, Reset init_rst_n, Reset gt_rst_n) (AuroraExtImportIfc#(AuroraExtPerQuad));
+	Clock clk <- exposeCurrentClock;
+	Reset rst <- exposeCurrentReset;
+
+	Reg#(Bit#(8)) nodeIdx <- mkReg(255);
+	
+	Vector#(4, FIFO#(Bit#(AuroraPhysWidth))) writeQ <- replicateM(mkFIFO);
+	Vector#(4, FIFO#(Bit#(AuroraPhysWidth))) mirrorQ <- replicateM(mkFIFO);
+	for (Integer i = 0; i < 4; i = i + 1) begin
+		rule m0 if ( bdpiRecvAvailable(nodeIdx, fromInteger(i) ));
+			let d = bdpiRead(nodeIdx, fromInteger(i));
+			mirrorQ[i].enq(d);
+	   		$display( "(%t) AuroraExtImport \t\tread %x %d", $time, d, i );
+		endrule
+		rule w0 if ( bdpiSendAvailable(nodeIdx, fromInteger(i)));
+			let d = writeQ[i].first;
+			if ( bdpiWrite(nodeIdx, fromInteger(i), d) ) begin
+		  		$display( "(%t) AuroraExtImport \t\twrite %x %d", $time, d, i );
+				writeQ[i].deq;
+			end
+		endrule
+   	end
+	
+	function AuroraControllerIfc#(AuroraPhysWidth) auroraController(Integer i);
+		return (interface AuroraControllerIfc;
+				interface Reset aurora_rst_n = rst;
+				method Bit#(1) channel_up;
+		    			return 1;
+				 endmethod
+		 		method Bit#(1) lane_up;
+		    			return 1;
+		 		endmethod
+		 		method Bit#(1) hard_err;
+		    			return 0;
+		 		endmethod
+		 		method Bit#(1) soft_err;
+		    			return 0;
+		 		endmethod
+		 		method Bit#(8) data_err_count;
+		    			return 0;
+		 		endmethod
+
+		 		method Action send(Bit#(64) data);// if ( bdpiSendAvailable(nodeIdx, 0) );
+		    			$display("aurora.send port %d data %d", i, data);
+		    			writeQ[i].enq(data);
+		 		endmethod
+		 		method ActionValue#(Bit#(64)) receive;
+		    			let data = mirrorQ[i].first;
+		    			mirrorQ[i].deq;
+		    			$display("aurora.receive port %d data %h", i, data);
+		    			return data;
+		 		endmethod
+	 		endinterface);
+	endfunction
+
+	interface Clock aurora_clk0 = clk;
+	interface Clock aurora_clk1 = clk;
+	interface Clock aurora_clk2 = clk;
+	interface Clock aurora_clk3 = clk;
+
+	interface Reset aurora_rst0 = rst;
+	interface Reset aurora_rst1 = rst;
+	interface Reset aurora_rst2 = rst;
+	interface Reset aurora_rst3 = rst;
+	
+	
+	interface AuroraControllerIfc user0 = auroraController(0);
+	interface AuroraControllerIfc user1 = auroraController(1);
+	interface AuroraControllerIfc user2 = auroraController(2);
+	interface AuroraControllerIfc user3 = auroraController(3);
 endmodule
 endpackage: AuroraExtImport117

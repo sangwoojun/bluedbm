@@ -8,21 +8,20 @@ import ClockImport :: *;
 import DefaultValue :: *;
 
 import AuroraCommon::*;
-import AuroraExtGearbox::*;
-import AuroraExtImport117::*;
+import AuroraExtImportCommon::*;
 
-import XilinxCells::*;
 
 interface ClockDiv4Ifc;
-	interface Clock slowClock;
+        interface Clock slowClock;
 endinterface
 (* synthesize *)
 module mkClockDiv4#(Clock fastClock) (ClockDiv4Ifc);
-	MakeResetIfc fastReset <- mkReset(8, True, fastClock);
-	ClockDividerIfc clockdiv4 <- mkClockDivider(4, clocked_by fastClock, reset_by fastReset.new_rst);
+        MakeResetIfc fastReset <- mkReset(8, True, fastClock);
+        ClockDividerIfc clockdiv4 <- mkClockDivider(4, clocked_by fastClock, reset_by fastReset.new_rst);
 
-	interface slowClock = clockdiv4.slowClock;
+        interface slowClock = clockdiv4.slowClock;
 endmodule
+
 
 (* synthesize *)
 module mkAuroraExt119#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk200) (AuroraExtIfc);
@@ -53,7 +52,7 @@ module mkAuroraExt119#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk200) (AuroraEx
 	AuroraExtImportIfc#(AuroraExtPerQuad) auroraExtImport <- mkAuroraExtImport_bsim(defaultClock, defaultClock, defaultReset, defaultReset);
 `endif
 
-	Vector#(AuroraExtPerQuad, AuroraExtFlowControlIfc) auroraExt;
+	Vector#(AuroraExtPerQuad, AuroraExtUserIfc) auroraExt;
 	Vector#(AuroraExtPerQuad, Aurora_Pins#(1)) auroraPins;
 	Vector#(AuroraExtPerQuad, Clock) auroraClk;
 	Vector#(AuroraExtPerQuad, Reset) auroraRst;

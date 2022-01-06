@@ -27,21 +27,94 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	Clock pcieclk = pcie.user_clk;
 	Reset pcierst = pcie.user_rst;
 
-	Reg#(Bit#(1)) inQuad <- mkReg(0);
-	Reg#(Bit#(3)) inPort <- mkReg(0);
-	Reg#(Bit#(1)) outQuad <- mkReg(0);
-	Reg#(Bit#(3)) outPort <- mkReg(0);
-	//--------------------------------------------------------------------------------------------
-	//Write Request
-	//--------------------------------------------------------------------------------------------
+	//--------------------------------------------------------------------------------------
+	// Pcie Read and Write
+	//--------------------------------------------------------------------------------------
+	SyncFIFOIfc#(Tuple2#(IOReadReq, Bit#(32))) pcieRespQ <- mkSyncFIFOFromCC(16, pcieclk);
+	SyncFIFOIfc#(IOReadReq) pcieReadReqQ <- mkSyncFIFOToCC(16, pcieclk, pcierst);
 	SyncFIFOIfc#(IOWrite) pcieWriteQ <- mkSyncFIFOToCC(16, pcieclk, pcierst);
-	FIFO#(AuroraIfcType) inputPortQ <- mkFIFO;
-	Reg#(AuroraIfcType) inPayloadBuffer <- mkReg(0);
-	Reg#(Bit#(1)) inPayloadBufferCnt <- mkReg(0);
+	
+	rule getReadReq;
+		let r <- pcie.dataReq;
+		pcieReadReqQ.enq(r);
+	endrule
+	rule returnReadResp;
+		let r_ = pcieRespQ.first;
+		pcieRespQ.deq;
+
+		pcie.dataSend(tpl_1(r_), tpl_2(r_));
+	endrule
 	rule getWriteReq;
 		let w <- pcie.dataReceive;
 		pcieWriteQ.enq(w);
 	endrule
+	//--------------------------------------------------------------------------------------
+	// Debug lane and channel
+	//--------------------------------------------------------------------------------------
+	Vector#(8, Reg#(Bit#(1))) debuggingBitsC <- replicateM(mkReg(0));
+	Vector#(8, Reg#(Bit#(1))) debuggingBitsL <- replicateM(mkReg(0));
+	Reg#(Bit#(1)) debuggingCnt_1 <- mkReg(0);
+	Reg#(Bit#(4)) debuggingCnt_2 <- mkReg(0);
+	Reg#(Bool) debugDone <- mkReg(True);
+	
+	rule debugChannelLane;
+		debuggingBitsC[0] <= auroraQuads[0].user[0].channel_up;
+		debuggingBitsC[1] <= auroraQuads[0].user[1].channel_up;
+		debuggingBitsC[2] <= auroraQuads[0].user[2].channel_up;
+		debuggingBitsC[3] <= auroraQuads[0].user[3].channel_up;
+		
+		debuggingBitsC[4] <= auroraQuads[1].user[0].channel_up;
+		debuggingBitsC[5] <= auroraQuads[1].user[1].channel_up;
+		debuggingBitsC[6] <= auroraQuads[1].user[2].channel_up;
+		debuggingBitsC[7] <= auroraQuads[1].user[3].channel_up;
+
+		debuggingBitsL[0] <= auroraQuads[0].user[0].lane_up;
+		debuggingBitsL[1] <= auroraQuads[0].user[1].lane_up;
+		debuggingBitsL[2] <= auroraQuads[0].user[2].lane_up;
+		debuggingBitsL[3] <= auroraQuads[0].user[3].lane_up;
+		
+		debuggingBitsL[4] <= auroraQuads[1].user[0].lane_up;
+		debuggingBitsL[5] <= auroraQuads[1].user[1].lane_up;
+		debuggingBitsL[6] <= auroraQuads[1].user[2].lane_up;
+		debuggingBitsL[7] <= auroraQuads[1].user[3].lane_up;
+	endrule
+	rule getReadStatDebug(debugDone);
+		pcieReadReqQ.deq;
+		let r = pcieReadReqQ.first;
+
+		let a = r.addr;
+		if ( debuggingCnt_1 < 1 ) begin
+			if ( debuggingCnt_2 < 7 ) begin
+				debuggingCnt_2 <= debuggingCnt_2 + 1;
+			end else begin
+				debuggingCnt_1 <= debuggingCnt_1 + 1;
+				debuggingCnt_2 <= 0;
+			end
+			pcieRespQ.enq(tuple2(r, zeroExtend(debuggingBitsC[debuggingCnt_2])));
+		end else begin
+			if ( debuggingCnt_2 < 7 ) begin
+				debuggingCnt_2 <= debuggingCnt_2 + 1;
+			end else begin
+				debuggingCnt_1 <= 0;
+				debuggingCnt_2 <= 0;
+				debugDone <= False;
+			end
+			pcieRespQ.enq(tuple2(r, zeroExtend(debuggingBitsL[debuggingCnt_2])));
+		end
+	endrule
+	//--------------------------------------------------------------------------------------------
+	// Send Payload
+	//--------------------------------------------------------------------------------------------
+	Reg#(Bit#(1)) inQuad <- mkReg(0);
+	Reg#(Bit#(3)) inPort <- mkReg(0);
+	Reg#(Bit#(1)) outQuad <- mkReg(0);
+	Reg#(Bit#(3)) outPort <- mkReg(0);
+
+	FIFO#(AuroraIfcType) inputPortQ <- mkFIFO;
+	Reg#(AuroraIfcType) inPayloadBuffer <- mkReg(0);
+	Reg#(Bit#(1)) inPayloadBufferCnt <- mkReg(0);
+	Reg#(Bool) inPayloadSendDone <- mkReg(False);
+
 	rule getCmd;
 		pcieWriteQ.deq;
 		let w = pcieWriteQ.first;
@@ -114,44 +187,55 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	rule relayPayload;
 		inputPortQ.deq;
 		let d = inputPortQ.first;
-		auroraQuads[inQuad].user[inPort].send(d);
+		auroraQuads[0].user[0].send(d);
+		inPayloadSendDone <= True;
 	endrule
 	//--------------------------------------------------------------------------------------
-	//Read Request
+	// Receive Payload
 	//--------------------------------------------------------------------------------------
-	SyncFIFOIfc#(Tuple2#(IOReadReq, Bit#(32))) pcieRespQ <- mkSyncFIFOFromCC(16, pcieclk);
-	SyncFIFOIfc#(IOReadReq) pcieReadReqQ <- mkSyncFIFOToCC(16, pcieclk, pcierst);
-	FIFO#(AuroraIfcType) outputPortQ <- mkFIFO;
+	//FIFO#(AuroraIfcType) outputPortQ <- mkFIFO;
 	Reg#(Bit#(32)) outPayloadBuffer <- mkReg(0);
 	Reg#(Bit#(1)) outPayloadBufferCnt <- mkReg(0);
-	rule getPacket;
-		let d <- auroraQuads[inQuad].user[inPort].receive;
-		outputPortQ.enq(d);
+	Reg#(Bit#(4)) quadCnt <- mkReg(0);
+	Reg#(Bool) outPayloadWriteStart <- mkReg(False);
+	Vector#(8, Reg#(AuroraIfcType)) outputPort <- replicateM(mkReg(0));
+
+	rule getPacket(inPayloadSendDone);
+		let d_0 <- auroraQuads[0].user[0].receive;
+		outputPort[0] <= d_0;
+		let d_1 <- auroraQuads[0].user[1].receive;
+		outputPort[1] <= d_1;
+		let d_2 <- auroraQuads[0].user[2].receive;
+		outputPort[2] <= d_2;
+		let d_3 <- auroraQuads[0].user[3].receive;
+		outputPort[3] <= d_3;
+		let d_4 <- auroraQuads[1].user[0].receive;
+		outputPort[4] <= d_4;
+		let d_5 <- auroraQuads[1].user[1].receive;
+		outputPort[5] <= d_5;
+		let d_6 <- auroraQuads[1].user[2].receive;
+		outputPort[6] <= d_6;
+		let d_7 <- auroraQuads[1].user[3].receive;
+		outputPort[7] <= d_7;
+		outPayloadWriteStart <= True;
+		//outputPortQ.enq(d);
 	endrule
-	rule getReadReq;
-		let r <- pcie.dataReq;
-		pcieReadReqQ.enq(r);
-	endrule
-	rule getReadStat;
+	rule getReadStatRecPayload(inPayloadSendDone && outPayloadWriteStart);
 		pcieReadReqQ.deq;
 		let r = pcieReadReqQ.first;
 
 		let a = r.addr;
 		if (outPayloadBufferCnt == 0 ) begin
-			outputPortQ.deq;
-			let d = outputPortQ.first;
-			pcieRespQ.enq(tuple2(r, truncate(d)));
-			outPayloadBuffer <= truncate(outputPortQ.first>>32);
+			//outputPortQ.deq;
+			//let d = outputPortQ.first;
+			pcieRespQ.enq(tuple2(r, truncate(outputPort[quadCnt])));
+			outPayloadBuffer <= truncate(outputPort[quadCnt]>>32);
 			outPayloadBufferCnt <= outPayloadBufferCnt + 1;
 		end else begin
 			pcieRespQ.enq(tuple2(r, outPayloadBuffer));
 			outPayloadBufferCnt <= 0;
+			if ( quadCnt == 7 ) quadCnt <= 0;
+			else quadCnt <= quadCnt + 1;
 		end
-	endrule
-	rule returnReadResp;
-		let r_ = pcieRespQ.first;
-		pcieRespQ.deq;
-
-		pcie.dataSend(tpl_1(r_), tpl_2(r_));
 	endrule
 endmodule

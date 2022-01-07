@@ -38,72 +38,69 @@ int main(int argc, char** argv) {
 	printf( "\n" );
 	fflush( stdout );
 
-	int cnt = 16;
-	printf( "Quad 117\n" );
-	fflush( stdout );
-	for ( int i = 0; i < 4; i ++ ) {
-		printf( "X1Y%d Channel Up: %x\n", cnt, pcie->userReadWord(0) );
-		fflush( stdout );
-		cnt ++;
-	}
-	cnt = 24;
-	printf( "Quad 119\n" );
-	fflush( stdout );
-	for ( int i = 0; i < 4; i ++ ) {
-		printf( "X1Y%d Channel Up: %x\n", cnt, pcie->userReadWord(0) );
-		fflush( stdout );
-		cnt ++;
-	}
-	cnt = 16;
-	printf( "Quad 117\n" );
-	fflush( stdout );
-	for ( int i = 0; i < 4; i ++ ) {
-		printf( "X1Y%d Lane Up: %x\n", cnt, pcie->userReadWord(0) );
-		fflush( stdout );
-		cnt ++;
-	}
-	cnt = 24;
-	printf( "Quad 119\n" );
-	fflush( stdout );
-	for ( int i = 0; i < 4; i ++ ) {
-		printf( "X1Y%d Lane Up: %x\n", cnt, pcie->userReadWord(0) );
-		fflush( stdout );
-		cnt ++;
-	}
+	printf( "Channel/Lane Up: %x\n", pcie->userReadWord(8*4) );
+
+
 	printf( "\n" );
 	fflush( stdout );
-	pcie->Ioctl(1, 0);
+	//pcie->Ioctl(1, 0);
 	sleep(1);
 
 	pcie->userWriteWord(0, PORT); //designate input port of AuroraExt
 	printf( "Designate input port as %d\n", PORT );
 	fflush( stdout );
 	
-	for ( int i = 0; i < 32; i ++ ) {
-		pcie->userWriteWord(1, 0xdeadbeef);
-		pcie->userWriteWord(1, 0xcafef00d);
+	for ( int i = 0; i < 3; i ++ ) {
+		pcie->userWriteWord(4, 0xdeadbeef);
+		pcie->userWriteWord(4, 0xcafef00d);
 	}
 	printf( "Send Done! (deadbeef & cafef00d)\n\n" );
 	fflush( stdout );
-	sleep(10);
+	sleep(1);
 	
-	int resCnt = 16;
-	for ( int i = 0; i < 4; i ++ ) {
-		printf( "Quad 117\n" );
-		printf( "X1Y%d received(1/2): %x\n", resCnt, pcie->userReadWord(0) );
-		fflush(stdout);
-		printf( "X1Y%d received(2/2): %x\n", resCnt, pcie->userReadWord(0) );
-		fflush(stdout);
-		resCnt ++;
+	pcie->userWriteWord(0, 2); //designate input port of AuroraExt
+	sleep(1);
+	for ( int i = 0; i < 3; i ++ ) {
+		pcie->userWriteWord(4, 0xdeadbeef);
+		pcie->userWriteWord(4, 0xcafef00d);
 	}
-	resCnt = 24;
-	for ( int i = 0; i < 4; i ++ ) {
-		printf( "Quad 119\n" );
-		printf( "X1Y%d received(1/2): %x\n", resCnt, pcie->userReadWord(0) );
-		fflush(stdout);
-		printf( "X1Y%d received(2/2): %x\n", resCnt, pcie->userReadWord(0) );
-		fflush(stdout);
-		resCnt ++;
+	printf( "Send Done! (deadbeef & cafef00d)\n\n" );
+	fflush( stdout );
+	sleep(1);
+	
+	pcie->userWriteWord(0, 1); //designate input port of AuroraExt
+	sleep(1);
+	printf( "Designate input port as %d\n", PORT );
+	fflush( stdout );
+	
+	for ( int i = 0; i < 3; i ++ ) {
+		pcie->userWriteWord(4, 0xdeadbeef);
+		pcie->userWriteWord(4, 0xcafef00d);
+	}
+	printf( "Send Done! (deadbeef & cafef00d)\n\n" );
+	fflush( stdout );
+	sleep(1);
+	
+	for ( int qq = 0; qq < 6; qq ++ ) {
+		int resCnt = 16;
+		for ( int i = 0; i < 4; i ++ ) {
+			printf( "Quad 117\n" );
+			printf( "X1Y%d received(1/2): %x\n", resCnt, pcie->userReadWord(i*4) );
+			fflush(stdout);
+			printf( "X1Y%d received(2/2): %x\n", resCnt, pcie->userReadWord(i*4) );
+			fflush(stdout);
+			resCnt ++;
+		}
+		resCnt = 24;
+		for ( int i = 0; i < 4; i ++ ) {
+			printf( "Quad 119\n" );
+			printf( "X1Y%d received(1/2): %x\n", resCnt, pcie->userReadWord((4+i)*4) );
+			fflush(stdout);
+			printf( "X1Y%d received(2/2): %x\n", resCnt, pcie->userReadWord((4+i)*4 ));
+			fflush(stdout);
+			resCnt ++;
+		}
+		printf( "\n");
 	}
 
 	return 0;

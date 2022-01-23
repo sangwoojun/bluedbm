@@ -1,4 +1,4 @@
-BLUESPEC_HOME = /opt/Bluespec/Bluespec-2016.07.beta1/lib
+#BLUESPEC_HOME = /opt/Bluespec/Bluespec-2016.07.beta1/lib
 LIBPATH =../../../bluespecpcie/
 BLIBPATH=../../../bluelib/src
 ROOT=../../../

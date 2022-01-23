@@ -24,7 +24,8 @@ typedef 4 AuroraExtPerQuad;
 
 typedef 64 AuroraPhysWidth;
 typedef TSub#(AuroraPhysWidth, 2) BodySz;
-typedef Bit#(AuroraPhysWidth) AuroraIfcType;
+typedef TMul#(BodySz, 2) AuroraIfcWidth;
+typedef Bit#(AuroraIfcWidth) AuroraIfcType;
 
 
 interface AuroraExtIfc;
@@ -53,7 +54,7 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 	Reg#(Bit#(16)) curSendBudgetDown <- mkReg(0, clocked_by uclk, reset_by urst);
 	
 	SyncFIFOIfc#(AuroraIfcType) outPacketQ <- mkSyncFIFOFromCC(8, uclk);
-	FIFO#(AuroraIfcType) sendQ <- mkSizedFIFO(32, clocked_by uclk, reset_by urst);
+	FIFO#(Bit#(AuroraPhysWidth)) sendQ <- mkSizedFIFO(32, clocked_by uclk, reset_by urst); //
 	rule sendPacket;
 		let curSendBudget = curSendBudgetUp - curSendBudgetDown;
 		if ((maxInFlightUp-maxInFlightDown)
@@ -97,8 +98,7 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 		end else begin 
 			if ( header == 1 ) begin
 				let pasData = inPacketBuffer;
-				Bit#(2) curDataFinal = truncate(curData);
-				recvQ.enq({curDataFinal, pasData});
+				recvQ.enq({curData, pasData});
 				curInQUp <= curInQUp + 1;
 				maxInFlightDown <= maxInFlightDown + 1;
 			end else begin

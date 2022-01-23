@@ -171,7 +171,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		let d = inputPortQ.first;
 		let qid = outPortIdx[2];
 		Bit#(2) pid = truncate(outPortIdx);
-		auroraQuads[qid].user[pid].send(d);
+		auroraQuads[qid].user[pid].send(zeroExtend(d));
 		inPayloadSendDone <= True;
 	endrule
 	//--------------------------------------------------------------------------------------

@@ -1,20 +1,23 @@
+open_hw
 connect_hw_server
-open_hw_target 
-set artixfpga1 [lindex [get_hw_devices] 0] 
-set artixfpga2 [lindex [get_hw_devices] 1] 
-set vc707fpga [lindex [get_hw_devices] 2] 
+#open_hw_target {localhost:3121/xilinx_tcf/Digilent/210203AE47E1A}
 
-set file ./build/hw/mkProjectTop.bit
-set_property PROGRAM.FILE $file $vc707fpga
-puts "fpga is $vc707fpga, bit file size is [exec ls -sh $file], PROGRAM BEGIN"
-program_hw_devices $vc707fpga
+#set vc707fpga2 [lindex [get_hw_devices] 1] 
 
-set file ./mkTopArtix.bit
-set_property PROGRAM.FILE $file $artixfpga1
-puts "fpga is $artixfpga1, bit file size is [exec ls -sh $file], PROGRAM BEGIN"
-program_hw_devices $artixfpga
+#set file ./vc707/hw/mkProjectTop.bit
+#set_property PROGRAM.FILE $file $vc707fpga2
+#puts "fpga is $vc707fpga2, bit file size is [exec ls -sh $file], PROGRAM BEGIN"
+#program_hw_devices -verbose $vc707fpga2
+#refresh_hw_device $vc707fpga2
 
-set file ./mkTopArtix.bit
-set_property PROGRAM.FILE $file $artixfpga2
-puts "fpga is $artixfpga2, bit file size is [exec ls -sh $file], PROGRAM BEGIN"
-program_hw_devices $artixfpga2
+#close_hw_target {localhost:3121/xilinx_tcf/Digilent/210203AE47E1A}
+
+open_hw_target {localhost:3121/xilinx_tcf/Digilent/210203A7E2C3A} 
+
+set vc707fpga1 [lindex [get_hw_devices] 2]
+
+set file ./vc707/hw/mkProjectTop.bit
+set_property PROGRAM.FILE $file $vc707fpga1
+puts "fpga is $vc707fpga1, bit file size is [exec ls -sh $file], PROGRAM BEGIN"
+program_hw_devices -verbose $vc707fpga1
+refresh_hw_device $vc707fpga1

@@ -7,7 +7,7 @@ proc genAurora {corename propertyList} {
 
 	create_project -name local_synthesized_ip -in_memory -part xc7vx485tffg1761-2
 	set_property board_part xilinx.com:vc707:part0:1.0 [current_project]
-	create_ip -name aurora_64b66b -version 11.2 -vendor xilinx.com -library ip -module_name $corename -dir ./$coredir
+	create_ip -name aurora_64b66b -version 12.0 -vendor xilinx.com -library ip -module_name $corename -dir ./$coredir
 	set_property -dict $propertyList [get_ips $corename]
 
 	generate_target {instantiation_template} [get_files ./$coredir/$corename/$corename.xci]

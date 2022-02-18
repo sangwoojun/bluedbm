@@ -86,6 +86,22 @@ int main(int argc, char** argv) {
 		printf( "X1Y%d received(2/2): %x\n", resCnt, pcie->userReadWord(i*4) );
 		fflush(stdout);
 		resCnt ++;
+		printf( "X1Y%d received(2/2): %x\n", resCnt, pcie->userReadWord(i*4) );
+		fflush(stdout);
+		printf( "X1Y%d received(2/2): %x\n", resCnt, pcie->userReadWord(i*4) );
+		fflush(stdout);
+		printf( "X1Y%d received(2/2): %x\n", resCnt, pcie->userReadWord(i*4) );
+		fflush(stdout);
+		printf( "X1Y%d received(2/2): %x\n", resCnt, pcie->userReadWord(i*4) );
+		fflush(stdout);
+		printf( "X1Y%d received(2/2): %x\n", resCnt, pcie->userReadWord(i*4) );
+		fflush(stdout);
+		printf( "X1Y%d received(2/2): %x\n", resCnt, pcie->userReadWord(i*4) );
+		fflush(stdout);
+		printf( "X1Y%d received(2/2): %x\n", resCnt, pcie->userReadWord(i*4) );
+		fflush(stdout);
+		printf( "X1Y%d received(2/2): %x\n", resCnt, pcie->userReadWord(i*4) );
+		fflush(stdout);
 	}
 	resCnt = 24;
 	for ( int i = 0; i < 4; i ++ ) {

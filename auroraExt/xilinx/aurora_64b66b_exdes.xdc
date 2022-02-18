@@ -67,23 +67,23 @@
 set_property LOC K7 [get_ports CLK_aurora_quad117_gtx_clk_n_v]
 set_property LOC K8 [get_ports CLK_aurora_quad117_gtx_clk_p_v]
 
-set_false_path -from [get_cells -hier -filter {NAME =~ *auroraQuad_0/rst50/*}]
+set_false_path -from [get_pins -hier -filter {NAME =~ *auroraQuad_0/rst50/Q}]
 #set_false_path -to [get_pins -hier -filter {NAME =~ *auroraExt119/auroraExt_*_outPacketQ/*/CLR}]
 #set_false_path -to [get_pins -hier -filter {NAME =~ *auroraExt119/auroraExt_*_outPacketQ/*/PRE}]
-set_false_path -to [get_pins -hier -filter {NAME =~ *auroraQuad_0/rst50/*/CLR}]
+#set_false_path -to [get_pins -hier -filter {NAME =~ *auroraQuad_0/rst50/*/CLR}]
 
 ## Quad119
 set_property LOC A9 [get_ports CLK_aurora_quad119_gtx_clk_n_v]
 set_property LOC A10 [get_ports CLK_aurora_quad119_gtx_clk_p_v]
 
-set_false_path -from [get_cells -hier -filter {NAME =~ *auroraQuad_1/rst50/*}]
+set_false_path -from [get_pins -hier -filter {NAME =~ *auroraQuad_1/rst50/Q}]
 #set_false_path -to [get_pins -hier -filter {NAME =~ *auroraExt119/auroraExt_*_outPacketQ/*/CLR}]
 #set_false_path -to [get_pins -hier -filter {NAME =~ *auroraExt119/auroraExt_*_outPacketQ/*/PRE}]
-set_false_path -to [get_pins -hier -filter {NAME =~ *auroraQuad_1/rst50/*/CLR}]
+#set_false_path -to [get_pins -hier -filter {NAME =~ *auroraQuad_1/rst50/*/CLR}]
 
 ## Board constraint (50MHz clk)
-create_clock -name aurora_117_init_clk_i -period 20.0 [get_pins *auroraQuad_0/auroraExt117ClockDiv/clockdiv4/cntr_reg[1]/Q]
-create_clock -name aurora_119_init_clk_i -period 20.0 [get_pins *auroraQuad_1/auroraExt119ClockDiv/clockdiv4/cntr_reg[1]/Q]
+create_clock -name aurora_117_init_clk_i -period 20.0 [get_pins *auroraQuad_0/auroraExt117ClockDiv/clockdiv4/Q]
+create_clock -name aurora_119_init_clk_i -period 20.0 [get_pins *auroraQuad_1/auroraExt119ClockDiv/clockdiv4/Q]
 
 ## Ref clks
 create_clock -name GTXQ0_left_117_i -period 1.600 [get_pins */clk_import_quad117/O]

@@ -55,7 +55,7 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 	
 	SyncFIFOIfc#(AuroraIfcType) outPacketQ <- mkSyncFIFOFromCC(8, uclk);
 	FIFO#(Bit#(AuroraPhysWidth)) sendQ <- mkSizedFIFO(32, clocked_by uclk, reset_by urst); //
-	rule sendPacket;
+	rule sendPacket( user.lane_up != 0 && user.channel_up != 0 );
 		let curSendBudget = curSendBudgetUp - curSendBudgetDown;
 		if ((maxInFlightUp-maxInFlightDown)
 			+(curInQUp-curInQDown)
@@ -87,7 +87,7 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 	SyncFIFOIfc#(AuroraIfcType) inPacketQ <- mkSyncFIFOToCC(8, uclk, urst);
 	FIFO#(AuroraIfcType) recvQ <- mkSizedBRAMFIFO(recvQDepth, clocked_by uclk, reset_by urst);
 	Reg#(Bit#(BodySz)) inPacketBuffer <- mkReg(0, clocked_by uclk, reset_by urst);
-	rule recvPacket;
+	rule recvPacket( user.lane_up != 0 && user.channel_up != 0 );
 		let d <- user.receive;
 		Bit#(1) control = d[0];
 		Bit#(1) header = d[1];

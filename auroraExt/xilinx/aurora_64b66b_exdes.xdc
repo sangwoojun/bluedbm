@@ -86,8 +86,8 @@ create_clock -name aurora_117_init_clk_i -period 20.0 [get_pins *auroraQuad_0/au
 create_clock -name aurora_119_init_clk_i -period 20.0 [get_pins *auroraQuad_1/auroraExt119ClockDiv/clockdiv4/cntr_reg[1]/Q]
 
 ## Ref clks
-create_clock -name GTXQ0_left_117_i -period 1.600 [get_pins *auroraQuad_0/auroraExt_gtx_clk/O]
-create_clock -name GTXQ0_left_119_i -period 1.600 [get_pins *auroraQuad_1/auroraExt_gtx_clk/O]
+create_clock -name GTXQ0_left_117_i -period 1.600 [get_pins */clk_import_quad117/O]
+create_clock -name GTXQ0_left_119_i -period 1.600 [get_pins */clk_import_quad119/O]
 
 ## Aurora clks
 create_clock -name TS_117_user_clk_i_all -period 6.400 [get_pins *auroraQuad_0/auroraExtImport/aurora_64b66b_block_i/clock_module_i/user_clk_net_i/O]

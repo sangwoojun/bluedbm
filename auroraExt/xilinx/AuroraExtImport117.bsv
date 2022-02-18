@@ -33,9 +33,9 @@ module mkAuroraExt117#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk200) (AuroraEx
 	ClockDiv4Ifc auroraExt117ClockDiv <- mkClockDiv4(clk200);
 	Clock clk50 = auroraExt117ClockDiv.slowClock;
 
-	ClockGenIfc clk_200mhz_import <- mkClockIBUFDS_GTE2Import(gtx_clk_p, gtx_clk_n);
-	Clock gtx_clk_200mhz = clk_200mhz_import.gen_clk;
-	Clock auroraExt_gtx_clk = gtx_clk_200mhz;
+	ClockGenIfc clk_import_quad117 <- mkClockIBUFDS_GTE2Import(gtx_clk_p, gtx_clk_n);
+	Clock gtx_clk_quad117 = clk_import_quad117.gen_clk;
+	Clock auroraExt117_gtx_clk = gtx_clk_quad117;
 
 	MakeResetIfc rst50ifc <- mkReset(8, True, clk50);
 	MakeResetIfc rst50ifc2 <- mkReset(16384, True, clk50);
@@ -44,10 +44,10 @@ module mkAuroraExt117#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk200) (AuroraEx
 	Reset rst50_3 = rst50ifc2.new_rst;
 	Reset rst50_3a <- mkAsyncReset(2, rst50_3, clk50);
 		
-	MakeResetIfc rstgtpifc2 <- mkReset(8, True, auroraExt_gtx_clk);
+	MakeResetIfc rstgtpifc2 <- mkReset(8, True, auroraExt117_gtx_clk);
 	Reset rstgtp = rstgtpifc2.new_rst;
 
-	AuroraExtImportIfc#(AuroraExtPerQuad) auroraExtImport <- mkAuroraExtImport117(auroraExt_gtx_clk, clk50, rst50, rstgtp);
+	AuroraExtImportIfc#(AuroraExtPerQuad) auroraExtImport <- mkAuroraExtImport117(auroraExt117_gtx_clk, clk50, rst50, rstgtp);
 `else
 	AuroraExtImportIfc#(AuroraExtPerQuad) auroraExtImport <- mkAuroraExtImport_bsim(defaultClock, defaultClock, defaultReset, defaultReset);
 `endif

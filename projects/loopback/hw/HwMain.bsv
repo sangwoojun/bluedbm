@@ -85,7 +85,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	Reg#(Bit#(4)) qpIdx <- mkReg(0);
 
 	FIFO#(AuroraIfcType) inputPortQ <- mkFIFO;
-	Reg#(AuroraIfcType) inPayloadBuffer <- mkReg(0);
+	Reg#(AuroraIfcType) inPayloadHalfFirst <- mkReg(0);
 	Reg#(Bit#(1)) inPayloadBufferCnt <- mkReg(0);
 	Reg#(Bool) inPayloadSendDone <- mkReg(False);
 
@@ -100,10 +100,11 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			qpIdx <= truncate(d);
 		end else begin
 			if (inPayloadBufferCnt == 0 ) begin
-				inPayloadBuffer <= zeroExtend(d);
+				inPayloadHalfFirst <= zeroExtend(d);
 				inPayloadBufferCnt <= inPayloadBufferCnt + 1;
 			end else begin
-				AuroraIfcType inPayload = (inPayloadBuffer<<32)|zeroExtend(d);		
+				AuroraIfcType inPayloadHalfSecond = zeroExtend(d);
+				AuroraIfcType inPayload = (inPayloadHalfSecond<<32)|(inPayloadHalfFirst);		
 				inputPortQ.enq(inPayload);
 				inPayloadBufferCnt <= 0;
 			end

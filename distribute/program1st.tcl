@@ -1,4 +1,4 @@
-open_hw
+open_hw_manager
 connect_hw_server
 open_hw_target {localhost:3121/xilinx_tcf/Digilent/210203A7E2C3A} 
 

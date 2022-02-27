@@ -95,7 +95,7 @@ module mkAuroraExt117#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk200) (AuroraEx
 					method Bit#(1) channel_up = auroraExt[idx].channel_up;
 				endinterface: AuroraExtUserIfc;
 	end
-	interface Vector user = userifcs;
+	interface user = userifcs;
 	interface Vector aurora = auroraPins;
 endmodule
 

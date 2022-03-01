@@ -96,7 +96,7 @@ module mkAuroraExt117#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk200) (AuroraEx
 				endinterface: AuroraExtUserIfc;
 	end
 	interface user = userifcs;
-	interface Vector aurora = auroraPins;
+	interface aurora = auroraPins;
 endmodule
 
 

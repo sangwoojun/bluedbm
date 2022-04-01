@@ -53,8 +53,8 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 	Reg#(Bit#(16)) curSendBudgetUp <- mkReg(0, clocked_by uclk, reset_by urst);
 	Reg#(Bit#(16)) curSendBudgetDown <- mkReg(0, clocked_by uclk, reset_by urst);
 	
-	SyncFIFOIfc#(AuroraIfcType) outPacketQ <- mkSyncFIFOFromCC(8, uclk);
-	FIFO#(Bit#(AuroraPhysWidth)) sendQ <- mkSizedFIFO(32, clocked_by uclk, reset_by urst); //
+	SyncFIFOIfc#(AuroraIfcType) outPacketQ <- mkSyncFIFOFromCC(128, uclk);
+	FIFO#(Bit#(AuroraPhysWidth)) sendQ <- mkSizedFIFO(128, clocked_by uclk, reset_by urst); //
 	rule sendPacket( user.lane_up != 0 && user.channel_up != 0 );
 		let curSendBudget = curSendBudgetUp - curSendBudgetDown;
 		if ((maxInFlightUp-maxInFlightDown)
@@ -67,6 +67,8 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 			sendQ.deq;
 			user.send(sendQ.first);
 			curSendBudgetDown <= curSendBudgetDown + 1;
+		end else if ( curSendBudget == 0 ) begin
+			user.send({fromInteger(windowSize), 2'b01});
 		end
 	endrule
 
@@ -84,14 +86,14 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 		end
 	endrule
 
-	SyncFIFOIfc#(AuroraIfcType) inPacketQ <- mkSyncFIFOToCC(8, uclk, urst);
+	SyncFIFOIfc#(AuroraIfcType) inPacketQ <- mkSyncFIFOToCC(128, uclk, urst);
 	FIFO#(AuroraIfcType) recvQ <- mkSizedBRAMFIFO(recvQDepth, clocked_by uclk, reset_by urst);
 	Reg#(Bit#(BodySz)) inPacketBuffer <- mkReg(0, clocked_by uclk, reset_by urst);
 	rule recvPacket( user.lane_up != 0 && user.channel_up != 0 );
 		let d <- user.receive;
 		Bit#(1) control = d[0];
 		Bit#(1) header = d[1];
-		Bit#(BodySz) curData = truncateLSB(d);
+		Bit#(BodySz) curData = truncate(d>>2);
 
 		if ( control == 1 ) begin
 			curSendBudgetUp <= curSendBudgetUp + truncate(curData);
@@ -112,7 +114,7 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 		recvQ.deq;
 		inPacketQ.enq(recvQ.first);
 	endrule
-	
+
 	method Action send(AuroraIfcType data);
 		outPacketQ.enq(data);
 	endmethod

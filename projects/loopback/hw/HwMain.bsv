@@ -53,8 +53,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	//--------------------------------------------------------------------------------------
 	Reg#(Bit#(8)) debuggingBitsC <- mkReg(0);
 	Reg#(Bit#(8)) debuggingBitsL <- mkReg(0);
-	Reg#(Bit#(1)) debuggingCnt_1 <- mkReg(0);
-	Reg#(Bit#(4)) debuggingCnt_2 <- mkReg(0);
+	Reg#(Bit#(8)) debuggingCnt <- mkReg(0);
 
 	rule debugChannelLane;
 		debuggingBitsC <= {
@@ -80,14 +79,15 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		};
 	endrule
 	//--------------------------------------------------------------------------------------------
-	// Send Payload
+	// Get Commands from Host via PCIe
 	//--------------------------------------------------------------------------------------------
-	Reg#(Bit#(4)) qpIdx <- mkReg(0);
-
 	FIFO#(AuroraIfcType) inputPortQ <- mkFIFO;
+
 	Reg#(AuroraIfcType) inPayloadHalfFirst <- mkReg(0);
-	Reg#(Bit#(1)) inPayloadBufferCnt <- mkReg(0);
-	Reg#(Bool) inPayloadSendDone <- mkReg(False);
+	Reg#(Bit#(4)) qpIdxIn <- mkReg(0);
+	Reg#(Bit#(4)) qpIdxOut <- mkReg(0);
+	Reg#(Bit#(2)) inPayloadBufferCnt <- mkReg(0);
+	Reg#(Bool) setPortDone <- mkReg(False);
 
 	rule getCmd;
 		pcieWriteQ.deq;
@@ -97,7 +97,14 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		let a = w.addr;
 
 		if ( a == 0 ) begin // command
-			qpIdx <= truncate(d);
+			case ( d )
+				0: qpIdxOut <= 4'b0001;
+				1: qpIdxOut <= 4'b0000;
+				2: qpIdxOut <= 4'b0100;
+				4: qpIdxOut <= 4'b0010;
+			endcase
+			qpIdxIn <= truncate(d);
+			setPortDone <= True;
 		end else begin
 			if (inPayloadBufferCnt == 0 ) begin
 				inPayloadHalfFirst <= zeroExtend(d);
@@ -110,11 +117,77 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			end
 		end
 	endrule
-	rule relayPayload;
+	//--------------------------------------------------------------------------------------------
+	// Traffic Generator
+	//--------------------------------------------------------------------------------------------
+	Reg#(Bit#(16)) sendTrafficPacketTotal <- mkReg(0);
+	Reg#(Bit#(32)) trafficPacket <-mkReg(32'hcccc0000);
+		
+	rule sendTrafficPacket( setPortDone && (sendTrafficPacketTotal < 1024) );
+		let qidIn = qpIdxIn[2];
+		Bit#(2) pidIn = truncate(qpIdxIn);
+		AuroraIfcType packet = zeroExtend(trafficPacket);
+
+		auroraQuads[qidIn].user[pidIn].send(packet);
+		
+		sendTrafficPacketTotal <= sendTrafficPacketTotal + 1;
+		trafficPacket <= trafficPacket + 1;
+		
+	endrule	
+	//--------------------------------------------------------------------------------------------
+	// Validation Checker
+	//--------------------------------------------------------------------------------------------
+	FIFOF#(Bit#(32)) validCheckerQ <- mkSizedFIFOF(256);
+	
+	Reg#(Bit#(16)) recvTrafficPacketTotal <- mkReg(0);
+	Reg#(Bit#(16)) recvTrafficPacketCnt <- mkReg(0);
+	Reg#(Bit#(16)) validChecker <- mkReg(0);
+	Reg#(Bit#(16)) validCheckBuffer <- mkReg(0);
+
+	Reg#(Bool) stopTrafficGenerator <- mkReg(False);
+
+	rule recvTrafficPacket( (recvTrafficPacketTotal < 1024) );
+		let qidOut = qpIdxOut[2];
+		Bit#(2) pidOut = truncate(qpIdxOut);
+		let tp <- auroraQuads[qidOut].user[pidOut].receive;
+		Bit#(16) d = truncate(tp);
+		
+		if ( recvTrafficPacketCnt + 1 == 512 ) begin
+			recvTrafficPacketCnt <= 0;
+			if ( validChecker == d ) begin
+				Bit#(16) v = validCheckBuffer + 1;
+				validCheckerQ.enq(zeroExtend(v));
+				validCheckBuffer <= validCheckBuffer + 1;
+			end else begin
+				validCheckerQ.enq(zeroExtend(validCheckBuffer));
+			end
+			
+			//stopTrafficGenerator <= True;
+			if ( recvTrafficPacketTotal + 1 == 1024 ) begin
+				stopTrafficGenerator <= True;
+			end
+		end else begin
+			if ( validChecker == d ) begin
+				validCheckBuffer <= validCheckBuffer + 1;
+			end else begin
+				validCheckBuffer <= validCheckBuffer + 0;
+			end
+			recvTrafficPacketCnt <= recvTrafficPacketCnt + 1;
+		end
+
+		recvTrafficPacketTotal <= recvTrafficPacketTotal + 1;
+		validChecker <= validChecker + 1;
+	endrule
+	//--------------------------------------------------------------------------------------------
+	// Send Payload
+	//--------------------------------------------------------------------------------------------
+	Reg#(Bool) inPayloadSendDone <- mkReg(False);
+
+	rule relayPayload( setPortDone && stopTrafficGenerator );
 		inputPortQ.deq;
 		let d = inputPortQ.first;
-		let qid = qpIdx[2];
-		Bit#(2) pid = truncate(qpIdx);
+		let qid = qpIdxIn[2];
+		Bit#(2) pid = truncate(qpIdxIn);
 
 		auroraQuads[qid].user[pid].send(d);
 		inPayloadSendDone <= True;
@@ -127,15 +200,15 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	for ( Integer qidx = 0; qidx < 2; qidx = qidx + 1 ) begin
 		for ( Integer pidx = 0; pidx < 4; pidx = pidx + 1) begin
 			Reg#(Maybe#(Bit#(32))) outputBufferUpper <- mkReg(tagged Invalid);
-			rule recvPacket(inPayloadSendDone); 
-				let qoff = qidx*4+pidx;
+			rule recvPacket( inPayloadSendDone ); 
+				let qoffx = qidx*4+pidx;
 				if ( isValid(outputBufferUpper) ) begin
 					outputBufferUpper <= tagged Invalid;
-					outputQv[qoff].enq(fromMaybe(?,outputBufferUpper));
+					outputQv[qoffx].enq(fromMaybe(?,outputBufferUpper));
 				end else begin
 					let d <- auroraQuads[qidx].user[pidx].receive;
 					outputBufferUpper <= tagged Valid truncate(d>>32);
-					outputQv[qoff].enq(truncate(d));
+					outputQv[qoffx].enq(truncate(d));
 				end
 			endrule
 		end
@@ -146,31 +219,36 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		let r = pcieReadReqQ.first;
 		Bit#(4) a = truncate(r.addr>>2);
 		if ( a < 8 ) begin
-			Bit#(1) qidx = truncate(a>>2);
-			Bit#(2) pidx = truncate(a);
-			if ( outputQv[a].notEmpty ) begin
-				pcieRespQ.enq(tuple2(r, outputQv[a].first));
-				outputQv[a].deq;
+			if ( inPayloadSendDone ) begin
+				if ( outputQv[a].notEmpty ) begin
+					pcieRespQ.enq(tuple2(r, outputQv[a].first));
+					outputQv[a].deq;
+				end else begin
+					pcieRespQ.enq(tuple2(r, 32'hffffffff));
+				end
 			end else begin
-				pcieRespQ.enq(tuple2(r, 32'hffffffff));
+				if ( validCheckerQ.notEmpty ) begin
+					pcieRespQ.enq(tuple2(r, validCheckerQ.first));
+					validCheckerQ.deq;
+				end else begin 
+					pcieRespQ.enq(tuple2(r, 32'h12345678));
+				end
 			end
 		end else begin
-			if ( debuggingCnt_1 < 1 ) begin
-				if ( debuggingCnt_2 < 7 ) begin
-					debuggingCnt_2 <= debuggingCnt_2 + 1;
+			if ( a == 8 ) begin
+				if ( debuggingCnt < 7 ) begin
+					debuggingCnt <= debuggingCnt + 1;
 				end else begin
-					debuggingCnt_1 <= debuggingCnt_1 + 1;
-					debuggingCnt_2 <= 0;
+					debuggingCnt <= 0;
 				end
-				pcieRespQ.enq(tuple2(r, zeroExtend(debuggingBitsC[debuggingCnt_2])));
-			end else begin
-				if ( debuggingCnt_2 < 7 ) begin
-					debuggingCnt_2 <= debuggingCnt_2 + 1;
+				pcieRespQ.enq(tuple2(r, zeroExtend(debuggingBitsC[debuggingCnt])));
+			end else if ( a == 9 ) begin
+				if ( debuggingCnt < 7 ) begin
+					debuggingCnt <= debuggingCnt + 1;
 				end else begin
-					debuggingCnt_1 <= 0;
-					debuggingCnt_2 <= 0;
+					debuggingCnt <= 0;
 				end
-				pcieRespQ.enq(tuple2(r, zeroExtend(debuggingBitsL[debuggingCnt_2])));
+				pcieRespQ.enq(tuple2(r, zeroExtend(debuggingBitsL[debuggingCnt])));
 			end
 		end
 	endrule

@@ -83,35 +83,40 @@ int main(int argc, char** argv) {
 		if ( v == 1024 ) 
 			break;
 	}
+	/*for ( int i = 0; i < 4; i ++ ) {
+		printf("%d\n", pcie->userReadWord(OUTPORT*4));
+	}*/
+	fflush(stdout);
 	clock_gettime(CLOCK_REALTIME, & now);
 	double diff = timespec_diff_sec(start, now);
 
 	printf( "Elapsed: %f\n", diff );
+	printf( "Bandwith: %f\n", ((double) v * 128) / diff );
 	printf( "Result: %f\n\n", ((double) v / (double) 1024)*100 );
 	fflush( stdout );
 	sleep(1);
 
 	pcie->userWriteWord(4, 0xacedc0de);
 	pcie->userWriteWord(4, 0xbabeface);
-	printf( "Send the first payload done! (acedc0de & babeface)\n" );	
-	fflush( stdout );
-	sleep(1);
-
 	pcie->userWriteWord(4, 0xdeadbeef);
 	pcie->userWriteWord(4, 0xcafef00d);
-	printf( "Send the second payload done! (deadbeef & cafef00d)\n" );
+	printf( "Send the first payload done!\n" );
+	printf( "acedc0de & babeface & deadbeef & cafef00d\n" );	
 	fflush( stdout );
 	sleep(1);
 	
 	pcie->userWriteWord(4, 0xfeedc0c0);
 	pcie->userWriteWord(4, 0xb00bdace);
-	printf( "Send the third payload done! (feedc0c0 & b00bdace)\n\n" );
+	pcie->userWriteWord(4, 0xdeadbeef);
+	pcie->userWriteWord(4, 0xcafef00d);
+	printf( "Send the second payload done!\n" );
+	printf( "feedc0c0 & b00bdace & deadbeef & cafef00d\n\n" );
 	fflush( stdout );
 	sleep(1);
 	
 	printf( "Received results\n" );
 	fflush( stdout );
-	for ( int i = 0; i < 6; i ++ ) {
+	for ( int i = 0; i < 8; i ++ ) {
 		printf( "%x\n", pcie->userReadWord(OUTPORT*4) );
 		fflush(stdout);
 	}

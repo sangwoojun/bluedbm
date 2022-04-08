@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <time.h>
+#include <math.h>
 
 #include "bdbmpcie.h"
 #include "dmasplitter.h"
@@ -74,14 +75,16 @@ int main(int argc, char** argv) {
 	timespec start;
 	timespec now;
 	unsigned int v = 0;
-
 	pcie->userWriteWord(0, INPORT); //designate input port of AuroraExt
 	
 	clock_gettime(CLOCK_REALTIME, & start);
 	while ( 1 ) {
 		v = pcie->userReadWord(OUTPORT*4);
-		if ( v == 1024 ) 
+		if ( v == 1 ) { 
 			break;
+		}else if ( v == 0 ) {
+			break;
+		}
 	}
 	/*for ( int i = 0; i < 4; i ++ ) {
 		printf("%d\n", pcie->userReadWord(OUTPORT*4));
@@ -89,12 +92,17 @@ int main(int argc, char** argv) {
 	fflush(stdout);
 	clock_gettime(CLOCK_REALTIME, & now);
 	double diff = timespec_diff_sec(start, now);
-
-	printf( "Elapsed: %f\n", diff );
-	printf( "Bandwith: %f\n", ((double) v * 128) / diff );
-	printf( "Result: %f\n\n", ((double) v / (double) 1024)*100 );
-	fflush( stdout );
-	sleep(1);
+	
+	if ( v == 1 ) { 
+		printf( "Elapsed: %f\n", diff );
+		printf( "Bandwith: %f\n", (((double) 1024 * 128) / diff) / pow(10.0, 9.0) );
+		printf( "Result: %f\n\n", ((double) 1024 / (double) 1024)*100 );
+		fflush( stdout );
+		sleep(1);
+	} else {
+		printf( "Result is not 100%%. Please check the system\n" );
+		exit(1);
+	}
 
 	pcie->userWriteWord(4, 0xacedc0de);
 	pcie->userWriteWord(4, 0xbabeface);

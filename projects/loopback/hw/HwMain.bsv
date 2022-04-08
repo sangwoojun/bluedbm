@@ -139,10 +139,11 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	//--------------------------------------------------------------------------------------------
 	// Traffic Generator
 	//--------------------------------------------------------------------------------------------
+	Integer trafficPacketTotal = 1024;
 	Reg#(Bit#(16)) sendTrafficPacketTotal <- mkReg(0);
 	Reg#(AuroraIfcType) trafficPacket <- mkReg(128'hcccccccc000000000000000000000000);
 		
-	rule sendTrafficPacket( setPortDone && (sendTrafficPacketTotal < 1024) );
+	rule sendTrafficPacket( setPortDone && (sendTrafficPacketTotal < fromInteger(trafficPacketTotal)) );
 		let qidIn = qpIdxIn[2];
 		Bit#(2) pidIn = truncate(qpIdxIn);
 
@@ -157,40 +158,35 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	FIFOF#(Bit#(32)) validCheckerQ <- mkFIFOF;
 	
 	Reg#(Bit#(16)) recvTrafficPacketTotal <- mkReg(0);
-	Reg#(Bit#(16)) recvTrafficPacketCnt <- mkReg(0);
 	Reg#(Bit#(16)) validChecker <- mkReg(0);
 	Reg#(Bit#(16)) validCheckBuffer <- mkReg(0);
 
 	Reg#(Bool) stopTrafficGenerator <- mkReg(False);
 
-	rule recvTrafficPacket( recvTrafficPacketTotal < 1024 );
+	rule recvTrafficPacket( recvTrafficPacketTotal < fromInteger(trafficPacketTotal) );
 		let qidOut = qpIdxOut[2];
 		Bit#(2) pidOut = truncate(qpIdxOut);
 		let tp <- auroraQuads[qidOut].user[pidOut].receive;
 		Bit#(16) d = truncate(tp);
 		
-		if ( recvTrafficPacketCnt + 1 == 256 ) begin
-			recvTrafficPacketCnt <= 0;
+		if ( recvTrafficPacketTotal + 1 == fromInteger(trafficPacketTotal) ) begin
 			if ( validChecker == d ) begin
-				Bit#(16) v = validCheckBuffer + 1;
-				validCheckerQ.enq(zeroExtend(v));
-				validCheckBuffer <= validCheckBuffer + 1;
+				if ( validCheckBuffer + 1 == fromInteger(trafficPacketTotal) ) begin
+					validCheckerQ.enq(1);
+				end else begin
+					validCheckerQ.enq(0);
+				end
 			end else begin
-				validCheckerQ.enq(zeroExtend(validCheckBuffer));
+				validCheckerQ.enq(0);
 			end
-			
-			if ( recvTrafficPacketTotal + 1 == 1024 ) begin
-				stopTrafficGenerator <= True;
-			end
+			stopTrafficGenerator <= True;
 		end else begin
 			if ( validChecker == d ) begin
 				validCheckBuffer <= validCheckBuffer + 1;
 			end else begin
 				validCheckBuffer <= validCheckBuffer + 0;
 			end
-			recvTrafficPacketCnt <= recvTrafficPacketCnt + 1;
 		end
-
 		recvTrafficPacketTotal <= recvTrafficPacketTotal + 1;
 		validChecker <= validChecker + 1;
 	endrule

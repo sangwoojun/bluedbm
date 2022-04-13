@@ -1,5 +1,4 @@
-rm -rf build
+vivado -mode batch -source ~/bluedbm/distribute/programall.tcl -nolog -nojournal
 
-tar xzf $BLUEDBM_BINARY_DIR/c.tgz
-
-vivado -mode batch -source program-all.tcl
+sleep 2
+bsrescan

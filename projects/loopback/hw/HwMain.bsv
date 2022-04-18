@@ -139,7 +139,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	//--------------------------------------------------------------------------------------------
 	// Traffic Generator
 	//--------------------------------------------------------------------------------------------
-	Integer trafficPacketTotal = 1024;
+	Integer trafficPacketTotal = 2048;
 	Reg#(Bit#(16)) sendTrafficPacketTotal <- mkReg(0);
 	Reg#(AuroraIfcType) trafficPacket <- mkReg(128'hcccccccc000000000000000000000000);
 		
@@ -163,7 +163,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 
 	Reg#(Bool) stopTrafficGenerator <- mkReg(False);
 
-	rule recvTrafficPacket( recvTrafficPacketTotal < fromInteger(trafficPacketTotal) );
+	rule recvTrafficPacket( !stopTrafficGenerator );
 		let qidOut = qpIdxOut[2];
 		Bit#(2) pidOut = truncate(qpIdxOut);
 		let tp <- auroraQuads[qidOut].user[pidOut].receive;
@@ -186,9 +186,9 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			end else begin
 				validCheckBuffer <= validCheckBuffer + 0;
 			end
+			recvTrafficPacketTotal <= recvTrafficPacketTotal + 1;
+			validChecker <= validChecker + 1;
 		end
-		recvTrafficPacketTotal <= recvTrafficPacketTotal + 1;
-		validChecker <= validChecker + 1;
 	endrule
 	//--------------------------------------------------------------------------------------------
 	// Send Payload

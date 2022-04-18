@@ -95,8 +95,8 @@ int main(int argc, char** argv) {
 	
 	if ( v == 1 ) { 
 		printf( "Elapsed: %f\n", diff );
-		printf( "Bandwith: %f\n", (((double) 1024 * 128) / diff) / pow(10.0, 9.0) );
-		printf( "Result: %f\n\n", ((double) 1024 / (double) 1024)*100 );
+		printf( "Bandwith: %f\n", (((double) 2048 * 128) / diff) / pow(10.0, 9.0) );
+		printf( "Result: %f\n\n", ((double) 2048 / (double) 2048)*100 );
 		fflush( stdout );
 		sleep(1);
 	} else {

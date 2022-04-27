@@ -139,8 +139,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	//--------------------------------------------------------------------------------------------
 	// Traffic Generator
 	//--------------------------------------------------------------------------------------------
-	Integer trafficPacketTotal = 2048;
-	Reg#(Bit#(16)) sendTrafficPacketTotal <- mkReg(0);
+	Integer trafficPacketTotal = 3*1024;
+	Reg#(Bit#(32)) sendTrafficPacketTotal <- mkReg(0);
 	Reg#(AuroraIfcType) trafficPacket <- mkReg(128'hcccccccc000000000000000000000000);
 		
 	rule sendTrafficPacket( setPortDone && (sendTrafficPacketTotal < fromInteger(trafficPacketTotal)) );
@@ -157,9 +157,9 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	//--------------------------------------------------------------------------------------------
 	FIFOF#(Bit#(32)) validCheckerQ <- mkFIFOF;
 	
-	Reg#(Bit#(16)) recvTrafficPacketTotal <- mkReg(0);
-	Reg#(Bit#(16)) validChecker <- mkReg(0);
-	Reg#(Bit#(16)) validCheckBuffer <- mkReg(0);
+	Reg#(Bit#(32)) recvTrafficPacketTotal <- mkReg(0);
+	Reg#(Bit#(32)) validChecker <- mkReg(0);
+	Reg#(Bit#(32)) validCheckBuffer <- mkReg(0);
 
 	Reg#(Bool) stopTrafficGenerator <- mkReg(False);
 
@@ -167,7 +167,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		let qidOut = qpIdxOut[2];
 		Bit#(2) pidOut = truncate(qpIdxOut);
 		let tp <- auroraQuads[qidOut].user[pidOut].receive;
-		Bit#(16) d = truncate(tp);
+		Bit#(32) d = truncate(tp);
 		
 		if ( recvTrafficPacketTotal + 1 == fromInteger(trafficPacketTotal) ) begin
 			if ( validChecker == d ) begin
@@ -212,7 +212,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	Reg#(Maybe#(Bit#(96))) outputBufferUpper1 <- mkReg(tagged Invalid);
 	Reg#(Maybe#(Bit#(64))) outputBufferUpper2 <- mkReg(tagged Invalid);
 	Reg#(Maybe#(Bit#(32))) outputBufferUpper3 <- mkReg(tagged Invalid);
-	rule recvPacket( inPayloadSendDone ); 
+	rule recvPacket( inPayloadSendDone && stopTrafficGenerator ); 
 		let qidOut = qpIdxOut[2];
 		Bit#(2) pidOut = truncate(qpIdxOut);
 

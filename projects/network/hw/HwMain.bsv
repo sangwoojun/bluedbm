@@ -99,38 +99,9 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 
 		if ( a == 0 ) begin // command
 			qpIdxIn <= truncate(d);
-			if ( d == 3) begin
-				secondRoundStart <= True;
-			end
+			secondRoundStart <= True;
 			setPortDone <= True;
-		end else begin
-			if ( isValid(inPayloadFirst) ) begin
-				if ( isValid(inPayloadSecondHalf1) ) begin
-					let p = fromMaybe(?, inPayloadSecondHalf1);
-					let v = fromMaybe(?, inPayloadFirst);
-					AuroraIfcType inPayloadSecondHalf2 = zeroExtend(d);
-					AuroraIfcType inPayloadSecond = (inPayloadSecondHalf2<<32)|(p);
-					AuroraIfcType inPayload = (inPayloadSecond<<64)|(v);
-					inputPortQ.enq(inPayload);
-
-					inPayloadFirst <= tagged Invalid;
-					inPayloadSecondHalf1 <= tagged Invalid;
-				end else begin
-					inPayloadSecondHalf1 <= tagged Valid zeroExtend(d);
-				end
-			end else begin
-				if ( isValid(inPayloadFirstHalf1) ) begin
-					let p = fromMaybe(?, inPayloadFirstHalf1);
-					AuroraIfcType inPayloadFirstHalf2 = zeroExtend(d);
-					AuroraIfcType v = (inPayloadFirstHalf2<<32)|(p);
-					inPayloadFirst <= tagged Valid v;
-					
-					inPayloadFirstHalf1 <= tagged Invalid;
-				end else begin
-					inPayloadFirstHalf1 <= tagged Valid zeroExtend(d);
-				end
-			end
-		end
+		end	
 	endrule
 	//--------------------------------------------------------------------------------------------
 	// Traffic Generator & Validation Checker
@@ -147,25 +118,17 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		trafficPacket <= trafficPacket + 1;
 		sendTrafficPacketFirstTotal <= sendTrafficPacketFirstTotal + 1;
 	endrule	
-	//Reg#(Bool) secondRoundStart <- mkReg(False);
-	Vector#(8, Reg#(Bit#(16))) recvTrafficPacketFirstTotal <- replicateM(mkReg(0));
 	for (Integer qidx = 0; qidx < 2; qidx = qidx + 1) begin
 		for (Integer pidx = 0; pidx < 4; pidx = pidx + 1) begin
+			Reg#(Bit#(16)) recvTrafficPacketFirstTotal <- mkReg(0);
 			rule recvTrafficPacketFirst( !secondRoundStart );
 				let qoffx = qidx*4 + pidx;
 				let tp <- auroraQuads[qidx].user[pidx].receive;
 				auroraQuads[qidx].user[pidx].send(tp);
-				if ( recvTrafficPacketFirstTotal[qoffx] + 1 == fromInteger(trafficPacketTotal) ) begin
-					secondRoundStart <= True;
-					recvTrafficPacketFirstTotal[qoffx] <= 0;
-				end else begin
-					recvTrafficPacketFirstTotal[qoffx] <= recvTrafficPacketFirstTotal[qoffx] + 1;
-				end
 			endrule
 		end
 	end
-	/*Reg#(Bool) secondRoundStart <- mkReg(False);
-	Vector#(8, FIFOF#(AuroraIfcType)) recvFirstQv <- replicateM(mkSizedFIFOF(32));
+	/*Vector#(8, FIFOF#(AuroraIfcType)) recvFirstQv <- replicateM(mkSizedFIFOF(32));
 	for (Integer qidx = 0; qidx < 2; qidx = qidx + 1) begin
 		for (Integer pidx = 0; pidx < 4; pidx = pidx + 1) begin
 			rule recvTrafficPacketFirst( !secondRoundStart );
@@ -197,7 +160,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	Reg#(Bit#(16)) validChecker <- mkReg(0);
 	Reg#(Bit#(16)) validCheckBuffer <- mkReg(0);
 	Reg#(Bool) stopTrafficGenerator <- mkReg(False);
-	rule recvTrafficPacketFinal( secondRoundStart && (recvTrafficPacketFinalTotal < fromInteger(trafficPacketTotal)) );
+	rule recvTrafficPacketFinal( recvTrafficPacketFinalTotal < fromInteger(trafficPacketTotal) );
 		let qidOut = qpIdxIn[2];
 		Bit#(2) pidOut = truncate(qpIdxIn);
 		let tp <- auroraQuads[qidOut].user[pidOut].receive;
@@ -224,94 +187,17 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		recvTrafficPacketFinalTotal <= recvTrafficPacketFinalTotal + 1;
 		validChecker <= validChecker + 1;
 	endrule
-	//--------------------------------------------------------------------------------------------
-	// Send & Receive Packet
-	//--------------------------------------------------------------------------------------------
-	Reg#(Bool) sendPacketDone <- mkReg(False);
-	rule sendPacket( setPortDone && stopTrafficGenerator );
-		inputPortQ.deq;
-		let d = inputPortQ.first;
-		let qid = qpIdxIn[2];
-		Bit#(2) pid = truncate(qpIdxIn);
-
-		auroraQuads[qid].user[pid].send(d);
-		sendPacketDone <= True;
-	endrule
-	Vector#(8, FIFOF#(AuroraIfcType)) recvPacketFirstQv <- replicateM(mkFIFOF);
-	for (Integer qida = 0; qida < 2; qida = qida + 1) begin
-		for (Integer pida = 0; pida < 4; pida = pida + 1) begin
-			rule recvPacketFirst( sendPacketDone );
-				let qoffa = qida*4 + pida;
-				let tp <- auroraQuads[qida].user[pida].receive;
-				recvPacketFirstQv[qoffa].enq(tp);
-			endrule
-		end
-	end
-	Reg#(Bool) resendPacketDone <- mkReg(False);
-	for (Integer qidb = 0; qidb < 2; qidb = qidb + 1) begin
-		for (Integer pidb = 0; pidb < 4; pidb = pidb + 1) begin
-			rule resendPacket( sendPacketDone );
-				let qoffb = qidb*4 + pidb;
-				if (recvPacketFirstQv[qoffb].notEmpty) begin
-					auroraQuads[qidb].user[pidb].send(recvPacketFirstQv[qoffb].first);
-					recvPacketFirstQv[qoffb].deq;
-					resendPacketDone <= True;
-				end
-			endrule
-		end
-	end
-	FIFOF#(Bit#(32)) outputQ <- mkFIFOF;
-	Reg#(Maybe#(Bit#(96))) outputBufferUpper1 <- mkReg(tagged Invalid);
-	Reg#(Maybe#(Bit#(64))) outputBufferUpper2 <- mkReg(tagged Invalid);
-	Reg#(Maybe#(Bit#(32))) outputBufferUpper3 <- mkReg(tagged Invalid);
-	rule recvPacketFinal( resendPacketDone ); 
-		let qidOut = qpIdxIn[2];
-		Bit#(2) pidOut = truncate(qpIdxIn);
-
-		if ( isValid(outputBufferUpper1) ) begin
-			if ( isValid(outputBufferUpper2) ) begin
-				if ( isValid(outputBufferUpper3) ) begin
-					let d = fromMaybe(?, outputBufferUpper3);
-					outputQ.enq(d);
-					outputBufferUpper1 <= tagged Invalid;
-					outputBufferUpper2 <= tagged Invalid;
-					outputBufferUpper3 <= tagged Invalid;
-				end else begin
-					let d = fromMaybe(?, outputBufferUpper2);
-					outputBufferUpper3 <= tagged Valid truncate(d>>32);
-					outputQ.enq(truncate(d));
-				end
-			end else begin
-				let d = fromMaybe(?, outputBufferUpper1);
-				outputBufferUpper2 <= tagged Valid truncate(d>>32);
-				outputQ.enq(truncate(d));
-			end
-		end else begin
-			let d <- auroraQuads[qidOut].user[pidOut].receive;
-			outputBufferUpper1 <= tagged Valid truncate(d>>32);
-			outputQ.enq(truncate(d));
-		end
-	endrule
 
 	rule getAuroraStatus;
 		pcieReadReqQ.deq;
 		let r = pcieReadReqQ.first;
 		Bit#(4) a = truncate(r.addr>>2);
 		if ( a < 8 ) begin
-			if ( sendPacketDone ) begin
-				if ( outputQ.notEmpty ) begin
-					pcieRespQ.enq(tuple2(r, outputQ.first));
-					outputQ.deq;
-				end else begin
-					pcieRespQ.enq(tuple2(r, 32'hffffffff));
-				end
-			end else begin
-				if ( validCheckerQ.notEmpty ) begin
-					pcieRespQ.enq(tuple2(r, validCheckerQ.first));
-					validCheckerQ.deq;
-				end else begin 
-					pcieRespQ.enq(tuple2(r, 32'h12345678));
-				end
+			if ( validCheckerQ.notEmpty ) begin
+				pcieRespQ.enq(tuple2(r, validCheckerQ.first));
+				validCheckerQ.deq;
+			end else begin 
+				pcieRespQ.enq(tuple2(r, 32'hffffffff));
 			end
 		end else begin
 			if ( a == 8 ) begin

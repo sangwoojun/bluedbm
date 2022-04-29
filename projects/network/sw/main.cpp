@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
 	fflush( stdout );
 	sleep(1);
 
-	printf( "Designating input port as %d\n", INPORT );
+	printf( "Network test between two FPGAs" );
 	printf( "Starting performance testing and validation check\n" );
 	fflush( stdout );
 	
@@ -102,32 +102,5 @@ int main(int argc, char** argv) {
 		printf( "Result is not 100%%. Please check the system\n" );
 		exit(1);
 	}
-
-	pcie->userWriteWord(4, 0xacedc0de);
-	pcie->userWriteWord(4, 0xbabeface);
-	pcie->userWriteWord(4, 0xdeadbeef);
-	pcie->userWriteWord(4, 0xcafef00d);
-	printf( "Send the first payload done!\n" );
-	printf( "acedc0de & babeface & deadbeef & cafef00d\n" );	
-	fflush( stdout );
-	sleep(1);
-	
-	pcie->userWriteWord(4, 0xfeedc0c0);
-	pcie->userWriteWord(4, 0xb00bdace);
-	pcie->userWriteWord(4, 0xdeadbeef);
-	pcie->userWriteWord(4, 0xcafef00d);
-	printf( "Send the second payload done!\n" );
-	printf( "feedc0c0 & b00bdace & deadbeef & cafef00d\n\n" );
-	fflush( stdout );
-	sleep(1);
-	
-	printf( "Received results\n" );
-	fflush( stdout );
-	for ( int i = 0; i < 8; i ++ ) {
-		printf( "%x\n", pcie->userReadWord(INPORT*4) );
-		fflush(stdout);
-	}
-	printf("\n");
-	fflush(stdout);
 	return 0;
 }

@@ -14,9 +14,9 @@
 // 4 means X1Y24, 5 means X1Y25
 // 6 means X1Y26, 7 means X1Y27
 // Current Connections
-// X1Y16 <=> X1Y17
-// X1Y18 <=> X1Y24
-// X1Y19 <=> X1Y25
+// FPGA1 X1Y16 <=> FPGA1 X1Y17
+// FPGA1 X1Y18 <=> FPGA1 X1Y24
+// FPGA1 X1Y19 <=> FPGA2 X1Y26
 
 double timespec_diff_sec( timespec start, timespec end ) {
 	double t = end.tv_sec - start.tv_sec;

@@ -6,7 +6,6 @@
 #include "bdbmpcie.h"
 #include "dmasplitter.h"
 
-#define DIRECTION 0
 // AuroraExt117
 // 0 means X1Y16, 1 means X1Y17
 // 2 means X1Y18, 3 means X1Y19
@@ -15,8 +14,8 @@
 // 6 means X1Y26, 7 means X1Y27
 // Current Connections
 // FPGA1 X1Y16 <=> FPGA1 X1Y17
-// FPGA1 X1Y18 <=> FPGA2 X1Y26
-// FPGA1 X1Y24 <=> FPGA2 X1Y27
+// FPGA1 X1Y19 <=> FPGA2 X1Y26 FPGA2 to FPGA1
+// FPGA1 X1Y24 <=> FPGA2 X1Y27 FPGA1 to FPGA2
 
 double timespec_diff_sec( timespec start, timespec end ) {
 	double t = end.tv_sec - start.tv_sec;
@@ -66,19 +65,25 @@ int main(int argc, char** argv) {
 	printf( "\n" );
 	fflush( stdout );
 	sleep(1);
-
-	printf( "Sending source routing packet from FPGA2 to FPGA1\n\n" );
-	//printf( "Sending source routing packet from FPGA1 to FPGA2" );
+	
+	int direction = 0;
+	printf( "Please input the direction (0: FPGA1 to FPGA2, 1: FPGA2 to FPGA1): " );
+	scanf( "%d", &direction );
+	if ( direction == 0 ) {
+		printf( "Sending source routing packet from FPGA1 to FPGA2\n" );
+	} else {
+		printf( "Sending source routing packet from FPGA2 to FPGA1\n" );
+	}
 	fflush( stdout );
 	
 	timespec start;
 	timespec now;
 	unsigned int v = 0;
-	pcie->userWriteWord(0, DIRECTION); //designate direction
+	pcie->userWriteWord(0, direction);
 	
 	clock_gettime(CLOCK_REALTIME, & start);
 	while ( 1 ) {
-		v = pcie->userReadWord(DIRECTION*4);
+		v = pcie->userReadWord(direction*4);
 		if ( v == 1 ) { 
 			break;
 		}
@@ -89,9 +94,12 @@ int main(int argc, char** argv) {
 	
 	if ( v == 1 ) { 
 		printf( "Elapsed: %f\n", diff );
-		printf( "Sending source routing packet from FPGA2 to FPGA1 succeeded!" );
+		if ( direction == 0 ) {
+			printf( "Sending source routing packet from FPGA1 to FPGA2 succeeded!" );
+		} else {
+			printf( "Sending source routing packet from FPGA2 to FPGA1 succeeded!" );
+		}
 		fflush( stdout );
-		sleep(1);
 	} else {
 		printf( "Result is not 100%%. Please check the system\n" );
 		exit(1);

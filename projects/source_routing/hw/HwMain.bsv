@@ -93,13 +93,12 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 
 		if ( a == 0 ) begin
 			if ( d == 0 ) begin // Open first connection (FPGA1 to 2)
-	 			AuroraIfcType routingPacketTmp = 0;
-				
-				routingPacketTmp[7:0] = 0; // OutPort of Host
-				routingPacketTmp[15:8] = 4; // OutPort of FPGA1
-				routingPacketTmp[16] = 0; // 0: Read, 1: Write
-				routingPacketTmp[47:17] = 4*1024; // Amount of memory
-				routingPacketTmp[127:48] = 0; // Address
+	 			AuroraIfcType routingPacketTmp = 0;	
+				routingPacketTmp[127:120] = 0; // OutPort of Host(8bits)
+				routingPacketTmp[119:112] = 4; // OutPort of FPGA1(8bits)
+				routingPacketTmp[111] = 0; // 0: Read, 1: Write(1bit)
+				routingPacketTmp[110:80] = 4*1024; // Amount of Memory(31bits)
+				routingPacketTmp[79:0] = 0; // Address(80bits)
 				routingPacketFPGA1to2 <= routingPacketTmp;
 
 				openFirstConnect <= True;
@@ -112,7 +111,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	// Host to FPGA1 to FPGA2 (First Connection)
 	//--------------------------------------------------------------------------------------------
 	rule sendPacketFPGA1to2( openFirstConnect );
-		Bit#(8) idFPGA1 = routingPacketFPGA1to2[15:8];
+		Bit#(8) idFPGA1 = routingPacketFPGA1to2[119:112];
 		Bit#(1) qidOutFPGA1 = idFPGA1[2];
 		Bit#(2) pidOutFPGA1 = truncate(idFPGA1);
 
@@ -130,13 +129,13 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	endrule
 	FIFOF#(Bit#(32)) validCheckFirstConnecQ <- mkFIFOF;
 	rule validCheckFirstConnec( openFirstConnect );
-		Bit#(8) id = routingPacketFPGA1to2[15:8];
+		Bit#(8) id = routingPacketFPGA1to2[119:112];
 		Bit#(1) qidIn = id[2];
 		Bit#(2) pidIn = truncate(id);
 
 		let p <- auroraQuads[qidIn].user[pidIn].receive;
 	
-		if ( p[47:17] == 4*1024 ) begin
+		if ( p[110:80] == 4*1024 ) begin
 			validCheckFirstConnecQ.enq(1);
 		end else begin
 			validCheckFirstConnecQ.enq(0);
@@ -148,12 +147,13 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	Reg#(AuroraIfcType) routingPacketFPGA2to1 <- mkReg(0);
 	rule sendPacketFPGA2to1( !openSecndConnect );
 		AuroraIfcType routingPacketTmp = 0;
-		routingPacketTmp[7:0] = 6;
-		routingPacketTmp[15:8] = 0;
-		routingPacketTmp[16] = 0;
-		routingPacketTmp[47:17] = 4*1024;
-		routingPacketTmp[127:48] = 0;
-		
+		routingPacketTmp[127:120] = 6; // OutPort of Host(8bits)
+		routingPacketTmp[119:112] = 0; // OutPort of FPGA1(8bits)
+		routingPacketTmp[111] = 0; // 0: Read, 1: Write(1bit)
+		routingPacketTmp[110:80] = 4*1024; // Amount of Memory(31bits)
+		routingPacketTmp[79:0] = 0; // Address(80bits)
+		routingPacketFPGA1to2 <= routingPacketTmp;
+	
 		auroraQuads[1].user[2].send(routingPacketTmp);
 
 		routingPacketFPGA2to1 <= routingPacketTmp;
@@ -165,7 +165,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		Bit#(2) pidIn = truncate(id);
 
 		let p <- auroraQuads[qidIn].user[pidIn].receive;
-		if ( p[47:17] == 4*1024 ) begin
+		if ( p[110:80] == 4*1024 ) begin
 			sendPacketFPGA1toHostQ.enq(1);
 		end else begin
 			sendPacketFPGA1toHostQ.enq(0);

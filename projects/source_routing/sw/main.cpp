@@ -76,35 +76,55 @@ int main(int argc, char** argv) {
 	}
 	fflush( stdout );
 	
-	timespec start;
-	timespec now;
-	unsigned int v = 0;
+	int* aom;	
+	unsigned int d_0 = 0;
+	unsigned int d_1[4] = { 0, };
 	pcie->userWriteWord(0, direction);
 	
-	clock_gettime(CLOCK_REALTIME, & start);
-	while ( 1 ) {
-		v = pcie->userReadWord(direction*4);
-		if ( v == 1 ) { 
-			break;
+	if ( direction == 0 ) {
+		while ( 1 ) {
+			d_0 = pcie->userReadWord(direction*4);
+			if ( d_0 == 1 ) {
+				break;
+			}
 		}
-	}
-	fflush(stdout);
-	clock_gettime(CLOCK_REALTIME, & now);
-	double diff = timespec_diff_sec(start, now);
-	
-	if ( v == 1 ) { 
-		printf( "Elapsed: %f\n", diff );
-		if ( direction == 0 ) {
-			printf( "Sending source routing packet from FPGA1 to FPGA2 succeeded!" );
-		} else {
-			printf( "Sending source routing packet from FPGA2 to FPGA1 succeeded!" );
-		}
-		fflush( stdout );
+		printf( "Sending source routing packet from FPGA1 to FPGA2 succeeded!\n" );
 	} else {
-		printf( "Result is not 100%%. Please check the system\n" );
-		exit(1);
-	}
+		for ( int i = 0; i < 5; i ++ ) {
+			d_1[i] = pcie->userReadWord(direction*4);
+			printf( "%d ", d_1[i] );
+		}
+		printf( "\n" );
+		fflush(stdout);
 	
+		uint64_t add_1 = d_1[0];
+		uint64_t add_2_Tmp = d_1[1];
+		uint64_t add_2 = add_2_Tmp << 32;
+		uint64_t addFinal = add_1 | add_2;
+		uint64_t aom_1 = d_1[2];
+		uint64_t aom_2_Tmp = d_1[3];
+		uint64_t aom_2 = aom_2_Tmp << 16;
+		uint64_t aom_3 = aom_1 | aom_2;
+		uint64_t aom_4 = aom_3 << 17;
+		uint64_t aomFinal = aom_4 >> 17;
+		uint64_t rw = aom_3 >> 47;
+		uint32_t outPortFPGA1Tmp = d_1[4] << 24;
+		uint32_t outPortFPGA1 = outPortFPGA1Tmp >> 24;
+		uint32_t outPortFPGA2 = d_1[4] >> 8;
+
+		if ( rw == 1 ) {
+			aom = (int*)malloc(aomFinal);
+		}
+
+		printf( "OutPort of FPGA2: %u\n", outPortFPGA2 );
+		printf( "OutPort of FPGA1: %u\n", outPortFPGA1 );
+		printf( "Amount of Memory: %llu Bytes\n", aomFinal );
+		
+		if ( rw == 1 ) {
+			printf( "Start Point of Address: %p\n", aom );
+			free(aom);
+		}
+	}
 	printf("\n");
 	fflush(stdout);
 	return 0;

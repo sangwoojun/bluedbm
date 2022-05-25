@@ -97,8 +97,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				routingPacketTmp[127:120] = 0; // OutPort of Host(8bits)
 				routingPacketTmp[119:112] = 4; // OutPort of FPGA1(8bits)
 				routingPacketTmp[111] = 0; // 0: Read, 1: Write(1bit)
-				routingPacketTmp[110:80] = 4*1024; // Amount of Memory(31bits)
-				routingPacketTmp[79:0] = 0; // Address(80bits)
+				routingPacketTmp[110:64] = 4*1024; // Amount of Memory(47bits)
+				routingPacketTmp[63:0] = 0; // Address(64bits)
 				routingPacketFPGA1to2 <= routingPacketTmp;
 
 				openFirstConnect <= True;
@@ -135,7 +135,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 
 		let p <- auroraQuads[qidIn].user[pidIn].receive;
 	
-		if ( p[110:80] == 4*1024 ) begin
+		if ( p[111] == 0 ) begin
 			validCheckFirstConnecQ.enq(1);
 		end else begin
 			validCheckFirstConnecQ.enq(0);
@@ -150,8 +150,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		routingPacketTmp[127:120] = 6; // OutPort of Host(8bits)
 		routingPacketTmp[119:112] = 0; // OutPort of FPGA1(8bits)
 		routingPacketTmp[111] = 0; // 0: Read, 1: Write(1bit)
-		routingPacketTmp[110:80] = 4*1024; // Amount of Memory(31bits)
-		routingPacketTmp[79:0] = 0; // Address(80bits)
+		routingPacketTmp[110:64] = 4*1024; // Amount of Memory(47bits)
+		routingPacketTmp[63:0] = 0; // Address(64bits)
 		routingPacketFPGA1to2 <= routingPacketTmp;
 	
 		auroraQuads[1].user[2].send(routingPacketTmp);
@@ -159,16 +159,45 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		routingPacketFPGA2to1 <= routingPacketTmp;
 	endrule	
 	FIFOF#(Bit#(32)) sendPacketFPGA1toHostQ <- mkFIFOF;
+	Reg#(Maybe#(Bit#(96))) sendPacketBuffer1 <- mkReg(tagged Invalid);
+	Reg#(Maybe#(Bit#(64))) sendPacketBuffer2 <- mkReg(tagged Invalid);
+	Reg#(Maybe#(Bit#(48))) sendPacketBuffer3 <- mkReg(tagged Invalid);
+	Reg#(Maybe#(Bit#(16))) sendPacketBuffer4 <- mkReg(tagged Invalid);
 	rule recvPacketFPGA1( openSecndConnect );
 		Bit#(8) id = 3;
 		Bit#(1) qidIn = id[2];
 		Bit#(2) pidIn = truncate(id);
 
-		let p <- auroraQuads[qidIn].user[pidIn].receive;
-		if ( p[110:80] == 4*1024 ) begin
-			sendPacketFPGA1toHostQ.enq(1);
+		if ( isValid(sendPacketBuffer1) ) begin
+			if ( isValid(sendPacketBuffer2) ) begin
+				if ( isValid(sendPacketBuffer3) ) begin
+					if ( isValid(sendPacketBuffer4) ) begin	
+						let p = fromMaybe(?, sendPacketBuffer4);
+						sendPacketFPGA1toHostQ.enq(zeroExtend(p));
+						sendPacketBuffer1 <= tagged Invalid;
+						sendPacketBuffer2 <= tagged Invalid;
+						sendPacketBuffer3 <= tagged Invalid;
+						sendPacketBuffer4 <= tagged Invalid;
+					end else begin
+						let p = fromMaybe(?, sendPacketBuffer3);
+						sendPacketBuffer4 <= tagged Valid truncate(p>>32);
+						sendPacketFPGA1toHostQ.enq(truncate(p));
+					end
+				end else begin
+					let p = fromMaybe(?, sendPacketBuffer2);
+					Bit#(16) d = truncate(p);
+					sendPacketBuffer3 <= tagged Valid truncate(p>>16);
+					sendPacketFPGA1toHostQ.enq(zeroExtend(d));
+				end
+			end else begin
+				let p = fromMaybe(?, sendPacketBuffer1);
+				sendPacketBuffer2 <= tagged Valid truncate(p>>32);
+				sendPacketFPGA1toHostQ.enq(truncate(p));
+			end
 		end else begin
-			sendPacketFPGA1toHostQ.enq(0);
+			let p <- auroraQuads[qidIn].user[pidIn].receive;
+			sendPacketBuffer1 <= tagged Valid truncate(p>>32);
+			sendPacketFPGA1toHostQ.enq(truncate(p));
 		end
 	endrule 
 	//--------------------------------------------------------------------------------------------

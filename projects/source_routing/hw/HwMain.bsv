@@ -81,9 +81,14 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	//--------------------------------------------------------------------------------------------
 	// Get Commands from Host via PCIe
 	//--------------------------------------------------------------------------------------------
-	Reg#(AuroraIfcType) routingPacketFPGA1to2 <- mkReg(0);
+	FIFO#(AuroraIfcType) recvPacketQ <- mkFIFO;
 	Reg#(Bool) openFirstConnect <- mkReg(False);
 	Reg#(Bool) openSecndConnect <- mkReg(False);
+	Reg#(Maybe#(AuroraIfcType)) recvPacketBuffer1 <- mkReg(tagged Invalid);
+	Reg#(Maybe#(AuroraIfcType)) recvPacketBuffer2 <- mkReg(tagged Invalid);
+	Reg#(Maybe#(AuroraIfcType)) recvPacketBuffer3 <- mkReg(tagged Invalid);
+	Reg#(Maybe#(AuroraIfcType)) recvPacketBuffer4 <- mkReg(tagged Invalid);
+
 	rule getCmd;
 		pcieWriteQ.deq;
 		let w = pcieWriteQ.first;
@@ -91,31 +96,60 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		let d = w.data;
 		let a = w.addr;
 
-		if ( a == 0 ) begin
-			if ( d == 0 ) begin // Open first connection (FPGA1 to 2)
-	 			AuroraIfcType routingPacketTmp = 0;	
-				routingPacketTmp[127:120] = 0; // OutPort of Host(8bits)
-				routingPacketTmp[119:112] = 4; // OutPort of FPGA1(8bits)
-				routingPacketTmp[111] = 0; // 0: Read, 1: Write(1bit)
-				routingPacketTmp[110:64] = 4*1024; // Amount of Memory(47bits)
-				routingPacketTmp[63:0] = 0; // Address(64bits)
-				routingPacketFPGA1to2 <= routingPacketTmp;
+		if ( a == 0 ) begin // Open first connection (FPGA1 to FPGA2)
+			if ( isValid(recvPacketBuffer1) ) begin
+				if ( isValid(recvPacketBuffer2) ) begin
+					if ( isValid(recvPacketBuffer3) ) begin
+						if ( isValid(recvPacketBuffer4) ) begin
+							let prevPacket = fromMaybe(?, recvPacketBuffer4);
+							AuroraIfcType extendDatato128 = zeroExtend(d);
+							AuroraIfcType recvPacketFinal = (extendDatato128 << 112) | prevPacket;
+							recvPacketQ.enq(recvPacketFinal);
 
-				openFirstConnect <= True;
-			end else begin // Open second connection (FPGA2 to 1)
-				openSecndConnect <= True;
+							recvPacketBuffer1 <= tagged Invalid;
+							recvPacketBuffer2 <= tagged Invalid;
+							recvPacketBuffer3 <= tagged Invalid;
+							recvPacketBuffer4 <= tagged Invalid;
+
+							openFirstConnect <= True;
+						end else begin
+							let prevPacket = fromMaybe(?, recvPacketBuffer3);
+							AuroraIfcType extendDatato128 = zeroExtend(d);
+							AuroraIfcType recvPacket = (extendDatato128 << 96) | prevPacket;
+							recvPacketBuffer4 <= tagged Valid recvPacket;
+						end
+					end else begin
+						let prevPacket = fromMaybe(?, recvPacketBuffer2);
+						AuroraIfcType extendDatato128 = zeroExtend(d);
+						AuroraIfcType recvPacket = (extendDatato128 << 64) | prevPacket;
+						recvPacketBuffer3 <= tagged Valid recvPacket;
+					end
+				end else begin
+					let prevPacket = fromMaybe(?, recvPacketBuffer1);
+					AuroraIfcType extendDatato128 = zeroExtend(d);
+					AuroraIfcType recvPacket = (extendDatato128 << 32) | prevPacket;
+					recvPacketBuffer2 <= tagged Valid recvPacket;
+				end
+			end else begin
+				recvPacketBuffer1 <= tagged Valid zeroExtend(d);
 			end
+		end else begin // Open second connection (FPGA2 to FPGA1)
+			openSecndConnect <= True;
 		end
 	endrule
 	//--------------------------------------------------------------------------------------------
 	// Host to FPGA1 to FPGA2 (First Connection)
 	//--------------------------------------------------------------------------------------------
+	Reg#(AuroraIfcType) routingPacketFPGA1to2 <- mkReg(0);
 	rule sendPacketFPGA1to2( openFirstConnect );
-		Bit#(8) idFPGA1 = routingPacketFPGA1to2[119:112];
+		recvPacketQ.deq;
+		AuroraIfcType routingPacketFPGA1to2Tmp = recvPacketQ.first;
+		Bit#(8) idFPGA1 = routingPacketFPGA1to2Tmp[119:112];
 		Bit#(1) qidOutFPGA1 = idFPGA1[2];
 		Bit#(2) pidOutFPGA1 = truncate(idFPGA1);
 
-		auroraQuads[qidOutFPGA1].user[pidOutFPGA1].send(routingPacketFPGA1to2);
+		auroraQuads[qidOutFPGA1].user[pidOutFPGA1].send(routingPacketFPGA1to2Tmp);
+		routingPacketFPGA1to2 <= routingPacketFPGA1to2Tmp;
 	endrule
 	Reg#(Bool) recvPacketFPGA2Done <- mkReg(False);
 	rule recvPacketFPGA2( !openFirstConnect );

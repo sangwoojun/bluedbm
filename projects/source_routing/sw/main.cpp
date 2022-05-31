@@ -71,15 +71,37 @@ int main(int argc, char** argv) {
 	scanf( "%d", &direction );
 	if ( direction == 0 ) {
 		printf( "Sending source routing packet from FPGA1 to FPGA2\n" );
+		
+		uint64_t address = 0;
+		uint32_t addressFirst = (uint32_t) address;
+		uint64_t addressSecondTmp = address >> 32;
+		uint32_t addressSecond = (uint32_t) addressSecondTmp;
+	
+		uint64_t amountofmemory = 4*1024;
+		uint64_t header = 0;
+		uint64_t aomNheader = (header << 47) | amountofmemory;
+		uint32_t aomNheaderFirst = (uint32_t) aomNheader;
+		uint64_t aomNheaderSecondTmp = aomNheader >> 32;
+		uint32_t aomNheaderSecond = (uint32_t) aomNheaderSecondTmp;
+
+		uint32_t outportHost = 0;
+		uint32_t outportFPGA1 = 4;
+		uint32_t outport = (outportHost << 8) | outportFPGA1;
+
+		pcie->userWriteWord(direction, addressFirst);
+		pcie->userWriteWord(direction, addressSecond);
+		pcie->userWriteWord(direction, aomNheaderFirst);
+		pcie->userWriteWord(direction, aomNheaderSecond);
+		pcie->userWriteWord(direction, outport);
 	} else {
 		printf( "Sending source routing packet from FPGA2 to FPGA1\n" );
+		pcie->userWriteWord(direction, 0);
 	}
 	fflush( stdout );
 	
 	int* aom;	
 	unsigned int d_0 = 0;
 	unsigned int d_1[4] = { 0, };
-	pcie->userWriteWord(0, direction);
 	
 	if ( direction == 0 ) {
 		while ( 1 ) {

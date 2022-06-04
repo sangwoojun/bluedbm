@@ -16,6 +16,66 @@ import AuroraExtImportCommon::*;
 import AuroraExtImport117::*;
 import AuroraExtImport119::*;
 
+
+interface KeyPairFPGA1Ifc;
+	method ActionValue#(AuroraIfcType) getEncryptedPacket (AuroraIfcType srPacket);
+	method ActionValue#(AuroraIfcType) getDecryptedPacket (AuroraIfcType encPacket);
+endinterface
+module mkKeyPairFPGA1(KeyPairFPGA1Ifc);
+	method ActionValue#(AuroraIfcType) getEncryptedPacket (AuroraIfcType srPacket);
+		AuroraIfcType encryptedPacket = srPacket ^ 1;
+		return encryptedPacket;
+	endmethod
+	method ActionValue#(AuroraIfcType) getDecryptedPacket (AuroraIfcType encPacket);
+		AuroraIfcType decryptedPacket = encPacket ^ 1;
+		return decryptedPacket;
+	endmethod
+endmodule
+
+interface KeyPairFPGA2Ifc;
+	method Action generateKeyPair;
+	method Action publicKey (AuroraIfcType srPacket);
+	method Action privateKey (AuroraIfcType encPacket);
+	method ActionValue#(AuroraIfcType) getEncryptedPacket;
+	method ActionValue#(AuroraIfcType) getDecryptedPacket;
+endinterface
+module mkKeyPairFPGA2(KeyPairFPGA2Ifc);
+
+	Reg#(Bool) generateKeyPairStart <- mkReg(False);
+	Reg#(AuroraIfcType) routingPacket <- mkReg(0);
+	Reg#(AuroraIfcType) encryptedRoutingPacket <- mkReg(0);
+	Reg#(AuroraIfcType) encryptedPacket <- mkReg(0);
+	Reg#(AuroraIfcType) decryptedPacket <- mkReg(0);
+
+	rule generatePublicKey(generateKeyPairStart);
+		Bit#(64) publicKeyTmp = 16*1024*1024*1024*1024*1024*1024 - 1;
+		AuroraIfcType publicKey = zeroExtend(publicKeyTmp);
+		encryptedPacket <= routingPacket ^ publicKey;
+	endrule
+
+	rule generatePrivateKey(generateKeyPairStart);
+		Bit#(64) privateKeyTmp = 16*1024*1024*1024*1024*1024*1024 - 1;
+		AuroraIfcType privateKey = zeroExtend(privateKeyTmp);
+		decryptedPacket <= encryptedRoutingPacket ^ privateKey;
+	endrule
+
+	method Action generateKeyPair;
+		generateKeyPairStart <= True;
+	endmethod
+	method Action publicKey (AuroraIfcType srPacket);
+		routingPacket <= srPacket;
+	endmethod
+	method Action privateKey (AuroraIfcType encPacket);
+		encryptedRoutingPacket <= encPacket;
+	endmethod
+	method ActionValue#(AuroraIfcType) getEncryptedPacket;
+		return encryptedPacket;
+	endmethod
+	method ActionValue#(AuroraIfcType) getDecryptedPacket;
+		return decryptedPacket;
+	endmethod
+endmodule
+
 interface HwMainIfc;
 endinterface
 
@@ -26,6 +86,9 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 
 	Clock pcieclk = pcie.user_clk;
 	Reset pcierst = pcie.user_rst;
+	
+	KeyPairFPGA1Ifc keyPairFPGA1 <- mkKeyPairFPGA1;
+	KeyPairFPGA2Ifc keyPairFPGA2 <- mkKeyPairFPGA2;
 
 	//--------------------------------------------------------------------------------------
 	// Pcie Read and Write
@@ -147,9 +210,12 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		Bit#(8) idFPGA1 = routingPacketFPGA1to2Tmp[119:112];
 		Bit#(1) qidOutFPGA1 = idFPGA1[2];
 		Bit#(2) pidOutFPGA1 = truncate(idFPGA1);
-
-		auroraQuads[qidOutFPGA1].user[pidOutFPGA1].send(routingPacketFPGA1to2Tmp);
-		routingPacketFPGA1to2 <= routingPacketFPGA1to2Tmp;
+		
+		let encryptedRoutingPacket <- keyPairFPGA1.getEncryptedPacket (routingPacketFPGA1to2Tmp);
+		let decryptedRoutingPacket <- keyPairFPGA1.getDecryptedPacket (encryptedRoutingPacket);
+		
+		auroraQuads[qidOutFPGA1].user[pidOutFPGA1].send(decryptedRoutingPacket);
+		routingPacketFPGA1to2 <= decryptedRoutingPacket;
 	endrule
 	Reg#(Bool) recvPacketFPGA2Done <- mkReg(False);
 	rule recvPacketFPGA2( !openFirstConnect );

@@ -16,62 +16,42 @@ import AuroraExtImportCommon::*;
 import AuroraExtImport117::*;
 import AuroraExtImport119::*;
 
-
-interface KeyPairFPGA1Ifc;
-	method ActionValue#(AuroraIfcType) getEncryptedPacket (AuroraIfcType srPacket);
-	method ActionValue#(AuroraIfcType) getDecryptedPacket (AuroraIfcType encPacket);
+interface PublicKeyHostIfc;
+	method ActionValue#(Bit#(32)) getEncryptedPacket (Bit#(32) srPacket);
 endinterface
-module mkKeyPairFPGA1(KeyPairFPGA1Ifc);
-	method ActionValue#(AuroraIfcType) getEncryptedPacket (AuroraIfcType srPacket);
-		AuroraIfcType encryptedPacket = srPacket ^ 1;
+module mkPublicKeyHost(PublicKeyHostIfc);
+	method ActionValue#(Bit#(32)) getEncryptedPacket (Bit#(32) srPacket);
+		Bit#(32) encryptedPacket = srPacket ^ 3;
 		return encryptedPacket;
 	endmethod
-	method ActionValue#(AuroraIfcType) getDecryptedPacket (AuroraIfcType encPacket);
-		AuroraIfcType decryptedPacket = encPacket ^ 1;
+endmodule
+
+interface KeyPairFPGA1Ifc;
+	method ActionValue#(Bit#(32)) getEncryptedPacket (Bit#(32) srPacket);
+	method ActionValue#(Bit#(32)) getDecryptedPacket (Bit#(32) encPacket);
+endinterface
+module mkKeyPairFPGA1(KeyPairFPGA1Ifc);
+	method ActionValue#(Bit#(32)) getEncryptedPacket (Bit#(32) srPacket);
+		Bit#(32) encryptedPacket = srPacket ^ 1;
+		return encryptedPacket;
+	endmethod
+	method ActionValue#(Bit#(32)) getDecryptedPacket (Bit#(32) encPacket);
+		Bit#(32) decryptedPacket = encPacket ^ 1;
 		return decryptedPacket;
 	endmethod
 endmodule
 
 interface KeyPairFPGA2Ifc;
-	method Action generateKeyPair;
-	method Action publicKey (AuroraIfcType srPacket);
-	method Action privateKey (AuroraIfcType encPacket);
-	method ActionValue#(AuroraIfcType) getEncryptedPacket;
-	method ActionValue#(AuroraIfcType) getDecryptedPacket;
+	method ActionValue#(Bit#(32)) getEncryptedPacket (Bit#(32) srPacket);
+	method ActionValue#(Bit#(32)) getDecryptedPacket (Bit#(32) encPacket);	
 endinterface
 module mkKeyPairFPGA2(KeyPairFPGA2Ifc);
-
-	Reg#(Bool) generateKeyPairStart <- mkReg(False);
-	Reg#(AuroraIfcType) routingPacket <- mkReg(0);
-	Reg#(AuroraIfcType) encryptedRoutingPacket <- mkReg(0);
-	Reg#(AuroraIfcType) encryptedPacket <- mkReg(0);
-	Reg#(AuroraIfcType) decryptedPacket <- mkReg(0);
-
-	rule generatePublicKey(generateKeyPairStart);
-		Bit#(64) publicKeyTmp = 16*1024*1024*1024*1024*1024*1024 - 1;
-		AuroraIfcType publicKey = zeroExtend(publicKeyTmp);
-		encryptedPacket <= routingPacket ^ publicKey;
-	endrule
-
-	rule generatePrivateKey(generateKeyPairStart);
-		Bit#(64) privateKeyTmp = 16*1024*1024*1024*1024*1024*1024 - 1;
-		AuroraIfcType privateKey = zeroExtend(privateKeyTmp);
-		decryptedPacket <= encryptedRoutingPacket ^ privateKey;
-	endrule
-
-	method Action generateKeyPair;
-		generateKeyPairStart <= True;
-	endmethod
-	method Action publicKey (AuroraIfcType srPacket);
-		routingPacket <= srPacket;
-	endmethod
-	method Action privateKey (AuroraIfcType encPacket);
-		encryptedRoutingPacket <= encPacket;
-	endmethod
-	method ActionValue#(AuroraIfcType) getEncryptedPacket;
+	method ActionValue#(Bit#(32)) getEncryptedPacket (Bit#(32) srPacket);
+		Bit#(32) encryptedPacket = srPacket ^ 2;
 		return encryptedPacket;
 	endmethod
-	method ActionValue#(AuroraIfcType) getDecryptedPacket;
+	method ActionValue#(Bit#(32)) getDecryptedPacket (Bit#(32) encPacket);
+		Bit#(32) decryptedPacket = encPacket ^ 2;
 		return decryptedPacket;
 	endmethod
 endmodule
@@ -89,6 +69,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	
 	KeyPairFPGA1Ifc keyPairFPGA1 <- mkKeyPairFPGA1;
 	KeyPairFPGA2Ifc keyPairFPGA2 <- mkKeyPairFPGA2;
+	PublicKeyHostIfc publicKeyHost <- mkPublicKeyHost;
 
 	//--------------------------------------------------------------------------------------
 	// Pcie Read and Write
@@ -150,7 +131,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	Reg#(Maybe#(AuroraIfcType)) recvPacketBuffer1 <- mkReg(tagged Invalid);
 	Reg#(Maybe#(AuroraIfcType)) recvPacketBuffer2 <- mkReg(tagged Invalid);
 	Reg#(Maybe#(AuroraIfcType)) recvPacketBuffer3 <- mkReg(tagged Invalid);
-	Reg#(Maybe#(AuroraIfcType)) recvPacketBuffer4 <- mkReg(tagged Invalid);
 
 	rule getCmd;
 		pcieWriteQ.deq;
@@ -163,24 +143,16 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			if ( isValid(recvPacketBuffer1) ) begin
 				if ( isValid(recvPacketBuffer2) ) begin
 					if ( isValid(recvPacketBuffer3) ) begin
-						if ( isValid(recvPacketBuffer4) ) begin
-							let prevPacket = fromMaybe(?, recvPacketBuffer4);
-							AuroraIfcType extendDatato128 = zeroExtend(d);
-							AuroraIfcType recvPacketFinal = (extendDatato128 << 112) | prevPacket;
-							recvPacketQ.enq(recvPacketFinal);
+						let prevPacket = fromMaybe(?, recvPacketBuffer3);
+						AuroraIfcType extendDatato128 = zeroExtend(d);
+						AuroraIfcType recvPacketFinal = (extendDatato128 << 72) | prevPacket;
+						recvPacketQ.enq(recvPacketFinal);
 
-							recvPacketBuffer1 <= tagged Invalid;
-							recvPacketBuffer2 <= tagged Invalid;
-							recvPacketBuffer3 <= tagged Invalid;
-							recvPacketBuffer4 <= tagged Invalid;
+						recvPacketBuffer1 <= tagged Invalid;
+						recvPacketBuffer2 <= tagged Invalid;
+						recvPacketBuffer3 <= tagged Invalid;
 
-							openFirstConnect <= True;
-						end else begin
-							let prevPacket = fromMaybe(?, recvPacketBuffer3);
-							AuroraIfcType extendDatato128 = zeroExtend(d);
-							AuroraIfcType recvPacket = (extendDatato128 << 96) | prevPacket;
-							recvPacketBuffer4 <= tagged Valid recvPacket;
-						end
+						openFirstConnect <= True;
 					end else begin
 						let prevPacket = fromMaybe(?, recvPacketBuffer2);
 						AuroraIfcType extendDatato128 = zeroExtend(d);
@@ -203,39 +175,44 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	//--------------------------------------------------------------------------------------------
 	// Host to FPGA1 to FPGA2 (First Connection)
 	//--------------------------------------------------------------------------------------------
-	Reg#(AuroraIfcType) routingPacketFPGA1to2 <- mkReg(0);
 	rule sendPacketFPGA1to2( openFirstConnect );
 		recvPacketQ.deq;
-		AuroraIfcType routingPacketFPGA1to2Tmp = recvPacketQ.first;
-		Bit#(8) idFPGA1 = routingPacketFPGA1to2Tmp[119:112];
-		Bit#(1) qidOutFPGA1 = idFPGA1[2];
-		Bit#(2) pidOutFPGA1 = truncate(idFPGA1);
+		AuroraIfcType encRoutingPacket = recvPacketQ.first;
+		Bit#(32) encOutPortFPGA1 = zeroExtend(encRoutingPacket[79:72]);
+		Bit#(32) outPortFPGA1 <- keyPairFPGA1.getDecryptedPacket (encOutPortFPGA1);
 		
-		let encryptedRoutingPacket <- keyPairFPGA1.getEncryptedPacket (routingPacketFPGA1to2Tmp);
-		let decryptedRoutingPacket <- keyPairFPGA1.getDecryptedPacket (encryptedRoutingPacket);
+		Bit#(8) id = truncate(outPortFPGA1);
+		Bit#(1) qid = id[2];
+		Bit#(2) pid = truncate(id);	
 		
-		auroraQuads[qidOutFPGA1].user[pidOutFPGA1].send(decryptedRoutingPacket);
-		routingPacketFPGA1to2 <= decryptedRoutingPacket;
+		AuroraIfcType remainRoutingPacket = zeroExtend(encRoutingPacket[71:0]);
+		auroraQuads[qid].user[pid].send(remainRoutingPacket);
 	endrule
-	Reg#(Bool) recvPacketFPGA2Done <- mkReg(False);
 	rule recvPacketFPGA2( !openFirstConnect );
-		Bit#(8) id = 7;
-		Bit#(1) qidIn = id[2];
-		Bit#(2) pidIn = truncate(id);
+		Bit#(8) id = 6;
+		Bit#(1) qid = id[2];
+		Bit#(2) pid = truncate(id);
 
-		let p <- auroraQuads[qidIn].user[pidIn].receive;
-		auroraQuads[qidIn].user[pidIn].send(p);
-		recvPacketFPGA2Done <= True;
+		let p <- auroraQuads[qid].user[pid].receive;
+		Bit#(32) encPacketHeader = zeroExtend(p[71:64]);
+		Bit#(32) encAomNHeader = p[63:32];
+		Bit#(32) encAddress = p[31:0];
+
+		Bit#(32) packetHeader <- keyPairFPGA2.getDecryptedPacket (encPacketHeader);
+		Bit#(32) aomNHeader <- keyPairFPGA2.getDecryptedPacket (encAomNHeader);
+		Bit#(32) address <- keyPairFPGA2.getDecryptedPacket (encAddress);
+
+		auroraQuads[qid].user[pid].send(zeroExtend(aomNHeader));
 	endrule
 	FIFOF#(Bit#(32)) validCheckFirstConnecQ <- mkFIFOF;
 	rule validCheckFirstConnec( openFirstConnect );
-		Bit#(8) id = routingPacketFPGA1to2[119:112];
-		Bit#(1) qidIn = id[2];
-		Bit#(2) pidIn = truncate(id);
+		Bit#(8) id = 3;
+		Bit#(1) qid = id[2];
+		Bit#(2) pid = truncate(id);
 
-		let p <- auroraQuads[qidIn].user[pidIn].receive;
+		let p <- auroraQuads[qid].user[pid].receive;
 	
-		if ( p[111] == 0 ) begin
+		if ( p == 4*1024 ) begin
 			validCheckFirstConnecQ.enq(1);
 		end else begin
 			validCheckFirstConnecQ.enq(0);
@@ -244,62 +221,67 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	//--------------------------------------------------------------------------------------------
 	// FPGA2 to FPGA1 to Host (Second Connection)
 	//--------------------------------------------------------------------------------------------
-	Reg#(AuroraIfcType) routingPacketFPGA2to1 <- mkReg(0);
 	rule sendPacketFPGA2to1( !openSecndConnect );
-		AuroraIfcType routingPacketTmp = 0;
-		routingPacketTmp[127:120] = 6; // OutPort of Host(8bits)
-		routingPacketTmp[119:112] = 0; // OutPort of FPGA1(8bits)
-		routingPacketTmp[111] = 0; // 0: Read, 1: Write(1bit)
-		routingPacketTmp[110:64] = 4*1024; // Amount of Memory(47bits)
-		routingPacketTmp[63:0] = 0; // Address(64bits)
-		routingPacketFPGA1to2 <= routingPacketTmp;
-	
-		auroraQuads[1].user[2].send(routingPacketTmp);
+		Bit#(8) id = 7;
+		Bit#(1) qid = id[2];
+		Bit#(2) pid = truncate(id);
 
-		routingPacketFPGA2to1 <= routingPacketTmp;
+		AuroraIfcType encRoutingPacket = 0;
+
+		Bit#(8) outPortFPGA1 = 0;
+		Bit#(8) packetHeader = 2;
+		Bit#(1) rwHeader = 0;
+		Bit#(31) aom = 4*1024;
+		Bit#(32) address = 0;
+
+		Bit#(32) encOutPortFPGA1 <- keyPairFPGA1.getEncryptedPacket (zeroExtend(outPortFPGA1));
+		Bit#(32) encPacketHeader <- publicKeyHost.getEncryptedPacket (zeroExtend(packetHeader));
+		Bit#(32) encAomNHeader <- publicKeyHost.getEncryptedPacket ({rwHeader, aom});
+		Bit#(32) encAddress <- publicKeyHost.getEncryptedPacket (address);
+
+		encRoutingPacket[79:72] = truncate(encOutPortFPGA1);
+		encRoutingPacket[71:64] = truncate(encPacketHeader);
+		encRoutingPacket[63:32] = encAomNHeader;
+		encRoutingPacket[31:0] = encAddress;
+
+		auroraQuads[qid].user[pid].send(encRoutingPacket);
 	endrule	
-	FIFOF#(Bit#(32)) sendPacketFPGA1toHostQ <- mkFIFOF;
-	Reg#(Maybe#(Bit#(96))) sendPacketBuffer1 <- mkReg(tagged Invalid);
-	Reg#(Maybe#(Bit#(64))) sendPacketBuffer2 <- mkReg(tagged Invalid);
-	Reg#(Maybe#(Bit#(48))) sendPacketBuffer3 <- mkReg(tagged Invalid);
-	Reg#(Maybe#(Bit#(16))) sendPacketBuffer4 <- mkReg(tagged Invalid);
+	FIFOF#(Bit#(72)) sendPacketFPGA1toHostQ <- mkFIFOF;
 	rule recvPacketFPGA1( openSecndConnect );
-		Bit#(8) id = 3;
-		Bit#(1) qidIn = id[2];
-		Bit#(2) pidIn = truncate(id);
+		Bit#(8) id = 4;
+		Bit#(1) qid = id[2];
+		Bit#(2) pid = truncate(id);
 
-		if ( isValid(sendPacketBuffer1) ) begin
-			if ( isValid(sendPacketBuffer2) ) begin
-				if ( isValid(sendPacketBuffer3) ) begin
-					if ( isValid(sendPacketBuffer4) ) begin	
-						let p = fromMaybe(?, sendPacketBuffer4);
-						sendPacketFPGA1toHostQ.enq(zeroExtend(p));
-						sendPacketBuffer1 <= tagged Invalid;
-						sendPacketBuffer2 <= tagged Invalid;
-						sendPacketBuffer3 <= tagged Invalid;
-						sendPacketBuffer4 <= tagged Invalid;
-					end else begin
-						let p = fromMaybe(?, sendPacketBuffer3);
-						sendPacketBuffer4 <= tagged Valid truncate(p>>32);
-						sendPacketFPGA1toHostQ.enq(truncate(p));
-					end
-				end else begin
-					let p = fromMaybe(?, sendPacketBuffer2);
-					Bit#(16) d = truncate(p);
-					sendPacketBuffer3 <= tagged Valid truncate(p>>16);
-					sendPacketFPGA1toHostQ.enq(zeroExtend(d));
-				end
-			end else begin
-				let p = fromMaybe(?, sendPacketBuffer1);
-				sendPacketBuffer2 <= tagged Valid truncate(p>>32);
-				sendPacketFPGA1toHostQ.enq(truncate(p));
-			end
-		end else begin
-			let p <- auroraQuads[qidIn].user[pidIn].receive;
-			sendPacketBuffer1 <= tagged Valid truncate(p>>32);
-			sendPacketFPGA1toHostQ.enq(truncate(p));
+		let p <- auroraQuads[qid].user[pid].receive;
+		Bit#(32) encOutPortFPGA1 = zeroExtend(p[79:72]);
+		Bit#(32) outPortFPGA1 <- keyPairFPGA1.getDecryptedPacket (encOutPortFPGA1);
+
+		if ( outPortFPGA1[7:0] == 0 ) begin
+			sendPacketFPGA1toHostQ.enq(p[71:0]);
 		end
 	endrule 
+	FIFOF#(Bit#(32)) relayPacketFPGA1toHostQ <- mkFIFOF;
+	Reg#(Maybe#(Bit#(40))) relayPacketBuffer1 <- mkReg(tagged Invalid);
+	Reg#(Maybe#(Bit#(8))) relayPacketBuffer2 <- mkReg(tagged Invalid);
+	rule relayPackettoHost( openSecndConnect );
+		if ( isValid(relayPacketBuffer1) ) begin
+			if ( isValid(relayPacketBuffer2) ) begin
+				let p = fromMaybe(?, relayPacketBuffer2);
+				relayPacketFPGA1toHostQ.enq(zeroExtend(p));
+				relayPacketBuffer1 <= tagged Invalid;
+				relayPacketBuffer2 <= tagged Invalid;
+			end else begin
+				let p = fromMaybe(?, relayPacketBuffer1);
+				relayPacketBuffer2 <= tagged Valid truncate(p>>32);
+				relayPacketFPGA1toHostQ.enq(truncate(p));
+			end
+		end else begin
+			let p = sendPacketFPGA1toHostQ.first;
+			relayPacketBuffer1 <= tagged Valid truncate(p>>32);
+			relayPacketFPGA1toHostQ.enq(truncate(p));
+			sendPacketFPGA1toHostQ.deq;
+		end
+	endrule
 	//--------------------------------------------------------------------------------------------
 	// Send Routing Packet to Host
 	//--------------------------------------------------------------------------------------------
@@ -316,9 +298,9 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 					pcieRespQ.enq(tuple2(r, 32'h12345678));
 				end
 			end else begin
-				if ( sendPacketFPGA1toHostQ.notEmpty ) begin
-					pcieRespQ.enq(tuple2(r, sendPacketFPGA1toHostQ.first));
-					sendPacketFPGA1toHostQ.deq;
+				if ( relayPacketFPGA1toHostQ.notEmpty ) begin
+					pcieRespQ.enq(tuple2(r, relayPacketFPGA1toHostQ.first));
+					relayPacketFPGA1toHostQ.deq;
 				end else begin 
 					pcieRespQ.enq(tuple2(r, 32'h12345678));
 				end

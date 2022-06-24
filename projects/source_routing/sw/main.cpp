@@ -23,6 +23,25 @@ double timespec_diff_sec( timespec start, timespec end ) {
 	return t;
 }
 
+uint32_t publicKeyFPGA1(uint32_t routingPacket) {
+	uint32_t encPacket = routingPacket ^ 1;
+	return encPacket;
+}
+
+uint32_t publicKeyFPGA2(uint32_t routingPacket) {
+	uint32_t encPacket = routingPacket ^ 2;
+	return encPacket;
+}
+ 
+uint32_t publicKeyHost(uint32_t routingPacket) {
+	uint32_t encPacket = routingPacket ^ 3;
+	return encPacket;
+}
+
+uint32_t privateKeyHost(uint32_t encRoutingPacket) {
+	uint32_t decPacket = encRoutingPacket ^ 3;
+	return decPacket;
+}
 
 int main(int argc, char** argv) {
 	printf( "Software startec\n" ); fflush(stdout);
@@ -72,36 +91,32 @@ int main(int argc, char** argv) {
 	if ( direction == 0 ) {
 		printf( "Sending source routing packet from FPGA1 to FPGA2\n" );
 		
-		uint64_t address = 0;
-		uint32_t addressFirst = (uint32_t) address;
-		uint64_t addressSecondTmp = address >> 32;
-		uint32_t addressSecond = (uint32_t) addressSecondTmp;
-	
-		uint64_t amountofmemory = 4*1024;
-		uint64_t header = 0;
-		uint64_t aomNheader = (header << 47) | amountofmemory;
-		uint32_t aomNheaderFirst = (uint32_t) aomNheader;
-		uint64_t aomNheaderSecondTmp = aomNheader >> 32;
-		uint32_t aomNheaderSecond = (uint32_t) aomNheaderSecondTmp;
+		uint32_t address = 0; // 32-bit Start Point of The Address
+		uint32_t amountofmemory = 4*1024;
+		uint32_t header = 0; // 0:Write, 1:Read
+		uint32_t aomNheader = (header << 31) | amountofmemory; // 32-bit R/W + Amount of Memory
+		uint32_t packetHeader = 0; // 8-bit Packet Header
+		uint32_t outportFPGA1 = 3; // 8-bit OutPort of FPGA1
 
-		uint32_t outportHost = 0;
-		uint32_t outportFPGA1 = 4;
-		uint32_t outport = (outportHost << 8) | outportFPGA1;
+		uint32_t encaddress = publicKeyFPGA2(address);
+		uint32_t encaomNheader = publicKeyFPGA2(aomNheader);
+		uint32_t encpacketHeader = publicKeyFPGA2(packetHeader);
+		uint32_t encoutportFPGA1 = publicKeyFPGA1(outportFPGA1);
 
-		pcie->userWriteWord(direction, addressFirst);
-		pcie->userWriteWord(direction, addressSecond);
-		pcie->userWriteWord(direction, aomNheaderFirst);
-		pcie->userWriteWord(direction, aomNheaderSecond);
-		pcie->userWriteWord(direction, outport);
+		pcie->userWriteWord(direction, encaddress);
+		pcie->userWriteWord(direction, encaomNheader);
+		pcie->userWriteWord(direction, encpacketHeader);
+		pcie->userWriteWord(direction, encoutportFPGA1);
 	} else {
 		printf( "Sending source routing packet from FPGA2 to FPGA1\n" );
 		pcie->userWriteWord(direction, 0);
 	}
 	fflush( stdout );
 	
+	int cnt = 0;
 	int* aom;	
 	unsigned int d_0 = 0;
-	unsigned int d_1[4] = { 0, };
+	unsigned int d_1[3] = { 0, };
 	
 	if ( direction == 0 ) {
 		while ( 1 ) {
@@ -112,38 +127,35 @@ int main(int argc, char** argv) {
 		}
 		printf( "Sending source routing packet from FPGA1 to FPGA2 succeeded!\n" );
 	} else {
-		for ( int i = 0; i < 5; i ++ ) {
-			d_1[i] = pcie->userReadWord(direction*4);
-			printf( "%d ", d_1[i] );
-		}
+		while ( 1 ) {
+			if ( cnt > 2 ) {
+				break;
+			}
+			d_0 = pcie->userReadWord(direction*4);
+			if ( d_0 != 305419896 ) {
+				d_1[cnt] = d_0;
+				cnt ++;
+			}
+	 	}
 		printf( "\n" );
 		fflush(stdout);
-	
-		uint64_t add_1 = d_1[0];
-		uint64_t add_2_Tmp = d_1[1];
-		uint64_t add_2 = add_2_Tmp << 32;
-		uint64_t addFinal = add_1 | add_2;
-		uint64_t aom_1 = d_1[2];
-		uint64_t aom_2_Tmp = d_1[3];
-		uint64_t aom_2 = aom_2_Tmp << 16;
-		uint64_t aom_3 = aom_1 | aom_2;
-		uint64_t aom_4 = aom_3 << 17;
-		uint64_t aomFinal = aom_4 >> 17;
-		uint64_t rw = aom_3 >> 47;
-		uint32_t outPortFPGA1Tmp = d_1[4] << 24;
-		uint32_t outPortFPGA1 = outPortFPGA1Tmp >> 24;
-		uint32_t outPortFPGA2 = d_1[4] >> 8;
 
-		if ( rw == 1 ) {
+		uint32_t address = privateKeyHost(d_1[0]);
+		uint32_t aomNHeader = privateKeyHost(d_1[1]);
+		uint32_t rwHeader = (aomNHeader >> 31);
+		uint32_t aomTmp = (aomNHeader << 1);
+		uint32_t aomFinal = (aomTmp >> 1);
+		uint32_t packetHeader = privateKeyHost(d_1[2]);	
+
+		if ( rwHeader == 1 ) {
 			aom = (int*)malloc(aomFinal);
 		}
 
-		printf( "OutPort of FPGA2: %u\n", outPortFPGA2 );
-		printf( "OutPort of FPGA1: %u\n", outPortFPGA1 );
+		printf( "Packet Header: %u\n", packetHeader );
 		printf( "Amount of Memory: %llu Bytes\n", aomFinal );
+		printf( "Start Point of Address: %p\n", address );
 		
-		if ( rw == 1 ) {
-			printf( "Start Point of Address: %p\n", aom );
+		if ( rwHeader == 1 ) {
 			free(aom);
 		}
 	}

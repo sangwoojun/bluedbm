@@ -24,8 +24,8 @@ typedef 4 AuroraExtPerQuad;
 
 typedef 64 AuroraPhysWidth;
 typedef TSub#(AuroraPhysWidth, 2) BodySz;
-typedef TMul#(AuroraPhysWidth, 2) AuroraIfcWidth;
-typedef Bit#(AuroraIfcWidth) AuroraIfcType;
+typedef TMul#(AuroraPhysWidth, 9) AuroraIfcWidth;
+typedef Bit#(AuroraIfcWidth) AuroraIfcType; // 576-bit = 72-Byte
 
 
 interface AuroraExtIfc;
@@ -43,8 +43,8 @@ endinterface
 
 
 module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock uclk, Reset urst, Integer idx) (AuroraExtUserIfc);
-	Integer recvQDepth = 256;
-	Integer windowSize = 128;
+	Integer recvQDepth = 1152;
+	Integer windowSize = 576;
 
 	Reg#(Bit#(16)) maxInFlightUp <- mkReg(0, clocked_by uclk, reset_by urst);
 	Reg#(Bit#(16)) maxInFlightDown <- mkReg(0, clocked_by uclk, reset_by urst);
@@ -72,18 +72,28 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 	endrule
 	
 	SyncFIFOIfc#(AuroraIfcType) outPacketQ <- mkSyncFIFOFromCC(32, uclk);
-	Reg#(Maybe#(Bit#(66))) outPacketBuffer1 <- mkReg(tagged Invalid, clocked_by uclk, reset_by urst);
-	Reg#(Maybe#(Bit#(BodySz))) outPacketBuffer2 <- mkReg(tagged Invalid, clocked_by uclk, reset_by urst);
+	Reg#(Maybe#(Bit#(514))) outPacketBuffer1 <- mkReg(tagged Invalid, clocked_by uclk, reset_by urst);
+	Reg#(Bit#(452)) outPacketBuffer2 <- mkReg(0, clocked_by uclk, reset_by urst);
+	Reg#(Bit#(8)) outPacketBufferCnt <- mkReg(0, clocked_by uclk, reset_by urst);
 	rule serOutPacket;
 		if ( isValid(outPacketBuffer1) ) begin
-			if ( isValid(outPacketBuffer2) ) begin
-				let d = fromMaybe(?, outPacketBuffer2);
-				sendQ.enq({d, 2'b10});
-				outPacketBuffer1 <= tagged Invalid;
-				outPacketBuffer2 <= tagged Invalid;
+			if ( outPacketBufferCnt > 0 ) begin
+				if ( outPacketBufferCnt == 8 ) begin
+					let d = outPacketBuffer2;
+					sendQ.enq({truncate(d), 2'b10});
+					
+					outPacketBuffer1 <= tagged Invalid;
+					outPacketBufferCnt <= 0;
+				end else begin
+					let d = outPacketBuffer2;
+					outPacketBuffer2 <= truncate(d>>valueof(BodySz));
+					outPacketBufferCnt <= outPacketBufferCnt + 1;
+					sendQ.enq({truncate(d), 2'b00});
+				end
 			end else begin
 				let d = fromMaybe(?, outPacketBuffer1);
-				outPacketBuffer2 <= tagged Valid truncate(d>>valueof(BodySz));
+				outPacketBuffer2 <= truncate(d>>valueof(BodySz));
+				outPacketBufferCnt <= outPacketBufferCnt + 1;
 				sendQ.enq({truncate(d), 2'b00});
 			end
 		end else begin
@@ -95,8 +105,9 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 	endrule
 
 	FIFO#(AuroraIfcType) recvQ <- mkSizedBRAMFIFO(recvQDepth, clocked_by uclk, reset_by urst);
-	Reg#(Maybe#(Bit#(124))) inPacketBuffer1 <- mkReg(tagged Invalid, clocked_by uclk, reset_by urst);
-	Reg#(Bit#(124)) inPacketBuffer2 <- mkReg(0, clocked_by uclk, reset_by urst);
+	Reg#(Maybe#(Bit#(558))) inPacketBuffer1 <- mkReg(tagged Invalid, clocked_by uclk, reset_by urst);
+	Reg#(Bit#(558)) inPacketBuffer2 <- mkReg(0, clocked_by uclk, reset_by urst);
+	Reg#(Bit#(8)) inPacketBufferCnt <- mkReg(0, clocked_by uclk, reset_by urst);
 	rule recvPacket( user.lane_up != 0 && user.channel_up != 0 );
 		let d <- user.receive;
 		Bit#(1) control = d[0];
@@ -113,10 +124,22 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 				maxInFlightDown <= maxInFlightDown + 1;
 			end else begin
 				if ( isValid(inPacketBuffer1) ) begin
-					let p = fromMaybe(?, inPacketBuffer1);
-					Bit#(124) c = zeroExtend(curData);
-					inPacketBuffer2 <= (c<<62)|(p);
-					inPacketBuffer1 <= tagged Invalid;
+					if ( inPacketBufferCnt > 0 ) begin
+						if ( inPacketBufferCnt == 8 ) begin
+							inPacketBuffer1 <= tagged Invalid;
+							inPacketBufferCnt <= 0;
+						end else begin
+							inPacketBufferCnt <= inPacketBufferCnt + 1;
+						end
+						let p = inPacketBuffer2;
+						Bit#(558) c = zeroExtend(curData);
+						inPacketBuffer2 <= (c<<62)|(p);
+					end else begin
+						let p = fromMaybe(?, inPacketBuffer1);
+						Bit#(558) c = zeroExtend(curData);
+						inPacketBuffer2 <= (c<<62)|(p);
+						inPacketBufferCnt <= inPacketBufferCnt + 1;
+					end
 				end else begin
 					inPacketBuffer1 <= tagged Valid zeroExtend(curData);
 				end

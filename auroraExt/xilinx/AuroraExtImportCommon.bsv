@@ -24,8 +24,8 @@ typedef 4 AuroraExtPerQuad;
 
 typedef 64 AuroraPhysWidth;
 typedef TSub#(AuroraPhysWidth, 2) BodySz;
-typedef TMul#(AuroraPhysWidth, 9) AuroraIfcWidth;
-typedef Bit#(AuroraIfcWidth) AuroraIfcType; // 576-bit = 72-Byte
+typedef TMul#(AuroraPhysWidth, 8) AuroraIfcWidth;
+typedef Bit#(AuroraIfcWidth) AuroraIfcType; // 512-bit = 64-Byte
 
 
 interface AuroraExtIfc;
@@ -43,8 +43,8 @@ endinterface
 
 
 module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock uclk, Reset urst, Integer idx) (AuroraExtUserIfc);
-	Integer recvQDepth = 1152;
-	Integer windowSize = 576;
+	Integer recvQDepth = 1024;
+	Integer windowSize = 512;
 
 	Reg#(Bit#(16)) maxInFlightUp <- mkReg(0, clocked_by uclk, reset_by urst);
 	Reg#(Bit#(16)) maxInFlightDown <- mkReg(0, clocked_by uclk, reset_by urst);
@@ -72,13 +72,13 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 	endrule
 	
 	SyncFIFOIfc#(AuroraIfcType) outPacketQ <- mkSyncFIFOFromCC(32, uclk);
-	Reg#(Maybe#(Bit#(514))) outPacketBuffer1 <- mkReg(tagged Invalid, clocked_by uclk, reset_by urst);
-	Reg#(Bit#(452)) outPacketBuffer2 <- mkReg(0, clocked_by uclk, reset_by urst);
+	Reg#(Maybe#(Bit#(450))) outPacketBuffer1 <- mkReg(tagged Invalid, clocked_by uclk, reset_by urst);
+	Reg#(Bit#(388)) outPacketBuffer2 <- mkReg(0, clocked_by uclk, reset_by urst);
 	Reg#(Bit#(8)) outPacketBufferCnt <- mkReg(0, clocked_by uclk, reset_by urst);
 	rule serOutPacket;
 		if ( isValid(outPacketBuffer1) ) begin
 			if ( outPacketBufferCnt > 0 ) begin
-				if ( outPacketBufferCnt == 8 ) begin
+				if ( outPacketBufferCnt == 7 ) begin
 					let d = outPacketBuffer2;
 					sendQ.enq({truncate(d), 2'b10});
 					
@@ -105,8 +105,8 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 	endrule
 
 	FIFO#(AuroraIfcType) recvQ <- mkSizedBRAMFIFO(recvQDepth, clocked_by uclk, reset_by urst);
-	Reg#(Maybe#(Bit#(558))) inPacketBuffer1 <- mkReg(tagged Invalid, clocked_by uclk, reset_by urst);
-	Reg#(Bit#(558)) inPacketBuffer2 <- mkReg(0, clocked_by uclk, reset_by urst);
+	Reg#(Maybe#(Bit#(496))) inPacketBuffer1 <- mkReg(tagged Invalid, clocked_by uclk, reset_by urst);
+	Reg#(Bit#(496)) inPacketBuffer2 <- mkReg(0, clocked_by uclk, reset_by urst);
 	Reg#(Bit#(8)) inPacketBufferCnt <- mkReg(0, clocked_by uclk, reset_by urst);
 	rule recvPacket( user.lane_up != 0 && user.channel_up != 0 );
 		let d <- user.receive;
@@ -125,18 +125,18 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 			end else begin
 				if ( isValid(inPacketBuffer1) ) begin
 					if ( inPacketBufferCnt > 0 ) begin
-						if ( inPacketBufferCnt == 8 ) begin
+						if ( inPacketBufferCnt == 7 ) begin
 							inPacketBuffer1 <= tagged Invalid;
 							inPacketBufferCnt <= 0;
 						end else begin
 							inPacketBufferCnt <= inPacketBufferCnt + 1;
 						end
 						let p = inPacketBuffer2;
-						Bit#(558) c = zeroExtend(curData);
+						Bit#(496) c = zeroExtend(curData);
 						inPacketBuffer2 <= (c<<62)|(p);
 					end else begin
 						let p = fromMaybe(?, inPacketBuffer1);
-						Bit#(558) c = zeroExtend(curData);
+						Bit#(496) c = zeroExtend(curData);
 						inPacketBuffer2 <= (c<<62)|(p);
 						inPacketBufferCnt <= inPacketBufferCnt + 1;
 					end

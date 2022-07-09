@@ -22,27 +22,34 @@ double timespec_diff_sec( timespec start, timespec end ) {
 	t += ((double)(end.tv_nsec - start.tv_nsec)/1000000000L);
 	return t;
 }
-
-uint32_t publicKeyFPGA1(uint32_t routingPacket) {
+// Public Key of FPGA1
+uint32_t publicKeyFPGA1_32b(uint32_t routingPacket) {
 	uint32_t encPacket = routingPacket ^ 1;
 	return encPacket;
 }
-
-uint32_t publicKeyFPGA2(uint32_t routingPacket) {
+uint8_t publicKeyFPGA1_8b(uint8_t routingPacket) {
+	uint8_t encPacket = routingPacket ^ 1;
+	return encPacket;
+}
+// Public Key of FPGA2
+uint32_t publicKeyFPGA2_32b(uint32_t routingPacket) {
 	uint32_t encPacket = routingPacket ^ 2;
 	return encPacket;
 }
- 
-uint32_t publicKeyHost(uint32_t routingPacket) {
+uint8_t publicKeyFPGA2_8b(uint8_t routingPacket) {
+	uint8_t encPacket = routingPacket ^ 2;
+	return encPacket;
+}
+// Public & Private Key of Host
+uint32_t publicKeyHost_32b(uint32_t routingPacket) {
 	uint32_t encPacket = routingPacket ^ 3;
 	return encPacket;
 }
-
-uint32_t privateKeyHost(uint32_t encRoutingPacket) {
+uint32_t privateKeyHost_32b(uint32_t encRoutingPacket) {
 	uint32_t decPacket = encRoutingPacket ^ 3;
 	return decPacket;
 }
-
+// Main
 int main(int argc, char** argv) {
 	printf( "Software startec\n" ); fflush(stdout);
 	BdbmPcie* pcie = BdbmPcie::getInstance();
@@ -94,19 +101,29 @@ int main(int argc, char** argv) {
 		uint32_t address = 0; // 32-bit Start Point of The Address
 		uint32_t amountofmemory = 4*1024;
 		uint32_t header = 0; // 0:Write, 1:Read
-		uint32_t aomNheader = (header << 31) | amountofmemory; // 32-bit R/W + Amount of Memory
-		uint32_t packetHeader = 0; // 8-bit Packet Header
-		uint32_t outportFPGA1 = 3; // 8-bit OutPort of FPGA1
+		uint32_t aomNheader = (amountofmemory << 1) | header; // 32-bit R/W + Amount of Memory
+		uint32_t packetHeader = 0; // 16-bit Packet Header
 
-		uint32_t encaddress = publicKeyFPGA2(address);
-		uint32_t encaomNheader = publicKeyFPGA2(aomNheader);
-		uint32_t encpacketHeader = publicKeyFPGA2(packetHeader);
-		uint32_t encoutportFPGA1 = publicKeyFPGA1(outportFPGA1);
+		uint8_t outportFPGA1_2 = 3; // 8-bit Output Port of FPGA1_2
+		uint8_t outportFPGA2 = 7; // 8-bit Output Port of FPGA2
+		uint8_t outportFPGA1_1 = 4; // 8-bit Output Port of FPGA1_1
+		uint8_t numHops = 3; // 8-bit The number of Hops
+		
+		uint32_t encaddress = publicKeyFPGA2_32b(address);
+		uint32_t encaomNheader = publicKeyFPGA2_32b(aomNheader);
+		uint32_t encpacketHeader = publicKeyFPGA2_32b(packetHeader);
 
-		pcie->userWriteWord(direction, encaddress);
-		pcie->userWriteWord(direction, encaomNheader);
+		uint8_t encoutportFPGA1_2 = publicKeyFPGA1_8b(outportFPGA1_2);
+		uint8_t encoutportFPGA2 = publicKeyFPGA2_8b(outportFPGA2);
+		uint8_t encoutportFPGA1_1 = publicKeyFPGA1_8b(outportFPGA1_1);
+		uint8_t encnumHops = publicKeyFPGA1_8b(numHops);
+
+		uint32_t encHeaderPart = ((uint32_t)encoutportFPGA1_2 << 24) | ((uint32_t)encoutportFPGA2 << 16) | ((uint32_t)encoutportFPGA1_1 << 8) | (uint32_t)encnumHops ;
+
+		pcie->userWriteWord(direction, encHeaderPart);
 		pcie->userWriteWord(direction, encpacketHeader);
-		pcie->userWriteWord(direction, encoutportFPGA1);
+		pcie->userWriteWord(direction, encaomNheader);
+		pcie->userWriteWord(direction, encaddress);
 	} else {
 		printf( "Sending source routing packet from FPGA2 to FPGA1\n" );
 		pcie->userWriteWord(direction, 0);
@@ -140,12 +157,12 @@ int main(int argc, char** argv) {
 		printf( "\n" );
 		fflush(stdout);
 
-		uint32_t address = privateKeyHost(d_1[0]);
-		uint32_t aomNHeader = privateKeyHost(d_1[1]);
+		uint32_t address = privateKeyHost_32b(d_1[0]);
+		uint32_t aomNHeader = privateKeyHost_32b(d_1[1]);
 		uint32_t rwHeader = (aomNHeader >> 31);
 		uint32_t aomTmp = (aomNHeader << 1);
 		uint32_t aomFinal = (aomTmp >> 1);
-		uint32_t packetHeader = privateKeyHost(d_1[2]);	
+		uint32_t packetHeader = privateKeyHost_32b(d_1[2]);	
 
 		if ( rwHeader == 1 ) {
 			aom = (int*)malloc(aomFinal);

@@ -85,9 +85,15 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	Reg#(Bool) openFirstConnect <- mkReg(False);
 	Reg#(Bool) openSecndConnect <- mkReg(False);
 
-	Reg#(Maybe#(Bit#(24))) recvPacketBuffer24 <- mkReg(tagged Invalid);
-	Reg#(Maybe#(Bit#(40))) recvPacketBuffer40 <- mkReg(tagged Invalid);
-	Reg#(Maybe#(Bit#(72))) recvPacketBuffer72 <- mkReg(tagged Invalid);
+	Reg#(Bool) unlockFPGA1_2 <- mkReg(True);
+	Reg#(Bool) unlockVdChecker <- mkReg(False);
+
+	Reg#(Bool) unlockFPGA2_1 <- mkReg(True);
+	Reg#(Bool) unlockFPGA2_2 <- mkReg(False);
+
+	Reg#(Maybe#(Bit#(32))) recvPacketBuffer32 <- mkReg(tagged Invalid);
+	Reg#(Maybe#(Bit#(48))) recvPacketBuffer48 <- mkReg(tagged Invalid);
+	Reg#(Maybe#(Bit#(80))) recvPacketBuffer80 <- mkReg(tagged Invalid);
 	rule getCmd;
 		pcieWriteQ.deq;
 		let w = pcieWriteQ.first;
@@ -96,40 +102,40 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		let a = w.addr;
 
 		if ( a == 0 ) begin // Open first connection (Host to FPGA1 to FPGA2)
-			if ( isValid(recvPacketBuffer24) ) begin
-				if ( isValid(recvPacketBuffer40) ) begin
-					if ( isValid(recvPacketBuffer72) ) begin
-						let prevPacket = fromMaybe(?, recvPacketBuffer72);
+			if ( isValid(recvPacketBuffer32) ) begin
+				if ( isValid(recvPacketBuffer48) ) begin
+					if ( isValid(recvPacketBuffer80) ) begin
+						let prevPacket = fromMaybe(?, recvPacketBuffer80);
 						AuroraIfcType extendPrev = zeroExtend(prevPacket);
 						AuroraIfcType extendCurr = zeroExtend(d);
-						AuroraIfcType recvPacket = (extendCurr << 72) | extendPrev;
+						AuroraIfcType recvPacket = (extendCurr << 80) | extendPrev;
 						recvPacketQ.enq(recvPacket);
 
-						recvPacketBuffer24 <= tagged Invalid;
-						recvPacketBuffer40 <= tagged Invalid;
-						recvPacketBuffer72 <= tagged Invalid;
+						recvPacketBuffer32 <= tagged Invalid;
+						recvPacketBuffer48 <= tagged Invalid;
+						recvPacketBuffer80 <= tagged Invalid;
 
 						openFirstConnect <= True;
 						// Address
 					end else begin
-						let prevPacket = fromMaybe(?, recvPacketBuffer40);
-						Bit#(72) extendPrev = zeroExtend(prevPacket);
-						Bit#(72) extendCurr = zeroExtend(d);
-						Bit#(72) recvPacket = (extendCurr << 40) | extendPrev;
-						recvPacketBuffer72 <= tagged Valid recvPacket;
+						let prevPacket = fromMaybe(?, recvPacketBuffer48);
+						Bit#(80) extendPrev = zeroExtend(prevPacket);
+						Bit#(80) extendCurr = zeroExtend(d);
+						Bit#(80) recvPacket = (extendCurr << 48) | extendPrev;
+						recvPacketBuffer80 <= tagged Valid recvPacket;
 						// RW Header + Amount of Memory
 					end
 				end else begin
-					let prevPacket = fromMaybe(?, recvPacketBuffer24);
+					let prevPacket = fromMaybe(?, recvPacketBuffer32);
 					Bit#(16) currPacket = truncate(d);
-					Bit#(40) extendPrev = zeroExtend(prevPacket);
-					Bit#(40) extendCurr = zeroExtend(currPacket);
-					Bit#(40) recvPacket = (extendCurr << 24) | extendPrev;
-					recvPacketBuffer40 <= tagged Valid recvPacket;
+					Bit#(48) extendPrev = zeroExtend(prevPacket);
+					Bit#(48) extendCurr = zeroExtend(currPacket);
+					Bit#(48) recvPacket = (extendCurr << 32) | extendPrev;
+					recvPacketBuffer48 <= tagged Valid recvPacket;
 					// Packet Header
 				end
 			end else begin
-				recvPacketBuffer24 <= tagged Valid truncate(d); 
+				recvPacketBuffer32 <= tagged Valid d; 
 				// # of Hops and Output Ports of FPGAs
 			end
 		end else begin // Open second connection (FPGA2 to FPGA1 to Host)
@@ -137,21 +143,21 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		end
 	endrule
 	//--------------------------------------------------------------------------------------------
-	// Host(0) -> (0)FPGA1(4) -> (7)FPGA2(6) -> (3)FPGA1 (First Connection)
+	// Host(0) -> (0)FPGA1(4) -> (7)FPGA2(7) -> (4)FPGA1(3) -> (6)FPGA2 (First Connection)
 	//--------------------------------------------------------------------------------------------
 	rule fpga1_1( openFirstConnect );
 		if ( recvPacketQ.notEmpty ) begin
 			recvPacketQ.deq;
 			AuroraIfcType encRoutingPacket = recvPacketQ.first;
 			Bit#(8) numHops = encRoutingPacket[7:0] ^ 1; // Priv_Key of FPGA1
-
+			
 			if ( numHops != 0 ) begin
 				Bit#(8) outPortFPGA1_1 = encRoutingPacket[15:8] ^ 1; // Priv_Key of FPGA1
 				Bit#(8) id = truncate(outPortFPGA1_1);
 				Bit#(1) qid = id[2];
 				Bit#(2) pid = truncate(id);	
 
-				Bit#(8) encNewNumHopsTmp = (numHops - 1) ^ 2; // Pub_Key of FPGA2
+				Bit#(8) encNewNumHopsTmp = (numHops - 1) ^ 2; // 2, Pub_Key of FPGA2
 				AuroraIfcType encNewNumHops = zeroExtend(encNewNumHopsTmp);
 				AuroraIfcType remainRoutingPacket = encRoutingPacket >> 16;
 				AuroraIfcType newRemainRoutingPacket = (remainRoutingPacket << 8) | encNewNumHops;
@@ -172,7 +178,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			end
 		end
 	endrule
-	rule fpga2_1( !openFirstConnect );
+	rule fpga2_1( !openFirstConnect && unlockFPGA2_1 );
 		Bit#(8) idIn = 7;
 		Bit#(1) qidIn = idIn[2];
 		Bit#(2) pidIn = truncate(idIn);
@@ -186,12 +192,14 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			Bit#(1) qidOut = idOut[2];
 			Bit#(2) pidOut = truncate(idOut);	
 			
-			Bit#(8) encNewNumHopsTmp = (numHops - 1) ^ 1; // Pub_Key of FPGA1
+			Bit#(8) encNewNumHopsTmp = (numHops - 1) ^ 1; // 1, Pub_Key of FPGA1
 			AuroraIfcType encNewNumHops = zeroExtend(encNewNumHopsTmp);
 			AuroraIfcType remainRoutingPacket = p >> 16;
 			AuroraIfcType newRemainRoutingPacket = (remainRoutingPacket << 8) | encNewNumHops;
 
 			auroraQuads[qidOut].user[pidOut].send(newRemainRoutingPacket);
+			unlockFPGA2_1 <= False;
+			unlockFPGA2_2 <= True;
 		end else begin
 			// FPGA2_1 is final destination
 			AuroraIfcType remainRoutingPacket = p >> 8;
@@ -206,9 +214,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			end
 		end
 	endrule
-	FIFOF#(Bit#(32)) validCheckFirstConnectQ <- mkFIFOF;
-	rule fpga1_2( openFirstConnect );
-		Bit#(8) idIn = 3;
+	rule fpga1_2( openFirstConnect && unlockFPGA1_2 );
+		Bit#(8) idIn = 4;
 		Bit#(1) qidIn = idIn[2];
 		Bit#(2) pidIn = truncate(idIn);
 
@@ -221,28 +228,73 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			Bit#(1) qidOut = idOut[2];
 			Bit#(2) pidOut = truncate(idOut);	
 			
-			Bit#(8) encNewNumHopsTmp = (numHops - 1) ^ 2; // Pub_Key of FPGA2
+			Bit#(8) encNewNumHopsTmp = (numHops - 1) ^ 2; // 0, Pub_Key of FPGA2
 			AuroraIfcType encNewNumHops = zeroExtend(encNewNumHopsTmp);
 			AuroraIfcType remainRoutingPacket = p >> 16;
 			AuroraIfcType newRemainRoutingPacket = (remainRoutingPacket << 8) | encNewNumHops;
 
 			auroraQuads[qidOut].user[pidOut].send(newRemainRoutingPacket);
-			validCheckFirstConnectQ.enq(1);
-		end else if ( numHops == 0 ) begin
-			// FPGA1_2 is final destination
+			unlockFPGA1_2 <= False;
+			unlockVdChecker <= True;
+		end else begin
+			// FPGA1_1 is final destination
 			AuroraIfcType remainRoutingPacket = p >> 8;
 			Bit#(16) packetHeader = remainRoutingPacket[15:0] ^ 1; // Priv_Key of FPGA1
 			Bit#(32) aomNheader = remainRoutingPacket[47:16] ^ 1; // Priv_Key of FPGA1
 			Bit#(32) address = remainRoutingPacket[79:48] ^ 1; // Priv_Key of FPGA1
 
-			/*if ( aomNheader[0] == 0 ) begin
+			if ( aomNheader[0] == 0 ) begin
 				// Write
-				validCheckFirstConnectQ.enq(1);
 			end else begin
 				// Read
-				validCheckFirstConnectQ.enq(0);
-			end*/
-		       	validCheckFirstConnectQ.enq(1);
+			end
+		end
+	endrule
+	rule fpga2_2( !openFirstConnect && unlockFPGA2_2 );
+		Bit#(8) idIn = 6;
+		Bit#(1) qidIn = idIn[2];
+		Bit#(2) pidIn = truncate(idIn);
+
+		let p <- auroraQuads[qidIn].user[pidIn].receive;
+		Bit#(8) numHops = p[7:0] ^ 2; // Priv_Key of FPGA2
+		
+		if ( numHops != 0 ) begin
+			Bit#(8) outPortFPGA2_2 = p[15:8] ^ 2; // Priv_Key of FPGA2
+			Bit#(8) idOut = truncate(outPortFPGA2_2);
+			Bit#(1) qidOut = idOut[2];
+			Bit#(2) pidOut = truncate(idOut);	
+			
+			Bit#(8) encNewNumHopsTmp = (numHops - 1) ^ 1; // ?, Pub_Key of FPGA1
+			AuroraIfcType encNewNumHops = zeroExtend(encNewNumHopsTmp);
+			AuroraIfcType remainRoutingPacket = p >> 16;
+			AuroraIfcType newRemainRoutingPacket = (remainRoutingPacket << 8) | encNewNumHops;
+
+			auroraQuads[qidOut].user[pidOut].send(newRemainRoutingPacket);
+		end else begin
+			// FPGA2_2 is final destination
+			AuroraIfcType remainRoutingPacket = p >> 8;
+			Bit#(16) packetHeader = remainRoutingPacket[15:0] ^ 2; // Priv_Key of FPGA2
+			Bit#(32) aomNheader = remainRoutingPacket[47:16] ^ 2; // Priv_Key of FPGA2
+			Bit#(32) address = remainRoutingPacket[79:48] ^ 2; // Priv_Key of FPGA2
+
+			if ( aomNheader[0] == 0 ) begin
+				// Write
+				auroraQuads[qidIn].user[pidIn].send(zeroExtend(aomNheader[31:1]));
+			end
+		end
+	endrule
+	FIFOF#(Bit#(32)) validCheckFirstConnectQ <- mkFIFOF;
+	rule validCheckFirstConnection( openFirstConnect && unlockVdChecker );
+		Bit#(8) idIn = 3;
+		Bit#(1) qidIn = idIn[2];
+		Bit#(2) pidIn = truncate(idIn);
+
+		let p <- auroraQuads[qidIn].user[pidIn].receive;
+	
+		if ( p == 4*1024 ) begin
+			validCheckFirstConnectQ.enq(1);
+		end else begin
+			validCheckFirstConnectQ.enq(0);
 		end
 	endrule
 	//--------------------------------------------------------------------------------------------

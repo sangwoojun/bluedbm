@@ -124,6 +124,8 @@ int main(int argc, char** argv) {
 		d_0 = pcie->userReadWord(0);
 		if ( d_0 == 0 ) {
 			break;
+		} else if ( d_0 == 1 ) {
+			break;
 		}
 	}
 	printf( "Sending source routing packet succeeded!\n" );

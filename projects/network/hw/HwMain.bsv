@@ -136,6 +136,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	//--------------------------------------------------------------------------------------------
 	// Host(0) -> (0)FPGA1_1(4) -> (7)FPGA2_1(6) -> (3)FPGA1_2 (First Connection)
 	//--------------------------------------------------------------------------------------------
+	FIFOF#(Tuple3#(Bit#(1), Bit#(2), AuroraIfcType)) sendPacketByAuroraFPGA1_1Q <- mkFIFOF;
+	FIFOF#(Tuple3#(Bit#(1), Bit#(2), AuroraIfcType)) sendPacketByAuroraFPGA2_1Q <- mkFIFOF;
 	rule fpga1_1( openConnect );
 		if ( recvPacketQ.notEmpty ) begin
 			recvPacketQ.deq;
@@ -153,7 +155,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				AuroraIfcType remainRoutingPacket = encRoutingPacket >> 16;
 				AuroraIfcType newRemainRoutingPacket = (remainRoutingPacket << 8) | encNewNumHops;
 
-				auroraQuads[qid].user[pid].send(newRemainRoutingPacket);
+				//auroraQuads[qid].user[pid].send(newRemainRoutingPacket);
+				sendPacketByAuroraFPGA1_1Q.enq(tuple3(qid, pid, newRemainRoutingPacket));
 			end else begin
 				// Host wants to use FPGA1's memory
 				AuroraIfcType remainRoutingPacket = encRoutingPacket >> 8;
@@ -188,7 +191,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			AuroraIfcType remainRoutingPacket = p >> 16;
 			AuroraIfcType newRemainRoutingPacket = (remainRoutingPacket << 8) | encNewNumHops;
 
-			auroraQuads[qidOut].user[pidOut].send(newRemainRoutingPacket);
+			//auroraQuads[qidOut].user[pidOut].send(newRemainRoutingPacket);
+			sendPacketByAuroraFPGA2_1Q.enq(tuple3(qidOut, pidOut, newRemainRoutingPacket));
 		end else begin
 			// FPGA2_1 is final destination
 			AuroraIfcType remainRoutingPacket = p >> 8;
@@ -211,8 +215,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 
 		let p <- auroraQuads[qidIn].user[pidIn].receive;
 		Bit#(8) numHops = p[7:0] ^ 1; // Priv_Key of FPGA1
-		validCheckConnectionQ.enq(zeroExtend(numHops));
-		/*if ( numHops != 0 ) begin
+		//validCheckConnectionQ.enq(zeroExtend(numHops));
+		if ( numHops != 0 ) begin
 			Bit#(8) outPortFPGA1_2 = p[15:8] ^ 1; // Priv_Key of FPGA1
 			Bit#(8) idOut = truncate(outPortFPGA1_2);
 			Bit#(1) qidOut = idOut[2];
@@ -223,7 +227,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			AuroraIfcType remainRoutingPacket = p >> 16;
 			AuroraIfcType newRemainRoutingPacket = (remainRoutingPacket << 8) | encNewNumHops;
 
-			auroraQuads[qidOut].user[pidOut].send(newRemainRoutingPacket);
+			//auroraQuads[qidOut].user[pidOut].send(newRemainRoutingPacket);
+			//sendPacketByAuroraQ.enq(tuple3(qidOut, pidOut, newRemainRoutingPacket));
 		end else begin
 			// FPGA1_2 is final destination
 			AuroraIfcType remainRoutingPacket = p >> 8;
@@ -232,11 +237,31 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			Bit#(32) address = remainRoutingPacket[79:48] ^ 1; // Priv_Key of FPGA1
 
 			if ( aomNheader[0] == 0 ) begin
-				// Write
+				validCheckConnectionQ.enq(0);
 			end else begin
-				// Read
+				validCheckConnectionQ.enq(1);
 			end
-		end*/
+		end
+	endrule
+	rule sendPacketByAuroraFPGA1_1( openConnect );
+		if ( sendPacketByAuroraFPGA1_1Q.notEmpty ) begin
+			sendPacketByAuroraFPGA1_1Q.deq;
+			let qidOut = tpl_1(sendPacketByAuroraFPGA1_1Q.first);
+			let pidOut = tpl_2(sendPacketByAuroraFPGA1_1Q.first);
+			let payload = tpl_3(sendPacketByAuroraFPGA1_1Q.first);
+
+			auroraQuads[qidOut].user[pidOut].send(payload);
+		end
+	endrule
+	rule sendPacketByAuroraFPGA2( !openConnect );
+		if ( sendPacketByAuroraFPGA2_1Q.notEmpty ) begin
+			sendPacketByAuroraFPGA2_1Q.deq;
+			let qidOut = tpl_1(sendPacketByAuroraFPGA2_1Q.first);
+			let pidOut = tpl_2(sendPacketByAuroraFPGA2_1Q.first);
+			let payload = tpl_3(sendPacketByAuroraFPGA2_1Q.first);
+
+			auroraQuads[qidOut].user[pidOut].send(payload);
+		end
 	endrule
 	//--------------------------------------------------------------------------------------------
 	// Send Routing Packet to Host

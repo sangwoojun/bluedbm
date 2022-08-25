@@ -138,6 +138,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	//--------------------------------------------------------------------------------------------
 	FIFOF#(Tuple3#(Bit#(1), Bit#(2), AuroraIfcType)) sendPacketByAuroraFPGA1_1Q <- mkFIFOF;
 	FIFOF#(Tuple3#(Bit#(1), Bit#(2), AuroraIfcType)) sendPacketByAuroraFPGA2_1Q <- mkFIFOF;
+	FIFOF#(Tuple3#(Bit#(1), Bit#(2), AuroraIfcType)) sendPacketByAuroraFPGA1_2Q <- mkFIFOF;
+	Reg#(Bit#(1)) scheduler <- mkReg(0);
 	rule fpga1_1( openConnect );
 		if ( recvPacketQ.notEmpty ) begin
 			recvPacketQ.deq;
@@ -228,7 +230,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			AuroraIfcType newRemainRoutingPacket = (remainRoutingPacket << 8) | encNewNumHops;
 
 			//auroraQuads[qidOut].user[pidOut].send(newRemainRoutingPacket);
-			//sendPacketByAuroraQ.enq(tuple3(qidOut, pidOut, newRemainRoutingPacket));
+			sendPacketByAuroraFPGA1_2Q.enq(tuple3(qidOut, pidOut, newRemainRoutingPacket));
 		end else begin
 			// FPGA1_2 is final destination
 			AuroraIfcType remainRoutingPacket = p >> 8;
@@ -243,15 +245,30 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			end
 		end
 	endrule
-	rule sendPacketByAuroraFPGA1_1( openConnect );
-		if ( sendPacketByAuroraFPGA1_1Q.notEmpty ) begin
-			sendPacketByAuroraFPGA1_1Q.deq;
-			let qidOut = tpl_1(sendPacketByAuroraFPGA1_1Q.first);
-			let pidOut = tpl_2(sendPacketByAuroraFPGA1_1Q.first);
-			let payload = tpl_3(sendPacketByAuroraFPGA1_1Q.first);
+	rule sendPacketByAuroraFPGA1( openConnect );
+		Bit#(1) qidOut = 0;
+		Bit#(2) pidOut = 0;
+		AuroraIfcType payload = 0;
+		if ( scheduler == 0 ) begin
+			if ( sendPacketByAuroraFPGA1_1Q.notEmpty ) begin
+				sendPacketByAuroraFPGA1_1Q.deq;
+				qidOut = tpl_1(sendPacketByAuroraFPGA1_1Q.first);
+				pidOut = tpl_2(sendPacketByAuroraFPGA1_1Q.first);
+				payload = tpl_3(sendPacketByAuroraFPGA1_1Q.first);
 
-			auroraQuads[qidOut].user[pidOut].send(payload);
+				scheduler <= scheduler + 1;
+			end
+		end else begin
+			if ( sendPacketByAuroraFPGA1_2Q.notEmpty ) begin
+				sendPacketByAuroraFPGA1_2Q.deq;
+				qidOut = tpl_1(sendPacketByAuroraFPGA1_2Q.first);
+				pidOut = tpl_2(sendPacketByAuroraFPGA1_2Q.first);
+				payload = tpl_3(sendPacketByAuroraFPGA1_2Q.first);
+
+				scheduler <= 0;
+			end
 		end
+		auroraQuads[qidOut].user[pidOut].send(payload);
 	endrule
 	rule sendPacketByAuroraFPGA2( !openConnect );
 		if ( sendPacketByAuroraFPGA2_1Q.notEmpty ) begin

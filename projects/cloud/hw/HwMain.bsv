@@ -143,28 +143,28 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	rule fpga1_1( openConnect );
 		if ( recvPacketQ.notEmpty ) begin
 			recvPacketQ.deq;
-			AuroraIfcType encRoutingPacket = recvPacketQ.first;
-			Bit#(8) numHops = encRoutingPacket[7:0] ^ 1; // Priv_Key of FPGA1
+			AuroraIfcType recvPacket = recvPacketQ.first;
+			Bit#(8) numHops = recvPacket[7:0] ^ 1; // Priv_Key of FPGA1
 			
 			if ( numHops != 0 ) begin
-				Bit#(8) outPortFPGA1_1 = encRoutingPacket[15:8] ^ 1; // Priv_Key of FPGA1
-				Bit#(8) id = truncate(outPortFPGA1_1);
-				Bit#(1) qid = id[2];
-				Bit#(2) pid = truncate(id);	
+				Bit#(8) outPortFPGA1_1 = recvPacket[15:8] ^ 1; // Priv_Key of FPGA1
+				Bit#(1) qidOut = outPortFPGA1_1[2];
+				Bit#(2) pidOut = truncate(outPortFPGA1_1);	
 
 				Bit#(8) encNewNumHopsTmp = (numHops - 1) ^ 2; // 2, Pub_Key of FPGA2
 				AuroraIfcType encNewNumHops = zeroExtend(encNewNumHopsTmp);
-				AuroraIfcType remainRoutingPacket = encRoutingPacket >> 16;
-				AuroraIfcType newRemainRoutingPacket = (remainRoutingPacket << 8) | encNewNumHops;
+				
+				AuroraIfcType remainingPacket = recvPacket >> 16;
+				AuroraIfcType newPacket = (remainingPacket << 8) | encNewNumHops;
 
-				//auroraQuads[qid].user[pid].send(newRemainRoutingPacket);
-				sendPacketByAuroraFPGA1_1Q.enq(tuple3(qid, pid, newRemainRoutingPacket));
+				//auroraQuads[qid].user[pid].send(newPacket);
+				sendPacketByAuroraFPGA1_1Q.enq(tuple3(qidOut, pidOut, newPacket));
 			end else begin
 				// Host wants to use FPGA1's memory
-				AuroraIfcType remainRoutingPacket = encRoutingPacket >> 8;
-				Bit#(16) packetHeader = remainRoutingPacket[15:0] ^ 1; // Priv_Key of FPGA1
-				Bit#(32) aomNheader = remainRoutingPacket[47:16] ^ 1; // Priv_Key of FPGA1
-				Bit#(32) address = remainRoutingPacket[79:48] ^ 1; // Priv_Key of FPGA1
+				AuroraIfcType remainedPacket = recvPacket >> 8;
+				Bit#(16) packetHeader = remainedPacket[15:0] ^ 1; // Priv_Key of FPGA1
+				Bit#(32) aomNheader = remainedPacket[47:16] ^ 1; // Priv_Key of FPGA1
+				Bit#(32) address = remainedPacket[79:48] ^ 1; // Priv_Key of FPGA1
 
 				if ( aomNheader[0] == 0 ) begin
 					// Write
@@ -175,32 +175,32 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		end
 	endrule
 	rule fpga2_1( !openConnect );
-		Bit#(8) idIn = 7;
-		Bit#(1) qidIn = idIn[2];
-		Bit#(2) pidIn = truncate(idIn);
+		Bit#(8) inPortFPGA2_1 = 7;
+		Bit#(1) qidIn = inPortFPGA2_1[2];
+		Bit#(2) pidIn = truncate(inPortFPGA2_1);
 
-		let p <- auroraQuads[qidIn].user[pidIn].receive;
-		Bit#(8) numHops = p[7:0] ^ 2; // Priv_Key of FPGA2
+		let recvPacket <- auroraQuads[qidIn].user[pidIn].receive;
+		Bit#(8) numHops = recvPacket[7:0] ^ 2; // Priv_Key of FPGA2
 
 		if ( numHops != 0 ) begin
-			Bit#(8) outPortFPGA2_1 = p[15:8] ^ 2; // Priv_Key of FPGA2
-			Bit#(8) idOut = truncate(outPortFPGA2_1);
-			Bit#(1) qidOut = idOut[2];
-			Bit#(2) pidOut = truncate(idOut);	
+			Bit#(8) outPortFPGA2_1 = recvPacket[15:8] ^ 2; // Priv_Key of FPGA2
+			Bit#(1) qidOut = outPortFPGA2_1[2];
+			Bit#(2) pidOut = truncate(outPortFPGA2_1);	
 			
 			Bit#(8) encNewNumHopsTmp = (numHops - 1) ^ 1; // 1, Pub_Key of FPGA1
 			AuroraIfcType encNewNumHops = zeroExtend(encNewNumHopsTmp);
-			AuroraIfcType remainRoutingPacket = p >> 16;
-			AuroraIfcType newRemainRoutingPacket = (remainRoutingPacket << 8) | encNewNumHops;
+			
+			AuroraIfcType remainingPacket = recvPacket >> 16;
+			AuroraIfcType newPacket = (remainingPacket << 8) | encNewNumHops;
 
-			//auroraQuads[qidOut].user[pidOut].send(newRemainRoutingPacket);
-			sendPacketByAuroraFPGA2_1Q.enq(tuple3(qidOut, pidOut, newRemainRoutingPacket));
+			//auroraQuads[qidOut].user[pidOut].send(newPacket);
+			sendPacketByAuroraFPGA2_1Q.enq(tuple3(qidOut, pidOut, newPacket));
 		end else begin
 			// FPGA2_1 is final destination
-			AuroraIfcType remainRoutingPacket = p >> 8;
-			Bit#(16) packetHeader = remainRoutingPacket[15:0] ^ 1; // Priv_Key of FPGA2
-			Bit#(32) aomNheader = remainRoutingPacket[47:16] ^ 1; // Priv_Key of FPGA2
-			Bit#(32) address = remainRoutingPacket[79:48] ^ 1; // Priv_Key of FPGA2
+			AuroraIfcType remainedPacket = recvPacket >> 8;
+			Bit#(16) packetHeader = remainedPacket[15:0] ^ 2; // Priv_Key of FPGA2
+			Bit#(32) aomNheader = remainedPacket[47:16] ^ 2; // Priv_Key of FPGA2
+			Bit#(32) address = remainedPacket[79:48] ^ 2; // Priv_Key of FPGA2
 
 			if ( aomNheader[0] == 0 ) begin
 				// Write
@@ -210,32 +210,32 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		end
 	endrule
 	rule fpga1_2( openConnect );
-		Bit#(8) idIn = 4;
-		Bit#(1) qidIn = idIn[2];
-		Bit#(2) pidIn = truncate(idIn);
+		Bit#(8) inPortFPGA1_2 = 4;
+		Bit#(1) qidIn = inPortFPGA1_2[2];
+		Bit#(2) pidIn = truncate(inPortFPGA1_2);
 
-		let p <- auroraQuads[qidIn].user[pidIn].receive;
-		Bit#(8) numHops = p[7:0] ^ 1; // Priv_Key of FPGA1
+		let recvPacket <- auroraQuads[qidIn].user[pidIn].receive;
+		Bit#(8) numHops = recvPacket[7:0] ^ 1; // Priv_Key of FPGA1
 
 		if ( numHops != 0 ) begin
-			Bit#(8) outPortFPGA1_2 = p[15:8] ^ 1; // Priv_Key of FPGA1
-			Bit#(8) idOut = truncate(outPortFPGA1_2);
-			Bit#(1) qidOut = idOut[2];
-			Bit#(2) pidOut = truncate(idOut);	
+			Bit#(8) outPortFPGA1_2 = recvPacket[15:8] ^ 1; // Priv_Key of FPGA1
+			Bit#(1) qidOut = outPortFPGA1_2[2];
+			Bit#(2) pidOut = truncate(outPortFPGA1_2);	
 			
 			Bit#(8) encNewNumHopsTmp = (numHops - 1) ^ 2; // 0, Pub_Key of FPGA2
 			AuroraIfcType encNewNumHops = zeroExtend(encNewNumHopsTmp);
-			AuroraIfcType remainRoutingPacket = p >> 16;
-			AuroraIfcType newRemainRoutingPacket = (remainRoutingPacket << 8) | encNewNumHops;
+			
+			AuroraIfcType remainingPacket = recvPacket >> 16;
+			AuroraIfcType newPacket = (remainingPacket << 8) | encNewNumHops;
 
-			//auroraQuads[qidOut].user[pidOut].send(newRemainRoutingPacket);
-			sendPacketByAuroraFPGA1_2Q.enq(tuple3(qidOut, pidOut, newRemainRoutingPacket));
+			//auroraQuads[qidOut].user[pidOut].send(newPacket);
+			sendPacketByAuroraFPGA1_2Q.enq(tuple3(qidOut, pidOut, newPacket));
 		end else begin
-			// FPGA1_1 is final destination
-			AuroraIfcType remainRoutingPacket = p >> 8;
-			Bit#(16) packetHeader = remainRoutingPacket[15:0] ^ 1; // Priv_Key of FPGA1
-			Bit#(32) aomNheader = remainRoutingPacket[47:16] ^ 1; // Priv_Key of FPGA1
-			Bit#(32) address = remainRoutingPacket[79:48] ^ 1; // Priv_Key of FPGA1
+			// FPGA1_2 is final destination
+			AuroraIfcType remainedPacket = recvPacket >> 8;
+			Bit#(16) packetHeader = remainedPacket[15:0] ^ 1; // Priv_Key of FPGA1
+			Bit#(32) aomNheader = remainedPacket[47:16] ^ 1; // Priv_Key of FPGA1
+			Bit#(32) address = remainedPacket[79:48] ^ 1; // Priv_Key of FPGA1
 
 			if ( aomNheader[0] == 0 ) begin
 				// Write
@@ -245,32 +245,32 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		end
 	endrule
 	rule fpga2_2( !openConnect );
-		Bit#(8) idIn = 6;
-		Bit#(1) qidIn = idIn[2];
-		Bit#(2) pidIn = truncate(idIn);
+		Bit#(8) inPortFPGA2_2 = 6;
+		Bit#(1) qidIn = inPortFPGA2_2[2];
+		Bit#(2) pidIn = truncate(inPortFPGA2_2);
 
-		let p <- auroraQuads[qidIn].user[pidIn].receive;
-		Bit#(8) numHops = p[7:0] ^ 2; // Priv_Key of FPGA2
+		let recvPacket <- auroraQuads[qidIn].user[pidIn].receive;
+		Bit#(8) numHops = recvPacket[7:0] ^ 2; // Priv_Key of FPGA2
 		
 		if ( numHops != 0 ) begin
-			Bit#(8) outPortFPGA2_2 = p[15:8] ^ 2; // Priv_Key of FPGA2
-			Bit#(8) idOut = truncate(outPortFPGA2_2);
-			Bit#(1) qidOut = idOut[2];
-			Bit#(2) pidOut = truncate(idOut);	
+			Bit#(8) outPortFPGA2_2 = recvPacket[15:8] ^ 2; // Priv_Key of FPGA2
+			Bit#(1) qidOut = outPortFPGA2_2[2];
+			Bit#(2) pidOut = truncate(outPortFPGA2_2);	
 			
 			Bit#(8) encNewNumHopsTmp = (numHops - 1) ^ 1; // ?, Pub_Key of FPGA1
 			AuroraIfcType encNewNumHops = zeroExtend(encNewNumHopsTmp);
-			AuroraIfcType remainRoutingPacket = p >> 16;
-			AuroraIfcType newRemainRoutingPacket = (remainRoutingPacket << 8) | encNewNumHops;
+	
+			AuroraIfcType remainingPacket = recvPacket >> 16;
+			AuroraIfcType newPacket = (remainingPacket << 8) | encNewNumHops;
 
-			//auroraQuads[qidOut].user[pidOut].send(newRemainRoutingPacket);
-			//sendPacketByAuroraFPGA2_2Q.enq(tuple3(qidOut, pidOut, newRemainRoutingPacket));
+			//auroraQuads[qidOut].user[pidOut].send(newPacket);
+			//sendPacketByAuroraFPGA2_2Q.enq(tuple3(qidOut, pidOut, newPacket));
 		end else begin
 			// FPGA2_2 is final destination
-			AuroraIfcType remainRoutingPacket = p >> 8;
-			Bit#(16) packetHeader = remainRoutingPacket[15:0] ^ 2; // Priv_Key of FPGA2
-			Bit#(32) aomNheader = remainRoutingPacket[47:16] ^ 2; // Priv_Key of FPGA2
-			Bit#(32) address = remainRoutingPacket[79:48] ^ 2; // Priv_Key of FPGA2
+			AuroraIfcType remainedPacket = recvPacket >> 8;
+			Bit#(16) packetHeader = remainedPacket[15:0] ^ 2; // Priv_Key of FPGA2
+			Bit#(32) aomNheader = remainedPacket[47:16] ^ 2; // Priv_Key of FPGA2
+			Bit#(32) address = remainedPacket[79:48] ^ 2; // Priv_Key of FPGA2
 
 			if ( aomNheader[0] == 0 ) begin
 				// Write

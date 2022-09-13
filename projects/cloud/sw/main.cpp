@@ -114,7 +114,8 @@ int main(int argc, char** argv) {
 	uint8_t encoutportFPGA1_1 = publicKeyFPGA1_8b(outportFPGA1_1);
 	uint8_t encnumHops = publicKeyFPGA1_8b(numHops);
 
-	uint32_t encHeaderPart = ((uint32_t)encoutportFPGA1_2 << 24) | ((uint32_t)encoutportFPGA2_1 << 16) | ((uint32_t)encoutportFPGA1_1 << 8) | (uint32_t)encnumHops ;
+	uint32_t encHeaderPart = ((uint32_t)encoutportFPGA1_2 << 24) | ((uint32_t)encoutportFPGA2_1 << 16) | 
+				 ((uint32_t)encoutportFPGA1_1 << 8) | (uint32_t)encnumHops;
 
 	pcie->userWriteWord(0, encHeaderPart);
 	pcie->userWriteWord(0, encpacketHeader);

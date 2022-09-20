@@ -24,20 +24,34 @@ double timespec_diff_sec( timespec start, timespec end ) {
 }
 // Public Key of FPGA1
 uint32_t publicKeyFPGA1_32b(uint32_t routingPacket) {
-	uint32_t encPacket = routingPacket ^ 1;
+	uint32_t pubKey = 1;
+	uint32_t encPacket = routingPacket ^ pubKey;
+	return encPacket;
+}
+uint16_t publicKeyFPGA1_16b(uint16_t routingPacket) {
+	uint16_t pubKey = 1;
+	uint16_t encPacket = routingPacket ^ pubKey;
 	return encPacket;
 }
 uint8_t publicKeyFPGA1_8b(uint8_t routingPacket) {
-	uint8_t encPacket = routingPacket ^ 1;
+	uint8_t pubKey = 1;
+	uint8_t encPacket = routingPacket ^ pubKey;
 	return encPacket;
 }
 // Public Key of FPGA2
 uint32_t publicKeyFPGA2_32b(uint32_t routingPacket) {
-	uint32_t encPacket = routingPacket ^ 2;
+	uint32_t pubKey = 2;
+	uint32_t encPacket = routingPacket ^ pubKey;
+	return encPacket;
+}
+uint16_t publicKeyFPGA2_16b(uint16_t routingPacket) {
+	uint16_t pubKey = 2;
+	uint16_t encPacket = routingPacket ^ pubKey;
 	return encPacket;
 }
 uint8_t publicKeyFPGA2_8b(uint8_t routingPacket) {
-	uint8_t encPacket = routingPacket ^ 2;
+	uint8_t pubKey = 2;
+	uint8_t encPacket = routingPacket ^ pubKey;
 	return encPacket;
 }
 // Public & Private Key of Host
@@ -105,22 +119,22 @@ int main(int argc, char** argv) {
 	uint8_t outportFPGA1_1 = 4; // 8-bit Output Port of FPGA1_1
 	uint8_t numHops = 3; // 8-bit The number of Hops
 		
-	uint32_t encaddress = publicKeyFPGA2_32b(address);
-	uint32_t encaomNheader = publicKeyFPGA2_32b(aomNheader);
-	uint32_t encpacketHeader = publicKeyFPGA2_32b(packetHeader);
+	uint32_t encAddress = publicKeyFPGA2_32b(address);
+	uint32_t encAomNheader = publicKeyFPGA2_32b(aomNheader);
+	uint32_t encPacketHeader = publicKeyFPGA2_32b(packetHeader);
 
-	uint8_t encoutportFPGA1_2 = publicKeyFPGA1_8b(outportFPGA1_2);
-	uint8_t encoutportFPGA2_1 = publicKeyFPGA2_8b(outportFPGA2_1);
-	uint8_t encoutportFPGA1_1 = publicKeyFPGA1_8b(outportFPGA1_1);
-	uint8_t encnumHops = publicKeyFPGA1_8b(numHops);
+	uint8_t encOutportFPGA1_2 = publicKeyFPGA1_8b(outportFPGA1_2);
+	uint8_t encOutportFPGA2_1 = publicKeyFPGA2_8b(outportFPGA2_1);
+	uint8_t encOutportFPGA1_1 = publicKeyFPGA1_8b(outportFPGA1_1);
+	uint8_t encNumHops = publicKeyFPGA1_8b(numHops);
 
-	uint32_t encHeaderPart = ((uint32_t)encoutportFPGA1_2 << 24) | ((uint32_t)encoutportFPGA2_1 << 16) | 
-				 ((uint32_t)encoutportFPGA1_1 << 8) | (uint32_t)encnumHops;
+	uint32_t encHeaderPart = ((uint32_t)encOutportFPGA1_2 << 24) | ((uint32_t)encOutportFPGA2_1 << 16) | 
+				 ((uint32_t)encOutportFPGA1_1 << 8) | (uint32_t)encNumHops;
 
 	pcie->userWriteWord(0, encHeaderPart);
-	pcie->userWriteWord(0, encpacketHeader);
-	pcie->userWriteWord(0, encaomNheader);
-	pcie->userWriteWord(0, encaddress);
+	pcie->userWriteWord(0, encPacketHeader);
+	pcie->userWriteWord(0, encAomNheader);
+	pcie->userWriteWord(0, encAddress);
 
 	unsigned int d_0 = 0;
 

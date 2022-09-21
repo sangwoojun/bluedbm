@@ -19,6 +19,10 @@ import AuroraExtImport119::*;
 interface HwMainIfc;
 endinterface
 
+Integer pubKeyFPGA1 = 1;
+Integer pubKeyFPGA2 = 2;
+Integer pubKeyHost = 3;
+
 module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) auroraQuads) (HwMainIfc);
 
 	Clock curClk <- exposeCurrentClock;
@@ -142,16 +146,18 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	FIFOF#(Tuple3#(Bit#(1), Bit#(2), AuroraIfcType)) sendPacketByAuroraFPGA2_2Q <- mkFIFOF;
 	rule fpga1_1( openConnect );
 		if ( recvPacketQ.notEmpty ) begin
+			Integer privKeyFPGA1 = 1;
+
 			recvPacketQ.deq;
 			AuroraIfcType recvPacket = recvPacketQ.first;
-			Bit#(8) numHops = recvPacket[7:0] ^ 1; // Priv_Key of FPGA1
+			Bit#(8) numHops = recvPacket[7:0] ^ fromInteger(privKeyFPGA1); // Priv_Key of FPGA1
 			
 			if ( numHops != 0 ) begin
-				Bit#(8) outPortFPGA1_1 = recvPacket[15:8] ^ 1; // Priv_Key of FPGA1
+				Bit#(8) outPortFPGA1_1 = recvPacket[15:8] ^ fromInteger(privKeyFPGA1); // Priv_Key of FPGA1
 				Bit#(1) qidOut = outPortFPGA1_1[2];
 				Bit#(2) pidOut = truncate(outPortFPGA1_1);	
 
-				Bit#(8) encNewNumHopsTmp = (numHops - 1) ^ 2; // 2, Pub_Key of FPGA2
+				Bit#(8) encNewNumHopsTmp = (numHops - 1) ^ fromInteger(pubKeyFPGA2); // 2, Pub_Key of FPGA2
 				AuroraIfcType encNewNumHops = zeroExtend(encNewNumHopsTmp);
 				
 				AuroraIfcType remainingPacket = recvPacket >> 16;
@@ -162,9 +168,9 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			end else begin
 				// Host wants to use FPGA1's memory
 				AuroraIfcType remainedPacket = recvPacket >> 8;
-				Bit#(16) packetHeader = remainedPacket[15:0] ^ 1; // Priv_Key of FPGA1
-				Bit#(32) aomNheader = remainedPacket[47:16] ^ 1; // Priv_Key of FPGA1
-				Bit#(32) address = remainedPacket[79:48] ^ 1; // Priv_Key of FPGA1
+				Bit#(16) packetHeader = remainedPacket[15:0] ^ fromInteger(privKeyFPGA1); // Priv_Key of FPGA1
+				Bit#(32) aomNheader = remainedPacket[47:16] ^ fromInteger(privKeyFPGA1); // Priv_Key of FPGA1
+				Bit#(32) address = remainedPacket[79:48] ^ fromInteger(privKeyFPGA1); // Priv_Key of FPGA1
 
 				if ( aomNheader[0] == 0 ) begin
 					// Write
@@ -175,19 +181,21 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		end
 	endrule
 	rule fpga2_1( !openConnect );
+		Integer privKeyFPGA2 = 2;
+
 		Bit#(8) inPortFPGA2_1 = 7;
 		Bit#(1) qidIn = inPortFPGA2_1[2];
 		Bit#(2) pidIn = truncate(inPortFPGA2_1);
 
 		let recvPacket <- auroraQuads[qidIn].user[pidIn].receive;
-		Bit#(8) numHops = recvPacket[7:0] ^ 2; // Priv_Key of FPGA2
+		Bit#(8) numHops = recvPacket[7:0] ^ fromInteger(privKeyFPGA2); // Priv_Key of FPGA2
 
 		if ( numHops != 0 ) begin
-			Bit#(8) outPortFPGA2_1 = recvPacket[15:8] ^ 2; // Priv_Key of FPGA2
+			Bit#(8) outPortFPGA2_1 = recvPacket[15:8] ^ fromInteger(privKeyFPGA2); // Priv_Key of FPGA2
 			Bit#(1) qidOut = outPortFPGA2_1[2];
 			Bit#(2) pidOut = truncate(outPortFPGA2_1);	
 			
-			Bit#(8) encNewNumHopsTmp = (numHops - 1) ^ 1; // 1, Pub_Key of FPGA1
+			Bit#(8) encNewNumHopsTmp = (numHops - 1) ^ fromInteger(pubKeyFPGA1); // 1, Pub_Key of FPGA1
 			AuroraIfcType encNewNumHops = zeroExtend(encNewNumHopsTmp);
 			
 			AuroraIfcType remainingPacket = recvPacket >> 16;
@@ -198,9 +206,9 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		end else begin
 			// FPGA2_1 is final destination
 			AuroraIfcType remainedPacket = recvPacket >> 8;
-			Bit#(16) packetHeader = remainedPacket[15:0] ^ 2; // Priv_Key of FPGA2
-			Bit#(32) aomNheader = remainedPacket[47:16] ^ 2; // Priv_Key of FPGA2
-			Bit#(32) address = remainedPacket[79:48] ^ 2; // Priv_Key of FPGA2
+			Bit#(16) packetHeader = remainedPacket[15:0] ^ fromInteger(privKeyFPGA2); // Priv_Key of FPGA2
+			Bit#(32) aomNheader = remainedPacket[47:16] ^ fromInteger(privKeyFPGA2); // Priv_Key of FPGA2
+			Bit#(32) address = remainedPacket[79:48] ^ fromInteger(privKeyFPGA2); // Priv_Key of FPGA2
 
 			if ( aomNheader[0] == 0 ) begin
 				// Write
@@ -210,19 +218,21 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		end
 	endrule
 	rule fpga1_2( openConnect );
+		Integer privKeyFPGA1 = 1;
+
 		Bit#(8) inPortFPGA1_2 = 4;
 		Bit#(1) qidIn = inPortFPGA1_2[2];
 		Bit#(2) pidIn = truncate(inPortFPGA1_2);
 
 		let recvPacket <- auroraQuads[qidIn].user[pidIn].receive;
-		Bit#(8) numHops = recvPacket[7:0] ^ 1; // Priv_Key of FPGA1
+		Bit#(8) numHops = recvPacket[7:0] ^ fromInteger(privKeyFPGA1); // Priv_Key of FPGA1
 
 		if ( numHops != 0 ) begin
-			Bit#(8) outPortFPGA1_2 = recvPacket[15:8] ^ 1; // Priv_Key of FPGA1
+			Bit#(8) outPortFPGA1_2 = recvPacket[15:8] ^ fromInteger(privKeyFPGA1); // Priv_Key of FPGA1
 			Bit#(1) qidOut = outPortFPGA1_2[2];
 			Bit#(2) pidOut = truncate(outPortFPGA1_2);	
 			
-			Bit#(8) encNewNumHopsTmp = (numHops - 1) ^ 2; // 0, Pub_Key of FPGA2
+			Bit#(8) encNewNumHopsTmp = (numHops - 1) ^ fromInteger(pubKeyFPGA2); // 0, Pub_Key of FPGA2
 			AuroraIfcType encNewNumHops = zeroExtend(encNewNumHopsTmp);
 			
 			AuroraIfcType remainingPacket = recvPacket >> 16;
@@ -233,9 +243,9 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		end else begin
 			// FPGA1_2 is final destination
 			AuroraIfcType remainedPacket = recvPacket >> 8;
-			Bit#(16) packetHeader = remainedPacket[15:0] ^ 1; // Priv_Key of FPGA1
-			Bit#(32) aomNheader = remainedPacket[47:16] ^ 1; // Priv_Key of FPGA1
-			Bit#(32) address = remainedPacket[79:48] ^ 1; // Priv_Key of FPGA1
+			Bit#(16) packetHeader = remainedPacket[15:0] ^ fromInteger(privKeyFPGA1); // Priv_Key of FPGA1
+			Bit#(32) aomNheader = remainedPacket[47:16] ^ fromInteger(privKeyFPGA1); // Priv_Key of FPGA1
+			Bit#(32) address = remainedPacket[79:48] ^ fromInteger(privKeyFPGA1); // Priv_Key of FPGA1
 
 			if ( aomNheader[0] == 0 ) begin
 				// Write
@@ -245,19 +255,21 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		end
 	endrule
 	rule fpga2_2( !openConnect );
+		Integer privKeyFPGA2 = 2;
+
 		Bit#(8) inPortFPGA2_2 = 6;
 		Bit#(1) qidIn = inPortFPGA2_2[2];
 		Bit#(2) pidIn = truncate(inPortFPGA2_2);
 
 		let recvPacket <- auroraQuads[qidIn].user[pidIn].receive;
-		Bit#(8) numHops = recvPacket[7:0] ^ 2; // Priv_Key of FPGA2
+		Bit#(8) numHops = recvPacket[7:0] ^ fromInteger(privKeyFPGA2); // Priv_Key of FPGA2
 		
 		if ( numHops != 0 ) begin
-			Bit#(8) outPortFPGA2_2 = recvPacket[15:8] ^ 2; // Priv_Key of FPGA2
+			Bit#(8) outPortFPGA2_2 = recvPacket[15:8] ^ fromInteger(privKeyFPGA2); // Priv_Key of FPGA2
 			Bit#(1) qidOut = outPortFPGA2_2[2];
 			Bit#(2) pidOut = truncate(outPortFPGA2_2);	
 			
-			Bit#(8) encNewNumHopsTmp = (numHops - 1) ^ 1; // ?, Pub_Key of FPGA1
+			Bit#(8) encNewNumHopsTmp = (numHops - 1) ^ fromInteger(pubKeyFPGA1); // ?, Pub_Key of FPGA1
 			AuroraIfcType encNewNumHops = zeroExtend(encNewNumHopsTmp);
 	
 			AuroraIfcType remainingPacket = recvPacket >> 16;
@@ -268,9 +280,9 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		end else begin
 			// FPGA2_2 is final destination
 			AuroraIfcType remainedPacket = recvPacket >> 8;
-			Bit#(16) packetHeader = remainedPacket[15:0] ^ 2; // Priv_Key of FPGA2
-			Bit#(32) aomNheader = remainedPacket[47:16] ^ 2; // Priv_Key of FPGA2
-			Bit#(32) address = remainedPacket[79:48] ^ 2; // Priv_Key of FPGA2
+			Bit#(16) packetHeader = remainedPacket[15:0] ^ fromInteger(privKeyFPGA2); // Priv_Key of FPGA2
+			Bit#(32) aomNheader = remainedPacket[47:16] ^ fromInteger(privKeyFPGA2); // Priv_Key of FPGA2
+			Bit#(32) address = remainedPacket[79:48] ^ fromInteger(privKeyFPGA2); // Priv_Key of FPGA2
 
 			if ( aomNheader[0] == 0 ) begin
 				// Write

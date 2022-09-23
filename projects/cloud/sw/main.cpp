@@ -112,7 +112,7 @@ int main(int argc, char** argv) {
 	uint32_t amountofmemory = 4*1024;
 	uint32_t header = 0; // 0:Write, 1:Read
 	uint32_t aomNheader = (amountofmemory << 1) | header; // 32-bit R/W + Amount of Memory
-	uint32_t packetHeader = 0; // 16-bit Packet Header
+	uint16_t packetHeader = 0; // 16-bit Packet Header
 
 	uint8_t outportFPGA1_2 = 3; // 8-bit Output Port of FPGA1_2
 	uint8_t outportFPGA2_1 = 7; // 8-bit Output Port of FPGA2
@@ -121,7 +121,7 @@ int main(int argc, char** argv) {
 		
 	uint32_t encAddress = publicKeyFPGA2_32b(address);
 	uint32_t encAomNheader = publicKeyFPGA2_32b(aomNheader);
-	uint32_t encPacketHeader = publicKeyFPGA2_32b(packetHeader);
+	uint16_t encPacketHeader = publicKeyFPGA2_16b(packetHeader);
 
 	uint8_t encOutportFPGA1_2 = publicKeyFPGA1_8b(outportFPGA1_2);
 	uint8_t encOutportFPGA2_1 = publicKeyFPGA2_8b(outportFPGA2_1);
@@ -132,7 +132,7 @@ int main(int argc, char** argv) {
 				 ((uint32_t)encOutportFPGA1_1 << 8) | (uint32_t)encNumHops;
 
 	pcie->userWriteWord(0, encHeaderPart);
-	pcie->userWriteWord(0, encPacketHeader);
+	pcie->userWriteWord(0, (uint32_t)encPacketHeader);
 	pcie->userWriteWord(0, encAomNheader);
 	pcie->userWriteWord(0, encAddress);
 

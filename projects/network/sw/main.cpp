@@ -122,14 +122,16 @@ int main(int argc, char** argv) {
 	unsigned int d_0 = 0;
 	while ( 1 ) {
 		d_0 = pcie->userReadWord(0);
-		if ( d_0 == 0 ) {
+		if ( d_0 == 1 ) {
+			printf( "Sending source routing packet succedded!\n" );
+			fflush( stdout );
 			break;
-		} else if ( d_0 == 1 ) {
+		} else if ( d_0 == 0 ) {
+			printf( "Sending source routing packet is in failure...\n" );
+			fflush( stdout );
 			break;
 		}
 	}
-	printf( "Sending source routing packet succeeded!\n" );
-	fflush( stdout );
 	
 	return 0;
 }

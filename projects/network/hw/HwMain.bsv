@@ -238,10 +238,10 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			Bit#(32) aomNheader = remainRoutingPacket[47:16] ^ 1; // Priv_Key of FPGA1
 			Bit#(32) address = remainRoutingPacket[79:48] ^ 1; // Priv_Key of FPGA1
 
-			if ( aomNheader[0] == 0 ) begin
-				validCheckConnectionQ.enq(0);
-			end else begin
+			if ( aomNheader[31:1] == 4*1024 ) begin
 				validCheckConnectionQ.enq(1);
+			end else begin
+				validCheckConnectionQ.enq(0);
 			end
 		end
 	endrule

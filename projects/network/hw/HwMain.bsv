@@ -245,37 +245,57 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			end
 		end
 	endrule
+	FIFOF#(Tuple3#(Bit#(1), Bit#(2), AuroraIfcType)) relayPacketByAuroraFPGA1Q <- mkFIFOF;
 	rule sendPacketByAuroraFPGA1( openConnect );
-		Bit#(1) qidOut = 0;
-		Bit#(2) pidOut = 0;
-		AuroraIfcType payload = 0;
 		if ( scheduler == 0 ) begin
 			if ( sendPacketByAuroraFPGA1_1Q.notEmpty ) begin
 				sendPacketByAuroraFPGA1_1Q.deq;
-				qidOut = tpl_1(sendPacketByAuroraFPGA1_1Q.first);
-				pidOut = tpl_2(sendPacketByAuroraFPGA1_1Q.first);
-				payload = tpl_3(sendPacketByAuroraFPGA1_1Q.first);
+				let qidOut = tpl_1(sendPacketByAuroraFPGA1_1Q.first);
+				let pidOut = tpl_2(sendPacketByAuroraFPGA1_1Q.first);
+				let payload = tpl_3(sendPacketByAuroraFPGA1_1Q.first);
 
 				scheduler <= scheduler + 1;
+				relayPacketByAuroraFPGA1Q.enq(tuple3(qidOut, pidOut, payload));
 			end
 		end else begin
 			if ( sendPacketByAuroraFPGA1_2Q.notEmpty ) begin
 				sendPacketByAuroraFPGA1_2Q.deq;
-				qidOut = tpl_1(sendPacketByAuroraFPGA1_2Q.first);
-				pidOut = tpl_2(sendPacketByAuroraFPGA1_2Q.first);
-				payload = tpl_3(sendPacketByAuroraFPGA1_2Q.first);
+				let qidOut = tpl_1(sendPacketByAuroraFPGA1_2Q.first);
+				let pidOut = tpl_2(sendPacketByAuroraFPGA1_2Q.first);
+				let payload = tpl_3(sendPacketByAuroraFPGA1_2Q.first);
 
 				scheduler <= 0;
+				relayPacketByAuroraFPGA1Q.enq(tuple3(qidOut, pidOut, payload));
 			end
 		end
-		auroraQuads[qidOut].user[pidOut].send(payload);
 	endrule
+	rule relayPacketByAuroraFPGA1( openConnect );
+		if ( relayPacketByAuroraFPGA1Q.notEmpty ) begin
+			relayPacketByAuroraFPGA1Q.deq;
+			let qidOut = tpl_1(relayPacketByAuroraFPGA1Q.first);
+			let pidOut = tpl_2(relayPacketByAuroraFPGA1Q.first);
+			let payload = tpl_3(relayPacketByAuroraFPGA1Q.first);
+
+			auroraQuads[qidOut].user[pidOut].send(payload);
+		end
+	endrule
+	FIFOF#(Tuple3#(Bit#(1), Bit#(2), AuroraIfcType)) relayPacketByAuroraFPGA2Q <- mkFIFOF;
 	rule sendPacketByAuroraFPGA2( !openConnect );
 		if ( sendPacketByAuroraFPGA2_1Q.notEmpty ) begin
 			sendPacketByAuroraFPGA2_1Q.deq;
 			let qidOut = tpl_1(sendPacketByAuroraFPGA2_1Q.first);
 			let pidOut = tpl_2(sendPacketByAuroraFPGA2_1Q.first);
 			let payload = tpl_3(sendPacketByAuroraFPGA2_1Q.first);
+
+			relayPacketByAuroraFPGA2Q.enq(tuple3(qidOut, pidOut, payload));
+		end
+	endrule
+	rule relayPacketByAuroraFPGA2( !openConnect );
+		if ( relayPacketByAuroraFPGA2Q.notEmpty ) begin
+			relayPacketByAuroraFPGA2Q.deq;
+			let qidOut = tpl_1(relayPacketByAuroraFPGA2Q.first);
+			let pidOut = tpl_2(relayPacketByAuroraFPGA2Q.first);
+			let payload = tpl_3(relayPacketByAuroraFPGA2Q.first);
 
 			auroraQuads[qidOut].user[pidOut].send(payload);
 		end

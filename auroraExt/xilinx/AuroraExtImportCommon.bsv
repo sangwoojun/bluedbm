@@ -108,6 +108,7 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 	Reg#(Maybe#(Bit#(496))) inPacketBuffer1st <- mkReg(tagged Invalid, clocked_by uclk, reset_by urst);
 	Reg#(Bit#(496)) inPacketBuffer2nd <- mkReg(0, clocked_by uclk, reset_by urst);
 	Reg#(Bit#(1)) inPacketBufferCnt <- mkReg(0, clocked_by uclk, reset_by urst);
+	Reg#(Bit#(4)) recvPacketCnt <- mkReg(0, clocked_by uclk, reset_by urst);
 	rule recvPacket( user.lane_up != 0 && user.channel_up != 0 );
 		let d <- user.receive;
 		Bit#(1) control = d[0];
@@ -119,7 +120,22 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 		end else begin 
 			if ( header == 1 ) begin
 				let pasData = inPacketBuffer2nd;
-				recvQ.enq({truncate(curData), pasData});
+				AuroraIfcType p = zeroExtend(pasData);
+				AuroraIfcType c = zeroExtend(curData);	
+
+				if ( recvPacketCnt == 5 ) begin
+					AuroraIfcType finalData = (c << 310) | p;
+					recvQ.enq(zeroExtend(finalData));
+				end else if ( recvPacketCnt == 6 ) begin
+					AuroraIfcType finalData = (c << 372) | p;
+					recvQ.enq(zeroExtend(finalData));
+				end else if ( recvPacketCnt == 7 ) begin
+					AuroraIfcType finalData = (c << 434) | p;
+					recvQ.enq(zeroExtend(finalData));
+				end else if ( recvPacketCnt == 8 ) begin
+					AuroraIfcType finalData = (c << 496) | p;
+					recvQ.enq(zeroExtend(finalData));
+				end
 				
 				curInQUp <= curInQUp + 1;
 				maxInFlightDown <= maxInFlightDown + 1;
@@ -127,13 +143,15 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 				inPacketBufferCnt <= 0;
 				inPacketBuffer1st <= tagged Invalid;
 				inPacketBuffer2nd <= 0;
+
+				recvPacketCnt <= 0;
 			end else begin
 				if ( isValid(inPacketBuffer1st) ) begin
 					if ( inPacketBufferCnt == 0 ) begin
 						let p = fromMaybe(?, inPacketBuffer1st);
 						Bit#(496) c = zeroExtend(curData);
 						inPacketBuffer2nd <= (c << 62) | p;
-						inPacketBufferCnt <= 1;
+						inPacketBufferCnt <= inPacketBufferCnt + 1;
 					end else begin
 						let p = inPacketBuffer2nd;
 						Bit#(496) c = zeroExtend(curData);
@@ -142,6 +160,7 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 				end else begin
 					inPacketBuffer1st <= tagged Valid zeroExtend(curData);
 				end
+				recvPacketCnt <= recvPacketCnt + 1;
 			end
 		end
 	endrule

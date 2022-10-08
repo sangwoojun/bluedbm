@@ -105,9 +105,9 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 	endrule
 
 	FIFO#(AuroraIfcType) recvQ <- mkSizedBRAMFIFO(recvQDepth, clocked_by uclk, reset_by urst);
-	Reg#(Maybe#(Bit#(496))) inPacketBuffer1 <- mkReg(tagged Invalid, clocked_by uclk, reset_by urst);
-	Reg#(Bit#(496)) inPacketBuffer2 <- mkReg(0, clocked_by uclk, reset_by urst);
-	Reg#(Bit#(8)) inPacketBufferCnt <- mkReg(0, clocked_by uclk, reset_by urst);
+	Reg#(Maybe#(Bit#(496))) inPacketBuffer1st <- mkReg(tagged Invalid, clocked_by uclk, reset_by urst);
+	Reg#(Bit#(496)) inPacketBuffer2nd <- mkReg(0, clocked_by uclk, reset_by urst);
+	Reg#(Bit#(1)) inPacketBufferCnt <- mkReg(0, clocked_by uclk, reset_by urst);
 	rule recvPacket( user.lane_up != 0 && user.channel_up != 0 );
 		let d <- user.receive;
 		Bit#(1) control = d[0];
@@ -118,30 +118,29 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 			curSendBudgetUp <= curSendBudgetUp + truncate(curData);
 		end else begin 
 			if ( header == 1 ) begin
-				let pasData = inPacketBuffer2;
+				let pasData = inPacketBuffer2nd;
 				recvQ.enq({truncate(curData), pasData});
+				
 				curInQUp <= curInQUp + 1;
 				maxInFlightDown <= maxInFlightDown + 1;
+
+				inPacketBufferCnt <= 0;
+				inPacketBuffer1st <= tagged Invalid;
+				inPacketBuffer2nd <= 0;
 			end else begin
-				if ( isValid(inPacketBuffer1) ) begin
-					if ( inPacketBufferCnt > 0 ) begin
-						if ( inPacketBufferCnt == 7 ) begin
-							inPacketBuffer1 <= tagged Invalid;
-							inPacketBufferCnt <= 0;
-						end else begin
-							inPacketBufferCnt <= inPacketBufferCnt + 1;
-						end
-						let p = inPacketBuffer2;
+				if ( isValid(inPacketBuffer1st) ) begin
+					if ( inPacketBufferCnt == 0 ) begin
+						let p = fromMaybe(?, inPacketBuffer1st);
 						Bit#(496) c = zeroExtend(curData);
-						inPacketBuffer2 <= (c<<62)|(p);
+						inPacketBuffer2nd <= (c << 62) | p;
+						inPacketBufferCnt <= 1;
 					end else begin
-						let p = fromMaybe(?, inPacketBuffer1);
+						let p = inPacketBuffer2nd;
 						Bit#(496) c = zeroExtend(curData);
-						inPacketBuffer2 <= (c<<62)|(p);
-						inPacketBufferCnt <= inPacketBufferCnt + 1;
+						inPacketBuffer2nd <= (c << 62) | p;
 					end
 				end else begin
-					inPacketBuffer1 <= tagged Valid zeroExtend(curData);
+					inPacketBuffer1st <= tagged Valid zeroExtend(curData);
 				end
 			end
 		end

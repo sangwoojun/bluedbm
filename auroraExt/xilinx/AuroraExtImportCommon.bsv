@@ -18,6 +18,10 @@ import "BDPI" function Bool bdpiRecvAvailable(Bit#(8) nidx, Bit#(8) pidx);
 import "BDPI" function Bit#(64) bdpiRead(Bit#(8) nidx, Bit#(8) pidx);
 import "BDPI" function Bool bdpiWrite(Bit#(8) nidx, Bit#(8) pidx, Bit#(64) data);
 
+typedef struct {
+	Bit#(512) packet;
+	Bit#(4) num;
+} AuroraSend deriving (Bits, Eq);
 
 typedef 4 AuroraExtPerQuad;
 
@@ -34,7 +38,7 @@ interface AuroraExtIfc;
 endinterface
 
 interface AuroraExtUserIfc;
-	method Action send(AuroraIfcType data);
+	method Action send(AuroraSend data);
 	method ActionValue#(AuroraIfcType) receive;
 
 	method Bit#(1) lane_up;
@@ -71,36 +75,46 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 		end
 	endrule
 	
-	SyncFIFOIfc#(AuroraIfcType) outPacketQ <- mkSyncFIFOFromCC(32, uclk);
-	Reg#(Maybe#(Bit#(450))) outPacketBuffer1 <- mkReg(tagged Invalid, clocked_by uclk, reset_by urst);
-	Reg#(Bit#(388)) outPacketBuffer2 <- mkReg(0, clocked_by uclk, reset_by urst);
-	Reg#(Bit#(8)) outPacketBufferCnt <- mkReg(0, clocked_by uclk, reset_by urst);
+	SyncFIFOIfc#(AuroraSend) outPacketQ <- mkSyncFIFOFromCC(32, uclk);
+	Reg#(Maybe#(Bit#(450))) outPacketBuffer1st <- mkReg(tagged Invalid, clocked_by uclk, reset_by urst); // 512-62=450
+	Reg#(Bit#(388)) outPacketBuffer2nd <- mkReg(0, clocked_by uclk, reset_by urst); //450-62=388
+	Reg#(Bit#(1)) outPacketBufferCnt <- mkReg(0, clocked_by uclk, reset_by urst);
+	Reg#(Bit#(4)) sendPacketCnt <- mkReg(0, clocked_by uclk, reset_by urst);
+	Reg#(Bit#(4)) numPacket <- mkReg(0, clocked_by uclk, reset_by urst);
 	rule serOutPacket;
-		if ( isValid(outPacketBuffer1) ) begin
-			if ( outPacketBufferCnt > 0 ) begin
-				if ( outPacketBufferCnt == 7 ) begin
-					let d = outPacketBuffer2;
-					sendQ.enq({truncate(d), 2'b10});
-					
-					outPacketBuffer1 <= tagged Invalid;
-					outPacketBufferCnt <= 0;
-				end else begin
-					let d = outPacketBuffer2;
-					outPacketBuffer2 <= truncate(d>>valueof(BodySz));
-					outPacketBufferCnt <= outPacketBufferCnt + 1;
-					sendQ.enq({truncate(d), 2'b00});
-				end
-			end else begin
-				let d = fromMaybe(?, outPacketBuffer1);
-				outPacketBuffer2 <= truncate(d>>valueof(BodySz));
+		if ( isValid(outPacketBuffer1st) ) begin
+			if ( outPacketBufferCnt == 0 ) begin
+				let p = fromMaybe(?, outPacketBuffer1st);
+				outPacketBuffer2nd <= truncate(p >> valueof(BodySz));
 				outPacketBufferCnt <= outPacketBufferCnt + 1;
-				sendQ.enq({truncate(d), 2'b00});
+				sendPacketCnt <= sendPacketCnt + 1;
+				sendQ.enq({p[61:0], 2'b00});
+			end else begin
+				if ( sendPacketCnt == numPacket ) begin
+					let p = outPacketBuffer2nd;
+					sendQ.enq({p[61:0], 2'b10});
+				
+					outPacketBuffer1st <= tagged Invalid;
+					outPacketBufferCnt <= 0;
+					sendPacketCnt <= 0;
+					numPacket <= 0;
+				end else begin
+					let p = outPacketBuffer2nd;
+					outPacketBuffer2nd <= (p >> valueof(BodySz));
+					sendPacketCnt <= sendPacketCnt + 1;
+					sendQ.enq({p[61:0], 2'b00});
+				end
 			end
 		end else begin
 			outPacketQ.deq;
 			let d = outPacketQ.first;
-			outPacketBuffer1 <= tagged Valid truncate(d>>valueof(BodySz));
-			sendQ.enq({truncate(d), 2'b00});
+			let p = d.packet;
+			let n = d.num;
+
+			outPacketBuffer1st <= tagged Valid truncate(p>>valueof(BodySz));
+			sendPacketCnt <= sendPacketCnt + 1;
+			numPacket <= n;
+			sendQ.enq({truncate(p), 2'b00});
 		end
 	endrule
 
@@ -123,7 +137,16 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 				AuroraIfcType p = zeroExtend(pasData);
 				AuroraIfcType c = zeroExtend(curData);	
 
-				if ( recvPacketCnt == 5 ) begin
+				if ( recvPacketCnt == 2 ) begin
+					AuroraIfcType finalData = (c << 124) | p;
+					recvQ.enq(zeroExtend(finalData));
+				end else if ( recvPacketCnt == 3 ) begin
+					AuroraIfcType finalData = (c << 186) | p;
+					recvQ.enq(zeroExtend(finalData));
+				end else if ( recvPacketCnt == 4 ) begin
+					AuroraIfcType finalData = (c << 248) | p;
+					recvQ.enq(zeroExtend(finalData));
+				end else if ( recvPacketCnt == 5 ) begin
 					AuroraIfcType finalData = (c << 310) | p;
 					recvQ.enq(zeroExtend(finalData));
 				end else if ( recvPacketCnt == 6 ) begin
@@ -150,15 +173,15 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 					if ( inPacketBufferCnt == 0 ) begin
 						let p = fromMaybe(?, inPacketBuffer1st);
 						Bit#(496) c = zeroExtend(curData);
-						inPacketBuffer2nd <= (c << 62) | p;
+						inPacketBuffer2nd <= (c << 62) | p; // Second
 						inPacketBufferCnt <= inPacketBufferCnt + 1;
 					end else begin
 						let p = inPacketBuffer2nd;
 						Bit#(496) c = zeroExtend(curData);
-						inPacketBuffer2nd <= (c << 62) | p;
+						inPacketBuffer2nd <= (c << 62) | p; // Third
 					end
 				end else begin
-					inPacketBuffer1st <= tagged Valid zeroExtend(curData);
+					inPacketBuffer1st <= tagged Valid zeroExtend(curData); // First
 				end
 				recvPacketCnt <= recvPacketCnt + 1;
 			end
@@ -172,7 +195,7 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 		inPacketQ.enq(recvQ.first);
 	endrule
 
-	method Action send(AuroraIfcType data);
+	method Action send(AuroraSend data);
 		outPacketQ.enq(data);
 	endmethod
 	method ActionValue#(AuroraIfcType) receive;

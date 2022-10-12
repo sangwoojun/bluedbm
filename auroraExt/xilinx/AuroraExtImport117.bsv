@@ -82,7 +82,7 @@ module mkAuroraExt117#(Clock gtx_clk_p, Clock gtx_clk_n, Clock clk200) (AuroraEx
 	Vector#(AuroraExtPerQuad, AuroraExtUserIfc) userifcs;
 	for ( Integer idx = 0; idx < valueOf(AuroraExtPerQuad); idx = idx + 1 ) begin
 		userifcs[idx] = interface AuroraExtUserIfc;
-					method Action send(AuroraIfcType data);
+					method Action send(AuroraSend data);
 						auroraExt[idx].send(data);
 						$display( "AuroraExt Port[%d] sent %x", idx, data );
 					endmethod

@@ -20,7 +20,7 @@ import "BDPI" function Bool bdpiWrite(Bit#(8) nidx, Bit#(8) pidx, Bit#(64) data)
 
 typedef struct {
 	Bit#(512) packet;
-	Bit#(4) num;
+	Bit#(8) num;
 } AuroraSend deriving (Bits, Eq);
 
 typedef 4 AuroraExtPerQuad;
@@ -45,6 +45,27 @@ interface AuroraExtUserIfc;
 	method Bit#(1) channel_up;
 endinterface
 
+function Bit#(16) cycleDecider(Bit#(16) totalBits);
+        Bit#(16) decidedCycle = 0;
+        if ( (totalBits > 0) && (totalBits <= 64)) begin
+                decidedCycle = 1;
+        end else if ( (totalBits > 64) && (totalBits <= 128) ) begin
+                decidedCycle = 2;
+        end else if ( (totalBits > 128) && (totalBits <= 192) ) begin
+                decidedCycle = 3;
+        end else if ( (totalBits > 192) && (totalBits <= 256) ) begin
+                decidedCycle = 4;
+        end else if ( (totalBits > 256) && (totalBits <= 320) ) begin
+                decidedCycle = 5;
+        end else if ( (totalBits > 320) && (totalBits <= 384) ) begin
+                decidedCycle = 6;
+        end else if ( (totalBits > 384) && (totalBits <= 448) ) begin
+                decidedCycle = 7;
+        end else if ( (totalBits > 448) && (totalBits <= 512) ) begin
+                decidedCycle = 8;
+        end
+        return decidedCycle;
+endfunction
 
 module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock uclk, Reset urst, Integer idx) (AuroraExtUserIfc);
 	Integer recvQDepth = 1024;
@@ -79,8 +100,8 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 	Reg#(Maybe#(Bit#(450))) outPacketBuffer1st <- mkReg(tagged Invalid, clocked_by uclk, reset_by urst); // 512-62=450
 	Reg#(Bit#(388)) outPacketBuffer2nd <- mkReg(0, clocked_by uclk, reset_by urst); //450-62=388
 	Reg#(Bit#(1)) outPacketBufferCnt <- mkReg(0, clocked_by uclk, reset_by urst);
-	Reg#(Bit#(4)) sendPacketCnt <- mkReg(0, clocked_by uclk, reset_by urst);
-	Reg#(Bit#(4)) numPacket <- mkReg(0, clocked_by uclk, reset_by urst);
+	Reg#(Bit#(8)) sendPacketCnt <- mkReg(0, clocked_by uclk, reset_by urst);
+	Reg#(Bit#(8)) numPacket <- mkReg(0, clocked_by uclk, reset_by urst);
 	rule serOutPacket;
 		if ( isValid(outPacketBuffer1st) ) begin
 			if ( outPacketBufferCnt == 0 ) begin
@@ -122,7 +143,7 @@ module mkAuroraExtFlowControl#(AuroraControllerIfc#(AuroraPhysWidth) user, Clock
 	Reg#(Maybe#(Bit#(496))) inPacketBuffer1st <- mkReg(tagged Invalid, clocked_by uclk, reset_by urst);
 	Reg#(Bit#(496)) inPacketBuffer2nd <- mkReg(0, clocked_by uclk, reset_by urst);
 	Reg#(Bit#(1)) inPacketBufferCnt <- mkReg(0, clocked_by uclk, reset_by urst);
-	Reg#(Bit#(4)) recvPacketCnt <- mkReg(0, clocked_by uclk, reset_by urst);
+	Reg#(Bit#(8)) recvPacketCnt <- mkReg(0, clocked_by uclk, reset_by urst);
 	rule recvPacket( user.lane_up != 0 && user.channel_up != 0 );
 		let d <- user.receive;
 		Bit#(1) control = d[0];

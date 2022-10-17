@@ -22,6 +22,12 @@
 #define PUBKEY_HOST 3
 #define PRIVKEY_HOST 3
 
+#define HOST 0
+#define FPGA1_1 1
+#define FPGA2_1 2
+#define FPGA1_2 3
+#define FPGA2_2 4
+
 double timespec_diff_sec( timespec start, timespec end ) {
 	double t = end.tv_sec - start.tv_sec;
 	t += ((double)(end.tv_nsec - start.tv_nsec)/1000000000L);
@@ -117,8 +123,14 @@ int main(int argc, char** argv) {
 	uint8_t outportFPGA2 = 6; // 8-bit Output Port of FPGA2
 	uint8_t outportFPGA1_1 = 4; // 8-bit Output Port of FPGA1_1
 	// Header Part
-	uint16_t packetHeader = 0; // 16-bit Packet Header	
+	uint8_t packetHeader1st = 0; // 1-bit S/D Flag
+	uint8_t packetHeader2nd = 2; // 7-bit Route Cnt
+	uint8_t packetHeader3rd = HOST; // 8-bit Starting Point
+	uint8_t packetHeader4th = 8; // 8-bit Payload Bytes
+	uint32_t packetHeader = ((uint32_t)packetHeader4th << 16) | ((uint32_t)packetHeader3rd << 8) | 
+				((uint32_t)packetHeader2nd << 1) | (uint32_t)packetHeader1st; // 24-bit Packet Header
 	uint8_t numHops = 2; // 8-bit The number of Hops
+	uint32_t headerPart = (packetHeader << 8) | numHops; // 32-bit Header Part
 
 	// Encryption
 	// Payload
@@ -127,12 +139,10 @@ int main(int argc, char** argv) {
 	// Actual Route
 	uint8_t encOutportFPGA2 = publicKeyFPGA2_8b(outportFPGA2);
 	uint8_t encOutportFPGA1_1 = publicKeyFPGA1_8b(outportFPGA1_1);
+	uint32_t encActualRoute = ((uint32_t)encOutportFPGA2 << 8) | (uint32_t)encOutportFPGA1_1; // 16-bit Encrypted Each Actual Route
+
 	// Header Part
-	uint16_t encPacketHeader = publicKeyFPGA1_16b(packetHeader);
-	uint8_t encNumHops = publicKeyFPGA1_8b(numHops);
-	
-	uint32_t encActualRoute = ((uint32_t)encOutportFPGA2 << 8) | (uint32_t)encOutportFPGA1_1; // 16-bit Actual Route
-	uint32_t encHeaderPart = ((uint32_t)encPacketHeader << 8) | (uint32_t)encNumHops; // 24-bit Header Part
+	uint32_t encHeaderPart = publicKeyFPGA1_32b(headerPart); // 32-bit Encrypted Header Part
 
 	pcie->userWriteWord(0, encHeaderPart);
 	pcie->userWriteWord(0, encActualRoute);

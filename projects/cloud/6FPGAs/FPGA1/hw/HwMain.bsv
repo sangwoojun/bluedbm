@@ -1,8 +1,8 @@
+// This HwMain is for only FPGA1
 import FIFO::*;
 import FIFOF::*;
 import Clocks::*;
 import Vector::*;
-import Real::*;
 
 import Serializer::*;
 
@@ -142,7 +142,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	// Host(0) -> (0)FPGA1_1(4) -> (7)FPGA2_1(6) -> (3)FPGA1_2 (First Connection)
 	//--------------------------------------------------------------------------------------------
 	FIFOF#(Tuple4#(Bit#(1), Bit#(2), Bit#(24), AuroraIfcType)) sendPacketByAuroraFPGA1_1Q <- mkFIFOF;
-	FIFOF#(Tuple4#(Bit#(1), Bit#(2), Bit#(24), AuroraIfcType)) sendPacketByAuroraFPGA2_1Q <- mkFIFOF;
 	FIFOF#(Tuple4#(Bit#(1), Bit#(2), Bit#(24), AuroraIfcType)) sendPacketByAuroraFPGA1_2Q <- mkFIFOF;
 	rule fpga1_1( openConnect && recvPacketQ.notEmpty );
 		Integer privKeyFPGA1 = 1;
@@ -175,49 +174,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				
 				Bit#(32) aomNheader = remainedPacket[31:0] ^ fromInteger(privKeyFPGA1);
 				Bit#(32) address = remainedPacket[63:32] ^ fromInteger(privKeyFPGA1); 
-
-				if ( aomNheader[0] == 0 ) begin
-					// Write
-				end else begin
-					// Read
-				end
-			end
-		end
-	endrule
-	rule fpga2_1( !openConnect );
-		Integer privKeyFPGA2 = 2;
-
-		Bit#(8) inPortFPGA2_1 = 7;
-		Bit#(1) qidIn = inPortFPGA2_1[2];
-		Bit#(2) pidIn = truncate(inPortFPGA2_1);
-
-		let recvPacket <- auroraQuads[qidIn].user[pidIn].receive;
-		Bit#(32) headerPart = recvPacket[31:0] ^ fromInteger(privKeyFPGA2);
-		Bit#(8) numHops = headerPart[7:0];
-		Bit#(24) packetHeader = headerPart[31:8];
-
-		if ( numHops != 0 ) begin
-			Bit#(8) outPortFPGA2_1 = recvPacket[39:32] ^ fromInteger(privKeyFPGA2);
-			Bit#(1) qidOut = outPortFPGA2_1[2];
-			Bit#(2) pidOut = truncate(outPortFPGA2_1);	
-
-			Bit#(8) newNumHops = numHops - 1;
-			Bit#(32) newHeaderPart = (zeroExtend(packetHeader) << 8) | zeroExtend(newNumHops);
-			Bit#(32) encNewHeaderPartTmp = newHeaderPart ^ fromInteger(pubKeyFPGA1);
-			AuroraIfcType encNewHeaderPart = zeroExtend(encNewHeaderPartTmp);
-
-			AuroraIfcType remainingPacket = recvPacket >> 40;
-			AuroraIfcType newPacket = (remainingPacket << 32) | encNewHeaderPart;
-
-			//auroraQuads[qidOut].user[pidOut].send(newPacket);
-			sendPacketByAuroraFPGA2_1Q.enq(tuple4(qidOut, pidOut, packetHeader, newPacket));
-		end else begin
-			// FPGA2_1 is final destination
-			if ( packetHeader[0] == 0 ) begin
-				AuroraIfcType remainedPacket = recvPacket >> 32;
-				
-				Bit#(32) aomNheader = remainedPacket[31:0] ^ fromInteger(privKeyFPGA2);
-				Bit#(32) address = remainedPacket[63:32] ^ fromInteger(privKeyFPGA2);
 
 				if ( aomNheader[0] == 0 ) begin
 					// Write
@@ -349,38 +305,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			let payload = tpl_4(relayPacketByAuroraFPGA1Q.first);
 
 			auroraQuads[qidOut].user[pidOut].send(AuroraSend{packet:payload,num:auroraExtCnt});
-		end
-	endrule
-	rule sendNrelayPacketFPGA2( !openConnect );
-		if ( sendPacketByAuroraFPGA2_1Q.notEmpty ) begin
-			Bit#(8) auroraExtCntFPGA2_1 = 0;
-			sendPacketByAuroraFPGA2_1Q.deq;
-			let qidOut = tpl_1(sendPacketByAuroraFPGA2_1Q.first);
-			let pidOut = tpl_2(sendPacketByAuroraFPGA2_1Q.first);
-			let packetHeader = tpl_3(sendPacketByAuroraFPGA2_1Q.first);
-			let payload = tpl_4(sendPacketByAuroraFPGA2_1Q.first);
-
-			let routeCnt = packetHeader[7:1];
-			let payloadByte = packetHeader[23:16];
-
-			if ( (routeCnt > 0) && (routeCnt < 3) ) begin
-				Bit#(8) totalByte = 4+2+payloadByte;
-				Bit#(16) totalBits = zeroExtend(totalByte) * 8;
-				Bit#(16) decidedCycle = cycleDecider(totalBits);
-				auroraExtCntFPGA2_1 = truncate(decidedCycle);
-			end else if ( (routeCnt > 2) && (routeCnt < 5) ) begin
-				Bit#(8) totalByte = 4+4+payloadByte;
-				Bit#(16) totalBits = zeroExtend(totalByte) * 8;
-				Bit#(16) decidedCycle = cycleDecider(totalBits);
-				auroraExtCntFPGA2_1 = truncate(decidedCycle);
-			end else if ( (routeCnt > 4) && (routeCnt < 9) ) begin
-				Bit#(8) totalByte = 4+8+payloadByte;
-				Bit#(16) totalBits = zeroExtend(totalByte) * 8;
-				Bit#(16) decidedCycle = cycleDecider(totalBits);
-				auroraExtCntFPGA2_1 = truncate(decidedCycle);
-			end
-
-			auroraQuads[qidOut].user[pidOut].send(AuroraSend{packet:payload,num:auroraExtCntFPGA2_1});
 		end
 	endrule
 	//--------------------------------------------------------------------------------------------

@@ -139,10 +139,11 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		end
 	endrule
 	//--------------------------------------------------------------------------------------------
-	// Host(0) -> (0)FPGA1_1(4) -> (7)FPGA2_1(6) -> (3)FPGA1_2 (First Connection)
+	// Host(0) -> (0)FPGA1_1(4) -> (7)FPGA2_1(6) -> (3)FPGA1_2
 	//--------------------------------------------------------------------------------------------
 	FIFOF#(Tuple4#(Bit#(1), Bit#(2), Bit#(24), AuroraIfcType)) sendPacketByAuroraFPGA1_1Q <- mkFIFOF;
 	FIFOF#(Tuple4#(Bit#(1), Bit#(2), Bit#(24), AuroraIfcType)) sendPacketByAuroraFPGA1_2Q <- mkFIFOF;
+	FIFOF#(Bit#(32)) validCheckConnectionQ <- mkFIFOF;
 	rule fpga1_1( openConnect && recvPacketQ.notEmpty );
 		Integer privKeyFPGA1 = 1;
 
@@ -175,15 +176,14 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				Bit#(32) aomNheader = remainedPacket[31:0] ^ fromInteger(privKeyFPGA1);
 				Bit#(32) address = remainedPacket[63:32] ^ fromInteger(privKeyFPGA1); 
 
-				if ( aomNheader[0] == 0 ) begin
-					// Write
+				if ( aomNheader[31:1] == 4*1024 ) begin
+					validCheckConnectionQ.enq(1);
 				end else begin
-					// Read
+					validCheckConnectionQ.enq(0);
 				end
 			end
 		end
 	endrule
-	FIFOF#(Bit#(32)) validCheckConnectionQ <- mkFIFOF;
 	rule fpga1_2( openConnect );
 		Integer privKeyFPGA1 = 1;
 
@@ -227,74 +227,49 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			end
 		end
 	endrule
-	Reg#(Bit#(1)) scheduler <- mkReg(0);
 	FIFOF#(Tuple4#(Bit#(1), Bit#(2), Bit#(8), AuroraIfcType)) relayPacketByAuroraFPGA1Q <- mkFIFOF;
 	rule sendPacketFPGA1( openConnect );
-		if ( scheduler == 0 ) begin
-			if ( sendPacketByAuroraFPGA1_1Q.notEmpty ) begin
-				Bit#(8) auroraExtCntFPGA1_1 = 0;
-				sendPacketByAuroraFPGA1_1Q.deq;
-				let qidOut = tpl_1(sendPacketByAuroraFPGA1_1Q.first);
-				let pidOut = tpl_2(sendPacketByAuroraFPGA1_1Q.first);
-				let packetHeader = tpl_3(sendPacketByAuroraFPGA1_1Q.first);
-				let payload = tpl_4(sendPacketByAuroraFPGA1_1Q.first);
+		Bit#(1) qidOut = 0;
+		Bit#(2) pidOut = 0;
+		Bit#(24) packetHeader = 0;
+		Bit#(8) auroraExtCntFPGA1 = 0;
+		AuroraIfcType payload = 0;
 
-				let routeCnt = packetHeader[7:1];
-				let payloadByte = packetHeader[23:16];
+		if ( sendPacketByAuroraFPGA1_1Q.notEmpty ) begin
+			sendPacketByAuroraFPGA1_1Q.deq;
+			qidOut = tpl_1(sendPacketByAuroraFPGA1_1Q.first);
+			pidOut = tpl_2(sendPacketByAuroraFPGA1_1Q.first);
+			packetHeader = tpl_3(sendPacketByAuroraFPGA1_1Q.first);
+			payload = tpl_4(sendPacketByAuroraFPGA1_1Q.first);
+		end else if ( sendPacketByAuroraFPGA1_2Q.notEmpty ) begin
+			sendPacketByAuroraFPGA1_2Q.deq;
+			qidOut = tpl_1(sendPacketByAuroraFPGA1_2Q.first);
+			pidOut = tpl_2(sendPacketByAuroraFPGA1_2Q.first);
+			packetHeader = tpl_3(sendPacketByAuroraFPGA1_2Q.first);
+			payload = tpl_4(sendPacketByAuroraFPGA1_2Q.first);
+		end 
 
-				if ( (routeCnt > 0) && (routeCnt < 3) ) begin
-					Bit#(8) totalByte = 4+2+payloadByte;
-					Bit#(16) totalBits = zeroExtend(totalByte) * 8;
-					Bit#(16) decidedCycle = cycleDecider(totalBits);
-					auroraExtCntFPGA1_1 = truncate(decidedCycle);
-				end else if ( (routeCnt > 2) && (routeCnt < 5) ) begin
-					Bit#(8) totalByte = 4+4+payloadByte;
-					Bit#(16) totalBits = zeroExtend(totalByte) * 8;
-					Bit#(16) decidedCycle = cycleDecider(totalBits);
-					auroraExtCntFPGA1_1 = truncate(decidedCycle);
-				end else if ( (routeCnt > 4) && (routeCnt < 9) ) begin
-					Bit#(8) totalByte = 4+8+payloadByte;
-					Bit#(16) totalBits = zeroExtend(totalByte) * 8;
-					Bit#(16) decidedCycle = cycleDecider(totalBits);
-					auroraExtCntFPGA1_1 = truncate(decidedCycle);
-				end
+		let routeCnt = packetHeader[7:1];
+		let payloadByte = packetHeader[23:16];
 
-				scheduler <= scheduler + 1;
-				relayPacketByAuroraFPGA1Q.enq(tuple4(qidOut, pidOut, auroraExtCntFPGA1_1, payload));
-			end
-		end else begin
-			if ( sendPacketByAuroraFPGA1_2Q.notEmpty ) begin
-				Bit#(8) auroraExtCntFPGA1_2 = 0;
-				sendPacketByAuroraFPGA1_2Q.deq;
-				let qidOut = tpl_1(sendPacketByAuroraFPGA1_2Q.first);
-				let pidOut = tpl_2(sendPacketByAuroraFPGA1_2Q.first);
-				let packetHeader = tpl_3(sendPacketByAuroraFPGA1_2Q.first);
-				let payload = tpl_4(sendPacketByAuroraFPGA1_2Q.first);
-
-				let routeCnt = packetHeader[7:1];
-				let payloadByte = packetHeader[23:16];
-
-				if ( (routeCnt > 0) && (routeCnt < 3) ) begin
-					Bit#(8) totalByte = 4+2+payloadByte;
-					Bit#(16) totalBits = zeroExtend(totalByte) * 8;
-					Bit#(16) decidedCycle = cycleDecider(totalBits);
-					auroraExtCntFPGA1_2 = truncate(decidedCycle);
-				end else if ( (routeCnt > 2) && (routeCnt < 5) ) begin
-					Bit#(8) totalByte = 4+4+payloadByte;
-					Bit#(16) totalBits = zeroExtend(totalByte) * 8;
-					Bit#(16) decidedCycle = cycleDecider(totalBits);
-					auroraExtCntFPGA1_2 = truncate(decidedCycle);
-				end else if ( (routeCnt > 4) && (routeCnt < 9) ) begin
-					Bit#(8) totalByte = 4+8+payloadByte;
-					Bit#(16) totalBits = zeroExtend(totalByte) * 8;
-					Bit#(16) decidedCycle = cycleDecider(totalBits);
-					auroraExtCntFPGA1_2 = truncate(decidedCycle);
-				end
-
-				scheduler <= 0;
-				relayPacketByAuroraFPGA1Q.enq(tuple4(qidOut, pidOut, auroraExtCntFPGA1_2, payload));
-			end
+		if ( (routeCnt > 0) && (routeCnt < 3) ) begin
+			Bit#(8) totalByte = 4+2+payloadByte;
+			Bit#(16) totalBits = zeroExtend(totalByte) * 8;
+			Bit#(16) decidedCycle = cycleDecider(totalBits);
+			auroraExtCntFPGA1 = truncate(decidedCycle);
+		end else if ( (routeCnt > 2) && (routeCnt < 5) ) begin
+			Bit#(8) totalByte = 4+4+payloadByte;
+			Bit#(16) totalBits = zeroExtend(totalByte) * 8;
+			Bit#(16) decidedCycle = cycleDecider(totalBits);
+			auroraExtCntFPGA1 = truncate(decidedCycle);
+		end else if ( (routeCnt > 4) && (routeCnt < 9) ) begin
+			Bit#(8) totalByte = 4+8+payloadByte;
+			Bit#(16) totalBits = zeroExtend(totalByte) * 8;
+			Bit#(16) decidedCycle = cycleDecider(totalBits);
+			auroraExtCntFPGA1 = truncate(decidedCycle);
 		end
+
+		relayPacketByAuroraFPGA1Q.enq(tuple4(qidOut, pidOut, auroraExtCntFPGA1, payload));
 	endrule
 	rule relayPacketFPGA1( openConnect );
 		if ( relayPacketByAuroraFPGA1Q.notEmpty ) begin

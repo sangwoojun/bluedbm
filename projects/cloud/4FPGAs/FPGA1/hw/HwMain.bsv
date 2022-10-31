@@ -138,7 +138,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	// Host -> FPGA1_1(0) -> (4)FPGA2_1(5) -> (1)FPGA1_2(2) -> (6)FPGA2_2(7) -> (3)FPGA1_3
 	//--------------------------------------------------------------------------------------------
 	FIFOF#(AuroraIfcType) recvPacketByAuroraFPGA1Q <- mkFIFOF;
-	FIFOF#(Tuple4#(Bit#(1), Bit#(2), Bit#(24), AuroraIfcType)) sendPacketByAuroraFPGA1Q <- mkFIFOF;
 	FIFOF#(Bit#(32)) validCheckConnectionQ <- mkFIFOF;
 	rule fpga1_1( recvPacketQ.notEmpty );
 		recvPacketQ.deq;
@@ -167,7 +166,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		Bit#(32) headerPart = recvPacket[31:0] ^ fromInteger(privKeyFPGA1);
 		Bit#(8) numHops = headerPart[7:0];
 		Bit#(24) packetHeader = headerPart[31:8];
-		
+
+		Bit#(8) auroraExtCntFPGA1 = 0;		
 		if ( numHops != 0 ) begin
 			Bit#(8) outPortFPGA1 = recvPacket[39:32] ^ fromInteger(privKeyFPGA1);
 			Bit#(1) qidOut = outPortFPGA1[2];
@@ -181,30 +181,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			AuroraIfcType remainingPacket = recvPacket >> 40;
 			AuroraIfcType newPacket = (remainingPacket << 32) | encNewHeaderPart;
 
-			sendPacketByAuroraFPGA1Q.enq(tuple4(qidOut, pidOut, packetHeader, newPacket));
-		end else begin
-			// Host wants to use FPGA1's memory
-			if ( packetHeader[0] == 0 ) begin	
-				Bit#(32) aomNheader = recvPacket[63:32] ^ fromInteger(privKeyFPGA1);
-				Bit#(32) address = recvPacket[95:64] ^ fromInteger(privKeyFPGA1); 
-
-				if ( aomNheader[31:1] == 4*1024 ) begin
-					validCheckConnectionQ.enq(1);
-				end else begin
-					validCheckConnectionQ.enq(0);
-				end			
-			end
-		end
-	endrule
-	rule relayPacketFPGA1;
-		if ( sendPacketByAuroraFPGA1Q.notEmpty ) begin
-			Bit#(8) auroraExtCntFPGA1 = 0;
-			sendPacketByAuroraFPGA1Q.deq;
-			let qidOut = tpl_1(sendPacketByAuroraFPGA1Q.first);
-			let pidOut = tpl_2(sendPacketByAuroraFPGA1Q.first);
-			let packetHeader = tpl_3(sendPacketByAuroraFPGA1Q.first);
-			let payload = tpl_4(sendPacketByAuroraFPGA1Q.first);
-				
 			let routeCnt = packetHeader[7:1];
 			let payloadByte = packetHeader[23:16];
 
@@ -224,8 +200,21 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				Bit#(16) decidedCycle = cycleDecider(totalBits);
 				auroraExtCntFPGA1 = truncate(decidedCycle);
 			end
-			auroraQuads[qidOut].user[pidOut].send(AuroraSend{packet:payload,num:auroraExtCntFPGA1});	
-		end 
+
+			auroraQuads[qidOut].user[pidOut].send(AuroraSend{packet:newPacket,num:auroraExtCntFPGA1});	
+		end else begin
+			// Host wants to use FPGA1's memory
+			if ( packetHeader[0] == 0 ) begin	
+				Bit#(32) aomNheader = recvPacket[63:32] ^ fromInteger(privKeyFPGA1);
+				Bit#(32) address = recvPacket[95:64] ^ fromInteger(privKeyFPGA1); 
+
+				if ( aomNheader[31:1] == 4*1024 ) begin
+					validCheckConnectionQ.enq(1);
+				end else begin
+					validCheckConnectionQ.enq(0);
+				end			
+			end
+		end
 	endrule
 	//--------------------------------------------------------------------------------------------
 	// Send Routing Packet to Host

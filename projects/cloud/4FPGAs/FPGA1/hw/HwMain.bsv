@@ -89,8 +89,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	// Get Commands from Host via PCIe
 	//--------------------------------------------------------------------------------------------
 	FIFOF#(AuroraIfcType) recvPacketQ <- mkFIFOF;
-	Reg#(Bool) openConnect <- mkReg(False);
-
 	Reg#(Maybe#(AuroraIfcType)) recvPacketBuffer1 <- mkReg(tagged Invalid);
 	Reg#(Maybe#(AuroraIfcType)) recvPacketBuffer2 <- mkReg(tagged Invalid);
 	Reg#(Maybe#(AuroraIfcType)) recvPacketBuffer3 <- mkReg(tagged Invalid);
@@ -163,10 +161,15 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	rule sendPacketFPGA1( recvPacketByAuroraFPGA1Q.notEmpty );
 		recvPacketByAuroraFPGA1Q.deq;
 		let recvPacket = recvPacketByAuroraFPGA1Q.first;
+
 		Bit#(32) headerPart = recvPacket[31:0] ^ fromInteger(privKeyFPGA1);
 		Bit#(8) numHops = headerPart[7:0];
 		Bit#(24) packetHeader = headerPart[31:8];
+		Bit#(8) routeCnt = zeroExtend(packetHeader[7:1]);
+		Bit#(8) payloadByte = packetHeader[23:16];
 
+		AuroraIfcType bodyPart = recvPacket >> 32;
+		AuroraIfcType payload = 0;
 		Bit#(8) auroraExtCntFPGA1 = 0;		
 		if ( numHops != 0 ) begin
 			Bit#(8) outPortFPGA1 = recvPacket[39:32] ^ fromInteger(privKeyFPGA1);
@@ -180,9 +183,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 
 			AuroraIfcType remainingPacket = recvPacket >> 40;
 			AuroraIfcType newPacket = (remainingPacket << 32) | encNewHeaderPart;
-
-			let routeCnt = packetHeader[7:1];
-			let payloadByte = packetHeader[23:16];
 
 			if ( (routeCnt > 0) && (routeCnt < 3) ) begin
 				Bit#(8) totalByte = 4+2+payloadByte;
@@ -204,15 +204,18 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			auroraQuads[qidOut].user[pidOut].send(AuroraSend{packet:newPacket,num:auroraExtCntFPGA1});	
 		end else begin
 			// Host wants to use FPGA1's memory
+			payload = bodyPart;
 			if ( packetHeader[0] == 0 ) begin	
-				Bit#(32) aomNheader = recvPacket[63:32] ^ fromInteger(privKeyFPGA1);
-				Bit#(32) address = recvPacket[95:64] ^ fromInteger(privKeyFPGA1); 
-
-				if ( aomNheader[31:1] == 4*1024 ) begin
-					validCheckConnectionQ.enq(1);
-				end else begin
-					validCheckConnectionQ.enq(0);
-				end			
+				Bit#(32) aomNheader = payload[31:0] ^ fromInteger(privKeyFPGA1);
+				Bit#(32) address = payload[63:32] ^ fromInteger(privKeyFPGA1); 
+				
+				if ( aomNheader[0] == 0 ) begin // Write
+					if ( aomNheader[31:1] == 4*1024 ) begin
+						validCheckConnectionQ.enq(1);
+					end else begin
+						validCheckConnectionQ.enq(0);
+					end			
+				end
 			end
 		end
 	endrule

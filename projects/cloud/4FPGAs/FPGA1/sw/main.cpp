@@ -83,6 +83,7 @@ int main(int argc, char** argv) {
 	}
 	printf( "\n" );
 	fflush( stdout );
+
 	// Check Aurora Channel and Lane	
 	int resCnt = 16;
 	for ( int i = 0; i < 4; i ++ ) {
@@ -114,6 +115,7 @@ int main(int argc, char** argv) {
 
 	printf( "Sending source routing packet from FPGA1 to FPGA2\n" );
 	fflush( stdout );	
+
 	// Payload	
 	uint32_t address = 0; // 32-bit Start Point of The Address
 	uint32_t amountofmemory = 4*1024;

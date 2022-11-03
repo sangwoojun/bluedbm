@@ -168,7 +168,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		Bit#(8) routeCnt = zeroExtend(packetHeader[7:1]);
 		Bit#(8) payloadByte = packetHeader[23:16];
 
-		AuroraIfcType bodyPart = recvPacket >> 32;
 		AuroraIfcType payload = 0;
 		Bit#(8) auroraExtCntFPGA1 = 0;		
 		if ( numHops != 0 ) begin
@@ -204,6 +203,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			auroraQuads[qidOut].user[pidOut].send(AuroraSend{packet:newPacket,num:auroraExtCntFPGA1});	
 		end else begin
 			// Host wants to use FPGA1's memory
+			AuroraIfcType bodyPart = recvPacket >> 32;
 			payload = bodyPart;
 			if ( packetHeader[0] == 0 ) begin	
 				Bit#(32) aomNheader = payload[31:0] ^ fromInteger(privKeyFPGA1);

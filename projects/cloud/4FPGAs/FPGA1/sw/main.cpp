@@ -127,14 +127,14 @@ int main(int argc, char** argv) {
 	uint8_t outportFPGA2_1 = 5;
 	uint8_t outportFPGA1_1 = 0;
 	// Header Part
-	uint8_t packetHeader1st = 0; // 1-bit S/D Flag
-	uint8_t packetHeader2nd = 4; // 7-bit Route Cnt ***
-	uint8_t packetHeader3rd = HOST; // 8-bit Starting Point
-	uint8_t packetHeader4th = 8; // 8-bit Payload Bytes
-	uint32_t packetHeader = ((uint32_t)packetHeader4th << 16) | ((uint32_t)packetHeader3rd << 8) | 
-				((uint32_t)packetHeader2nd << 1) | (uint32_t)packetHeader1st; // 24-bit Packet Header
+	uint8_t packetHeader1stSR = 0; // 1-bit S/D Flag
+	uint8_t packetHeader2ndSR = 4; // 7-bit Route Cnt ***
+	uint8_t packetHeader3rdSR = HOST; // 8-bit Starting Point
+	uint8_t packetHeader4thSR = 8; // 8-bit Payload Bytes
+	uint32_t packetHeaderSR = ((uint32_t)packetHeader4thSR << 16) | ((uint32_t)packetHeader3rdSR << 8) | 
+				  ((uint32_t)packetHeader2ndSR << 1) | (uint32_t)packetHeader1stSR; // 24-bit Packet Header
 	uint8_t numHops = 4; // 8-bit The number of Hops ***
-	uint32_t headerPart = (packetHeader << 8) | numHops; // 32-bit Header Part
+	uint32_t headerPartSR = (packetHeaderSR << 8) | numHops; // 32-bit Header Part
 
 	// Encryption
 	// Payload
@@ -145,13 +145,12 @@ int main(int argc, char** argv) {
 	uint8_t encOutportFPGA1_2 = publicKeyFPGA1_8b(outportFPGA1_2);
 	uint8_t encOutportFPGA2_1 = publicKeyFPGA2_8b(outportFPGA2_1);
 	uint8_t encOutportFPGA1_1 = publicKeyFPGA1_8b(outportFPGA1_1);
-	//uint32_t encActualRoute = ((uint32_t)encOutportFPGA2_1 << 8) | (uint32_t)encOutportFPGA1_1; // 16-bit Encrypted Each Actual Route
 	uint32_t encActualRoute = ((uint32_t)encOutportFPGA2_2 << 24) | ((uint32_t)encOutportFPGA1_2 << 16) |
 				  ((uint32_t)encOutportFPGA2_1 << 8) | (uint32_t)encOutportFPGA1_1; // 32-bit Encrypted Each Actual Route
 	// Header Part
-	uint32_t encHeaderPart = publicKeyFPGA1_32b(headerPart); // 32-bit Encrypted Header Part
+	uint32_t encHeaderPartSR = publicKeyFPGA1_32b(headerPartSR); // 32-bit Encrypted Header Part
 
-	pcie->userWriteWord(0, encHeaderPart);
+	pcie->userWriteWord(0, encHeaderPartSR);
 	pcie->userWriteWord(0, encActualRoute);
 	pcie->userWriteWord(0, encAomNheader);
 	pcie->userWriteWord(0, encAddress);

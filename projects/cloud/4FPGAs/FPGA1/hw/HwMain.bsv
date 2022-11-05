@@ -193,11 +193,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				Bit#(16) totalBits = zeroExtend(totalByte) * 8;
 				Bit#(16) decidedCycle = cycleDecider(totalBits);
 				auroraExtCntFPGA1 = truncate(decidedCycle);
-			end else if ( (routeCnt > 4) && (routeCnt < 9) ) begin
-				Bit#(8) totalByte = 4+8+payloadByte;
-				Bit#(16) totalBits = zeroExtend(totalByte) * 8;
-				Bit#(16) decidedCycle = cycleDecider(totalBits);
-				auroraExtCntFPGA1 = truncate(decidedCycle);
 			end
 
 			auroraQuads[qidOut].user[pidOut].send(AuroraSend{packet:newPacket,num:auroraExtCntFPGA1});	

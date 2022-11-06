@@ -168,6 +168,25 @@ int main(int argc, char** argv) {
 			break;
 		}
 	}
+
+	pcie->userWriteWord(0, encHeaderPartSR);
+	pcie->userWriteWord(0, encActualRoute);
+	pcie->userWriteWord(0, encAomNheader);
+	pcie->userWriteWord(0, encAddress);
 	
+	d_0 = 0;
+	while ( 1 ) {
+		d_0 = pcie->userReadWord(0);
+		if ( d_0 == 1 ) {
+			printf( "Sending source routing packet succedded!\n" );
+			fflush( stdout );
+			break;
+		} else if ( d_0 == 0 ) {
+			printf( "Sending source routing packet is in failure...\n" );
+			fflush( stdout );
+			break;
+		}
+	}
+
 	return 0;
 }

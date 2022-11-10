@@ -204,7 +204,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			// Host wants to use FPGA1's memory
 			AuroraIfcType bodyPart = recvPacket >> 32;
 			AuroraIfcType payload = bodyPart;
-			if ( packetHeader[0] == 0 ) begin	
+			if ( packetHeader[0] == 0 ) begin // Source Routing
 				Bit#(32) aomNheader = payload[31:0] ^ fromInteger(privKeyFPGA1);
 				Bit#(32) address = payload[63:32] ^ fromInteger(privKeyFPGA1); 
 				
@@ -214,6 +214,16 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 					end else begin
 						validCheckConnectionQ.enq(0);
 					end			
+				end
+			end else begin
+				Bit#(32) data_1 = payload[31:0] ^ fromInteger(privKeyFPGA1);
+				Bit#(32) data_2 = payload[63:32] ^ fromInteger(privKeyFPGA1);
+				Bit#(64) data = (zeroExtend(data_2) << 32) | zeroExtend(data_1);
+
+				if ( data == 4294967296 ) begin
+					validCheckConnectionQ.enq(1);
+				end else begin
+					validCheckConnectionQ.enq(0);
 				end
 			end
 		end

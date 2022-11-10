@@ -113,33 +113,47 @@ int main(int argc, char** argv) {
 	fflush( stdout );
 	sleep(1);
 
-	printf( "Sending source routing packet from FPGA1 to FPGA2\n" );
+	printf( "Sending source routing packet from HOST to FPGA1_3\n" );
 	fflush( stdout );	
 
-	// Payload	
+	// Payload (Source Routing)	
 	uint32_t address = 0; // 32-bit Start Point of The Address
 	uint32_t amountofmemory = 4*1024;
 	uint32_t header = 0; // 0:Write, 1:Read
 	uint32_t aomNheader = (amountofmemory << 1) | header; // 32-bit R/W + Amount of Memory
+	// Payload (Data Sending)
+	uint32_t data_1 = 0;
+	uint32_t data_2 = 1;
 	// Actual Route
 	uint8_t outportFPGA2_2 = 7;
 	uint8_t outportFPGA1_2 = 2;
 	uint8_t outportFPGA2_1 = 5;
 	uint8_t outportFPGA1_1 = 0;
-	// Header Part
+	// Header Part (Source Routing)
 	uint8_t packetHeader1stSR = 0; // 1-bit S/D Flag
 	uint8_t packetHeader2ndSR = 4; // 7-bit Route Cnt ***
 	uint8_t packetHeader3rdSR = HOST; // 8-bit Starting Point
 	uint8_t packetHeader4thSR = 8; // 8-bit Payload Bytes
 	uint32_t packetHeaderSR = ((uint32_t)packetHeader4thSR << 16) | ((uint32_t)packetHeader3rdSR << 8) | 
 				  ((uint32_t)packetHeader2ndSR << 1) | (uint32_t)packetHeader1stSR; // 24-bit Packet Header
+	// Header Part (Data Sending)
+	uint8_t packetHeader1stDS = 1;
+	uint8_t packetHeader2ndDS = 4;
+	uint8_t packetHeader3rdDS = HOST;
+	uint8_t packetHeader4thDS = 8;
+	uint32_t packetHeaderDS = ((uint32_t)packetHeader4thDS << 16) | ((uint32_t)packetHeader3rdDS << 8) |
+				  ((uint32_t)packetHeader2ndDS << 1) | (uint32_t)packetHeader1stDS;
 	uint8_t numHops = 4; // 8-bit The number of Hops ***
-	uint32_t headerPartSR = (packetHeaderSR << 8) | numHops; // 32-bit Header Part
+	uint32_t headerPartSR = (packetHeaderSR << 8) | numHops; // 32-bit Header Part (Source Routing)
+	uint32_t headerPartDS = (packetHeaderDS << 8) | numHops; // 32-bit Header Part (Data Sending)
 
 	// Encryption
-	// Payload
+	// Payload (Source Routing)
 	uint32_t encAddress = publicKeyFPGA1_32b(address);
 	uint32_t encAomNheader = publicKeyFPGA1_32b(aomNheader);
+	// Payload (Data Sending)
+	uint32_t encData_1 = publicKeyFPGA1_32b(data_1);
+	uint32_t encData_2 = publicKeyFPGA1_32b(data_2);
 	// Actual Route
 	uint8_t encOutportFPGA2_2 = publicKeyFPGA2_8b(outportFPGA2_2);
 	uint8_t encOutportFPGA1_2 = publicKeyFPGA1_8b(outportFPGA1_2);
@@ -147,8 +161,9 @@ int main(int argc, char** argv) {
 	uint8_t encOutportFPGA1_1 = publicKeyFPGA1_8b(outportFPGA1_1);
 	uint32_t encActualRoute = ((uint32_t)encOutportFPGA2_2 << 24) | ((uint32_t)encOutportFPGA1_2 << 16) |
 				  ((uint32_t)encOutportFPGA2_1 << 8) | (uint32_t)encOutportFPGA1_1; // 32-bit Encrypted Each Actual Route
-	// Header Part
-	uint32_t encHeaderPartSR = publicKeyFPGA1_32b(headerPartSR); // 32-bit Encrypted Header Part
+	// Header Part (Soure Routing)
+	uint32_t encHeaderPartSR = publicKeyFPGA1_32b(headerPartSR); // 32-bit Encrypted Header Part (Source Routing)
+	uint32_t encHeaderPartDS = publicKeyFPGA1_32b(headerPartDS); // 32-bit Encrypted Header Part (Data Sending)
 
 	pcie->userWriteWord(0, encHeaderPartSR);
 	pcie->userWriteWord(0, encActualRoute);
@@ -169,10 +184,13 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	pcie->userWriteWord(0, encHeaderPartSR);
+	printf( "Sending data sending packet from HOST to FPGA1_3\n" );
+	fflush( stdout );	
+
+	pcie->userWriteWord(0, encHeaderPartDS);
 	pcie->userWriteWord(0, encActualRoute);
-	pcie->userWriteWord(0, encAomNheader);
-	pcie->userWriteWord(0, encAddress);
+	pcie->userWriteWord(0, encData_1);
+	pcie->userWriteWord(0, encData_2);
 	
 	d_0 = 0;
 	while ( 1 ) {

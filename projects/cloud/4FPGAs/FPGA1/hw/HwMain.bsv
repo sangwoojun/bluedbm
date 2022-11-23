@@ -93,7 +93,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	//--------------------------------------------------------------------------------------------
 	// Get Commands from Host via PCIe
 	//--------------------------------------------------------------------------------------------
-	FIFOF#(AuroraIfcType) recvPacketQ <- mkFIFOF;
+	FIFOF#(AuroraIfcType) recvPacketByAuroraFPGA1Q <- mkFIFOF;
+	FIFOF#(Bit#(32)) validCheckConnectionQ <- mkFIFOF;
 	rule getCmd;
 		pcieWriteQ.deq;
 		let w = pcieWriteQ.first;
@@ -139,7 +140,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				// Final
 				AuroraIfcType srPacket = (zeroExtend(encAddress) << 96) | (zeroExtend(encAomNheader) << 64) | 
 							 (zeroExtend(encActualRoute) << 32) | (zeroExtend(encHeaderPartSR));
-				recvPacketQ.enq(srPacket);
+				recvPacketByAuroraFPGA1Q.enq(srPacket);
 			end else if ( d == 1 )  begin // Data Sending 
 				// Payload 
 				Bit#(64) data = 4294967296;
@@ -173,18 +174,19 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				// Final
 				AuroraIfcType dsPacket = (zeroExtend(encData) << 64) | (zeroExtend(encActualRoute) << 32) | 
 							 (zeroExtend(encHeaderPartDS));
-				recvPacketQ.enq(dsPacket);
+				recvPacketByAuroraFPGA1Q.enq(dsPacket);
 			end
 		end
 	endrule
 	//--------------------------------------------------------------------------------------------
-	// Host -> FPGA1_1(0) -> (4)FPGA2_1(5) -> (1)FPGA1_2(2) -> (6)FPGA2_2(7) -> (3)FPGA1_3
+	// FPGA1_1(0) -> (4)FPGA2_1(5) -> (1)FPGA1_2(2) -> (6)FPGA2_2(7) -> (3)FPGA1_3
 	//--------------------------------------------------------------------------------------------
-	FIFOF#(AuroraIfcType) recvPacketByAuroraFPGA1Q <- mkFIFOF;
-	FIFOF#(Bit#(32)) validCheckConnectionQ <- mkFIFOF;
-	rule fpga1_1( recvPacketQ.notEmpty );
-		recvPacketQ.deq;
-		let recvPacket = recvPacketQ.first;
+	rule fpga1_1;
+		Bit#(8) inPortFPGA1_1 = 0;
+		Bit#(1) qidIn = inPortFPGA1_1[2];
+		Bit#(2) pidIn = truncate(inPortFPGA1_1);
+
+		let recvPacket <- auroraQuads[qidIn].user[pidIn].receive;
 		recvPacketByAuroraFPGA1Q.enq(recvPacket);
 	endrule
 	rule fpga1_2;

@@ -42,35 +42,6 @@ int main(int argc, char** argv) {
 	printf( "\n" );
 	fflush( stdout );
 
-	// Check Aurora Channel and Lane	
-	int resCnt = 16;
-	for ( int i = 0; i < 4; i ++ ) {
-		printf( "Channel Up[X1Y%d]: %x\n", resCnt, pcie->userReadWord(8*4) );
-		fflush( stdout );
-		resCnt ++;
-	}
-	resCnt = 24;
-	for ( int i = 0; i < 4; i ++ ) {
-		printf( "Channel Up[X1Y%d]: %x\n", resCnt, pcie->userReadWord(8*4) );
-		fflush( stdout );
-		resCnt ++;
-	}
-	resCnt = 16;
-	for ( int i = 0; i < 4; i ++ ) {
-		printf( "Lane Up[X1Y%d]: %x\n", resCnt, pcie->userReadWord(9*4) );
-		fflush( stdout );
-		resCnt ++;
-	}
-	resCnt = 24;
-	for ( int i = 0; i < 4; i ++ ) {
-		printf( "Lane Up[X1Y%d]: %x\n", resCnt, pcie->userReadWord(9*4) );
-		fflush( stdout );
-		resCnt ++;
-	}
-	printf( "\n" );
-	fflush( stdout );
-	sleep(1);
-
 	printf( "Sending source routing packet from FPGA1_1 to FPGA1_3\n" );
 	fflush( stdout );	
 

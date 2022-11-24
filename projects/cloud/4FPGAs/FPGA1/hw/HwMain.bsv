@@ -31,6 +31,30 @@ Integer pubKeyHost = 3;
 
 Integer privKeyFPGA1 = 1;
 
+function Bit#(8) payloadExtractor(Bit#(8) routeCnt);
+	Bit#(8) addTrunc = 0;
+	if ( (routeCnt > 0) && (routeCnt < 3) ) begin
+		if ( routeCnt == 1 ) begin
+			addTrunc = 8;
+		end else if ( routeCnt == 2 ) begin
+			addTrunc = 0;
+		end
+	end else if ( (routeCnt > 2) && (routeCnt < 5) ) begin
+		if ( routeCnt == 3 ) begin
+			addTrunc = 8;
+		end else if ( routeCnt == 4 ) begin
+			addTrunc = 0;
+		end
+	end else if ( (routeCnt > 4) && (routeCnt < 9) ) begin
+		if ( routeCnt == 8 ) begin
+			addTrunc = 0;
+		end else begin
+			addTrunc = 8*(8-routeCnt);
+		end
+	end
+	return addTrunc;
+endfunction
+
 module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) auroraQuads) (HwMainIfc);
 
 	Clock curClk <- exposeCurrentClock;
@@ -60,39 +84,10 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		let w <- pcie.dataReceive;
 		pcieWriteQ.enq(w);
 	endrule
-	//--------------------------------------------------------------------------------------
-	// Debug lane and channel
-	//--------------------------------------------------------------------------------------
-	Reg#(Bit#(8)) debuggingBitsC <- mkReg(0);
-	Reg#(Bit#(8)) debuggingBitsL <- mkReg(0);
-	Reg#(Bit#(8)) debuggingCnt <- mkReg(0);
-
-	rule debugChannelLane;
-		debuggingBitsC <= {
-			auroraQuads[1].user[3].channel_up,
-			auroraQuads[1].user[2].channel_up,
-			auroraQuads[1].user[1].channel_up,
-			auroraQuads[1].user[0].channel_up,
-			auroraQuads[0].user[3].channel_up,
-			auroraQuads[0].user[2].channel_up,
-			auroraQuads[0].user[1].channel_up,
-			auroraQuads[0].user[0].channel_up
-		};
-
-		debuggingBitsL <= {
-			auroraQuads[1].user[3].lane_up,
-			auroraQuads[1].user[2].lane_up,
-			auroraQuads[1].user[1].lane_up,
-			auroraQuads[1].user[0].lane_up,
-			auroraQuads[0].user[3].lane_up,
-			auroraQuads[0].user[2].lane_up,
-			auroraQuads[0].user[1].lane_up,
-			auroraQuads[0].user[0].lane_up
-		};
-	endrule
 	//--------------------------------------------------------------------------------------------
 	// Get Commands from Host via PCIe
 	//--------------------------------------------------------------------------------------------
+	FIFOF#(AuroraIfcType) sendPacketByAuroraFPGA1Q <- mkFIFOF;
 	FIFOF#(AuroraIfcType) recvPacketByAuroraFPGA1Q <- mkFIFOF;
 	FIFOF#(Bit#(32)) validCheckConnectionQ <- mkFIFOF;
 	rule getCmd;
@@ -113,13 +108,12 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				Bit#(8) outPortFPGA2_2 = 7;
 				Bit#(8) outPortFPGA1_2 = 2;
 				Bit#(8) outPortFPGA2_1 = 5;
-				Bit#(8) outPortFPGA1_1 = 0;
 				// Header Part
 				Bit#(8) payloadByte = 8;
 				Bit#(8) startPoint = fromInteger(idxFPGA1_1);
-				Bit#(8) routeCnt = 4;
+				Bit#(8) routeCnt = 3;
 				Bit#(1) sdFlag = 0;
-				Bit#(8) numHops = 4;
+				Bit#(8) numHops = 3;
 				Bit#(32) headerPartSR = (zeroExtend(payloadByte) << 24) | (zeroExtend(startPoint) << 16) | 
 							(zeroExtend(routeCnt) << 9) | (zeroExtend(sdFlag) << 8) | 
 							(zeroExtend(numHops));
@@ -131,16 +125,15 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				Bit#(8) encOutPortFPGA2_2 = outPortFPGA2_2 ^ fromInteger(pubKeyFPGA2);
 				Bit#(8) encOutPortFPGA1_2 = outPortFPGA1_2 ^ fromInteger(pubKeyFPGA1);
 				Bit#(8) encOutPortFPGA2_1 = outPortFPGA2_1 ^ fromInteger(pubKeyFPGA2);
-				Bit#(8) encOutPortFPGA1_1 = outPortFPGA1_1 ^ fromInteger(pubKeyFPGA1);
-				Bit#(32) encActualRoute = (zeroExtend(encOutPortFPGA2_2) << 24) | (zeroExtend(encOutPortFPGA1_2) << 16) | 
-							  (zeroExtend(encOutPortFPGA2_1) << 8) | (zeroExtend(encOutPortFPGA1_1));
+				Bit#(24) encActualRoute = (zeroExtend(encOutPortFPGA2_2) << 16) | 
+							  (zeroExtend(encOutPortFPGA1_2) << 8) | (zeroExtend(encOutPortFPGA2_1));
 				// Header Part
-				Bit#(32) encHeaderPartSR = headerPartSR ^ fromInteger(pubKeyFPGA1);
+				Bit#(32) encHeaderPartSR = headerPartSR ^ fromInteger(pubKeyFPGA2);
 
 				// Final
-				AuroraIfcType srPacket = (zeroExtend(encAddress) << 96) | (zeroExtend(encAomNheader) << 64) | 
+				AuroraIfcType srPacket = (zeroExtend(encAddress) << 88) | (zeroExtend(encAomNheader) << 56) | 
 							 (zeroExtend(encActualRoute) << 32) | (zeroExtend(encHeaderPartSR));
-				recvPacketByAuroraFPGA1Q.enq(srPacket);
+				sendPacketByAuroraFPGA1Q.enq(srPacket);
 			end else if ( d == 1 )  begin // Data Sending 
 				// Payload 
 				Bit#(64) data = 4294967296;
@@ -148,13 +141,12 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				Bit#(8) outPortFPGA2_2 = 7;
 				Bit#(8) outPortFPGA1_2 = 2;
 				Bit#(8) outPortFPGA2_1 = 5;
-				Bit#(8) outPortFPGA1_1 = 0;
 				// Header Part
 				Bit#(8) payloadByte = 8;
 				Bit#(8) startPoint = fromInteger(idxFPGA1_1);
-				Bit#(8) routeCnt = 4;
+				Bit#(8) routeCnt = 3;
 				Bit#(1) sdFlag = 1;
-				Bit#(8) numHops = 4;
+				Bit#(8) numHops = 3;
 				Bit#(32) headerPartDS = (zeroExtend(payloadByte) << 24) | (zeroExtend(startPoint) << 16) | 
 							(zeroExtend(routeCnt) << 9) | (zeroExtend(sdFlag) << 8) | 
 							(zeroExtend(numHops));
@@ -165,23 +157,28 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				Bit#(8) encOutPortFPGA2_2 = outPortFPGA2_2 ^ fromInteger(pubKeyFPGA2);
 				Bit#(8) encOutPortFPGA1_2 = outPortFPGA1_2 ^ fromInteger(pubKeyFPGA1);
 				Bit#(8) encOutPortFPGA2_1 = outPortFPGA2_1 ^ fromInteger(pubKeyFPGA2);
-				Bit#(8) encOutPortFPGA1_1 = outPortFPGA1_1 ^ fromInteger(pubKeyFPGA1);
-				Bit#(32) encActualRoute = (zeroExtend(encOutPortFPGA2_2) << 24) | (zeroExtend(encOutPortFPGA1_2) << 16) | 
-							  (zeroExtend(encOutPortFPGA2_1) << 8) | (zeroExtend(encOutPortFPGA1_1));
+				Bit#(24) encActualRoute = (zeroExtend(encOutPortFPGA2_2) << 16) | 
+							  (zeroExtend(encOutPortFPGA1_2) << 8) | (zeroExtend(encOutPortFPGA2_1));
 				// Header Part
-				Bit#(32) encHeaderPartDS = headerPartDS ^ fromInteger(pubKeyFPGA1);
+				Bit#(32) encHeaderPartDS = headerPartDS ^ fromInteger(pubKeyFPGA2);
 
 				// Final
-				AuroraIfcType dsPacket = (zeroExtend(encData) << 64) | (zeroExtend(encActualRoute) << 32) | 
+				AuroraIfcType dsPacket = (zeroExtend(encData) << 56) | (zeroExtend(encActualRoute) << 32) | 
 							 (zeroExtend(encHeaderPartDS));
-				recvPacketByAuroraFPGA1Q.enq(dsPacket);
+				sendPacketByAuroraFPGA1Q.enq(dsPacket);
 			end
 		end
 	endrule
 	//--------------------------------------------------------------------------------------------
 	// FPGA1_1(0) -> (4)FPGA2_1(5) -> (1)FPGA1_2(2) -> (6)FPGA2_2(7) -> (3)FPGA1_3
 	//--------------------------------------------------------------------------------------------
-	rule fpga1_1;
+	rule fpga1_1Sender( sendPacketByAuroraFPGA1Q.notEmpty );
+		sendPacketByAuroraFPGA1Q.deq;
+		let sendPacket = sendPacketByAuroraFPGA1Q.first;
+
+		auroraQuads[0].user[0].send(AuroraSend{packet:sendPacket,num:3});	
+	endrule
+	rule fpga1_1Receiver;
 		Bit#(8) inPortFPGA1_1 = 0;
 		Bit#(1) qidIn = inPortFPGA1_1[2];
 		Bit#(2) pidIn = truncate(inPortFPGA1_1);
@@ -189,7 +186,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		let recvPacket <- auroraQuads[qidIn].user[pidIn].receive;
 		recvPacketByAuroraFPGA1Q.enq(recvPacket);
 	endrule
-	rule fpga1_2;
+	rule fpga1_2Receiver;
 		Bit#(8) inPortFPGA1_2 = 1;
 		Bit#(1) qidIn = inPortFPGA1_2[2];
 		Bit#(2) pidIn = truncate(inPortFPGA1_2);
@@ -197,7 +194,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		let recvPacket <- auroraQuads[qidIn].user[pidIn].receive;
 		recvPacketByAuroraFPGA1Q.enq(recvPacket);
 	endrule
-	rule fpga1_3;
+	rule fpga1_3Receiver;
 		Bit#(8) inPortFPGA1_3 = 3;
 		Bit#(1) qidIn = inPortFPGA1_3[2];
 		Bit#(2) pidIn = truncate(inPortFPGA1_3);
@@ -205,7 +202,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		let recvPacket <- auroraQuads[qidIn].user[pidIn].receive;
 		recvPacketByAuroraFPGA1Q.enq(recvPacket);
 	endrule
-	rule sendPacketFPGA1( recvPacketByAuroraFPGA1Q.notEmpty );
+	rule fpga1_2and3Sender( recvPacketByAuroraFPGA1Q.notEmpty );
 		recvPacketByAuroraFPGA1Q.deq;
 		let recvPacket = recvPacketByAuroraFPGA1Q.first;
 
@@ -249,8 +246,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			auroraQuads[qidOut].user[pidOut].send(AuroraSend{packet:newPacket,num:auroraExtCntFPGA1});	
 		end else begin
 			// Host wants to use FPGA1's memory
-			AuroraIfcType bodyPart = recvPacket >> 32;
-			AuroraIfcType payload = bodyPart;
+			//Bit#(8) addTrunc = payloadExtractor(routeCnt);
+			AuroraIfcType payload = recvPacket >> 32;
 			if ( packetHeader[0] == 0 ) begin // Source Routing
 				Bit#(32) aomNheader = payload[31:0] ^ fromInteger(privKeyFPGA1);
 				Bit#(32) address = payload[63:32] ^ fromInteger(privKeyFPGA1); 
@@ -286,22 +283,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				validCheckConnectionQ.deq;
 			end else begin 
 				pcieRespQ.enq(tuple2(r, 32'hffffffff));
-			end
-		end else begin
-			if ( a == 8 ) begin
-				if ( debuggingCnt < 7 ) begin
-					debuggingCnt <= debuggingCnt + 1;
-				end else begin
-					debuggingCnt <= 0;
-				end
-				pcieRespQ.enq(tuple2(r, zeroExtend(debuggingBitsC[debuggingCnt])));
-			end else if ( a == 9 ) begin
-				if ( debuggingCnt < 7 ) begin
-					debuggingCnt <= debuggingCnt + 1;
-				end else begin
-					debuggingCnt <= 0;
-				end
-				pcieRespQ.enq(tuple2(r, zeroExtend(debuggingBitsL[debuggingCnt])));
 			end
 		end
 	endrule

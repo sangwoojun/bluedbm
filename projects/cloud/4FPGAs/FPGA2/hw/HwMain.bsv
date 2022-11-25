@@ -38,6 +38,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	// Host -> FPGA1_1(0) -> (4)FPGA2_1(5) -> (1)FPGA1_2(2) -> (6)FPGA2_2(7) -> (3)FPGA1_3
 	//--------------------------------------------------------------------------------------------
 	FIFOF#(AuroraIfcType) recvPacketByAuroraFPGA2Q <- mkFIFOF;
+	FIFOF#(AuroraIfcType) validCheckConnectionQ <- mkFIFOF;
 	rule fpga2_1;
 		Bit#(8) inPortFPGA2_1 = 4;
 		Bit#(1) qidIn = inPortFPGA2_1[2];
@@ -100,16 +101,42 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			// FPGA2 is final destination
 			AuroraIfcType bodyPart = recvPacket >> 32;
 			AuroraIfcType payload = bodyPart;
-			if ( packetHeader[0] == 0 ) begin
+			if ( packetHeader[0] == 0 ) begin // Source Routing
 				Bit#(32) aomNheader = payload[31:0] ^ fromInteger(privKeyFPGA2);
 				Bit#(32) address = payload[63:32] ^ fromInteger(privKeyFPGA2);
 
-				if ( aomNheader[0] == 0 ) begin
-					// Write
+				if ( aomNheader[0] == 0 ) begin // Write
+					if ( aomNheader[31:1] == 4*1024 ) begin
+						validCheckConnectionQ.enq(1);
+					end else begin
+						validCheckConnectionQ.enq(0);
+					end
+				end else if ( aomNheader[0] == 1 ) begin // Read
+					if ( aomNheader[31:1] == 4*1024 ) begin
+						validCheckConnectionQ.enq(1);
+					end else begin
+						validCheckConnectionQ.enq(0);
+					end
+				end
+			end else if ( packetHeader[0] == 1 ) begin // Data Sending
+				Bit#(64) data = payload[63:0] ^ fromInteger(privKeyFPGA2);
+
+				if ( data == 4294967296 ) begin
+					validCheckConnectionQ.enq(1);
 				end else begin
-					// Read
+					validCheckConnectionQ.enq(0);
 				end
 			end
 		end
+	endrule
+	rule validChecker( validCheckConnectionQ.notEmpty );
+		validCheckConnectionQ.deq;
+		let v = validCheckConnectionQ.first;
+
+		Bit#(8) validCheckPort = 7;
+		Bit#(1) qidOut = validCheckPort[2];
+		Bit#(2) pidOut = truncate(validCheckPort);
+
+		auroraQuads[qidOut].user[pidOut].send(AuroraSend{packet:v,num:3});				
 	endrule
 endmodule

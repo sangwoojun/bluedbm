@@ -25,6 +25,22 @@ Integer pubKeyFPGA2 = 2;
 
 Integer privKeyFPGA2 = 2;
 
+function Bit#(8) cycleDeciderExt(Bit#(8) routeCnt, Bit#(8) payloadByte);
+	Bit#(8) auroraExtCnt = 0;
+	if ( routeCnt == 0 ) begin
+		Bit#(8) totalByte = 4+payloadByte;
+		Bit#(16) totalBits = zeroExtend(totalByte) * 8;
+		Bit#(16) decidedCycle = cycleDecider(totalBits);
+		auroraExtCnt = truncate(decidedCycle);
+	end else begin
+		Bit#(8) totalByte = 4+2+payloadByte;
+		Bit#(16) totalBits = zeroExtend(totalByte) * 8;
+		Bit#(16) decidedCycle = cycleDecider(totalBits);
+		auroraExtCnt = truncate(decidedCycle);
+	end
+	return auroraExtCnt;
+endfunction
+
 module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) auroraQuads) (HwMainIfc);
 
 	Clock curClk <- exposeCurrentClock;
@@ -77,18 +93,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			AuroraIfcType remainingPacket = recvPacket >> 40;
 			AuroraIfcType newPacket = (remainingPacket << 32) | encNewHeaderPart;
 			
-			Bit#(8) auroraExtCntFPGA2 = 0;
-			if ( routeCnt == 0 ) begin
-				Bit#(8) totalByte = 4+payloadByte;
-				Bit#(16) totalBits = zeroExtend(totalByte) * 8;
-				Bit#(16) decidedCycle = cycleDecider(totalBits);
-				auroraExtCntFPGA2 = truncate(decidedCycle);
-			end else begin
-				Bit#(8) totalByte = 4+2+payloadByte;
-				Bit#(16) totalBits = zeroExtend(totalByte) * 8;
-				Bit#(16) decidedCycle = cycleDecider(totalBits);
-				auroraExtCntFPGA2 = truncate(decidedCycle);
-			end
+			Bit#(8) auroraExtCntFPGA2 = cycleDeciderExt(routeCnt, payloadByte);
 
 			auroraQuads[qidOut].user[pidOut].send(AuroraSend{packet:newPacket,num:auroraExtCntFPGA2});			
 		end else begin

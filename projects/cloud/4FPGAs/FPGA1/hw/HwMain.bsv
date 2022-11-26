@@ -78,7 +78,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	//--------------------------------------------------------------------------------------------
 	// Get Commands from Host via PCIe
 	//--------------------------------------------------------------------------------------------
-	FIFOF#(AuroraIfcType) sendPacketByAuroraFPGA1Q <- mkFIFOF;
+	FIFOF#(Tuple3#(AuroraIfcType, Bit#(8), Bit#(8))) sendPacketByAuroraFPGA1Q <- mkFIFOF;
 	FIFOF#(AuroraIfcType) recvPacketByAuroraFPGA1Q <- mkFIFOF;
 	FIFOF#(Bit#(32)) validCheckConnectionQ <- mkFIFOF;
 	rule getCmd;
@@ -121,7 +121,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				// Final
 				AuroraIfcType srPacket = (zeroExtend(encAddress) << 80) | (zeroExtend(encAomNheader) << 48) | 
 							 (zeroExtend(encActualRoute) << 32) | (zeroExtend(encHeaderPartSR));
-				sendPacketByAuroraFPGA1Q.enq(srPacket);
+				sendPacketByAuroraFPGA1Q.enq(tuple3(srPacket, routeCnt, payloadByte));
 			end else if ( d == 1 )  begin // Data Sending 
 				// Payload 
 				Bit#(64) data = 4294967296;
@@ -150,7 +150,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				// Final
 				AuroraIfcType dsPacket = (zeroExtend(encData) << 48) | (zeroExtend(encActualRoute) << 32) | 
 							 (zeroExtend(encHeaderPartDS));
-				sendPacketByAuroraFPGA1Q.enq(dsPacket);
+				sendPacketByAuroraFPGA1Q.enq(tuple3(dsPacket, routeCnt, payloadByte));
 			end
 		end
 	endrule
@@ -159,9 +159,13 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	//--------------------------------------------------------------------------------------------
 	rule fpga1_1Sender( sendPacketByAuroraFPGA1Q.notEmpty );
 		sendPacketByAuroraFPGA1Q.deq;
-		let sendPacket = sendPacketByAuroraFPGA1Q.first;
+		let sendPacket = tpl_1(sendPacketByAuroraFPGA1Q.first);
+		let routeCnt = tpl_2(sendPacketByAuroraFPGA1Q.first);
+		let payloadByte = tpl_3(sendPacketByAuroraFPGA1Q.first);
 
-		auroraQuads[0].user[0].send(AuroraSend{packet:sendPacket,num:2});	
+		Bit#(8) auroraExtCntFPGA1 = cycleDeciderExt(routeCnt, payloadByte);
+
+		auroraQuads[0].user[0].send(AuroraSend{packet:sendPacket,num:auroraExtCntFPGA1});	
 	endrule
 	rule fpga1_1Receiver;
 		Bit#(8) inPortFPGA1_1 = 0;

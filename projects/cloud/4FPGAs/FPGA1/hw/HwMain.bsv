@@ -80,65 +80,59 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				Bit#(1) header = 0; // 0: Write, 1: Read
 				Bit#(32) aomNheader = (aom << 1) | zeroExtend(header);
 				// Actual Route
-				Bit#(8) outPortFPGA2_2 = 7;
 				Bit#(8) outPortFPGA1_2 = 2;
 				Bit#(8) outPortFPGA2_1 = 5;
 				// Header Part
 				Bit#(8) payloadByte = 8;
 				Bit#(8) startPoint = fromInteger(idxFPGA1_1);
-				Bit#(8) routeCnt = 3;
+				Bit#(8) routeCnt = 2;
 				Bit#(1) sdFlag = 0;
-				Bit#(8) numHops = 3;
+				Bit#(8) numHops = 2;
 				Bit#(32) headerPartSR = (zeroExtend(payloadByte) << 24) | (zeroExtend(startPoint) << 16) | 
 							(zeroExtend(routeCnt) << 9) | (zeroExtend(sdFlag) << 8) | 
 							(zeroExtend(numHops));
 				// Encryption
 				// Payload
-				Bit#(32) encAddress = address ^ fromInteger(pubKeyFPGA1);
-				Bit#(32) encAomNheader = aomNheader ^ fromInteger(pubKeyFPGA1);
+				Bit#(32) encAddress = address ^ fromInteger(pubKeyFPGA2);
+				Bit#(32) encAomNheader = aomNheader ^ fromInteger(pubKeyFPGA2);
 				// Actual Route
-				Bit#(8) encOutPortFPGA2_2 = outPortFPGA2_2 ^ fromInteger(pubKeyFPGA2);
 				Bit#(8) encOutPortFPGA1_2 = outPortFPGA1_2 ^ fromInteger(pubKeyFPGA1);
 				Bit#(8) encOutPortFPGA2_1 = outPortFPGA2_1 ^ fromInteger(pubKeyFPGA2);
-				Bit#(24) encActualRoute = (zeroExtend(encOutPortFPGA2_2) << 16) | 
-							  (zeroExtend(encOutPortFPGA1_2) << 8) | (zeroExtend(encOutPortFPGA2_1));
+				Bit#(16) encActualRoute = (zeroExtend(encOutPortFPGA1_2) << 8) | (zeroExtend(encOutPortFPGA2_1));
 				// Header Part
 				Bit#(32) encHeaderPartSR = headerPartSR ^ fromInteger(pubKeyFPGA2);
 
 				// Final
-				AuroraIfcType srPacket = (zeroExtend(encAddress) << 88) | (zeroExtend(encAomNheader) << 56) | 
+				AuroraIfcType srPacket = (zeroExtend(encAddress) << 80) | (zeroExtend(encAomNheader) << 48) | 
 							 (zeroExtend(encActualRoute) << 32) | (zeroExtend(encHeaderPartSR));
 				sendPacketByAuroraFPGA1Q.enq(srPacket);
 			end else if ( d == 1 )  begin // Data Sending 
 				// Payload 
 				Bit#(64) data = 4294967296;
 				// Actual Route
-				Bit#(8) outPortFPGA2_2 = 7;
 				Bit#(8) outPortFPGA1_2 = 2;
 				Bit#(8) outPortFPGA2_1 = 5;
 				// Header Part
 				Bit#(8) payloadByte = 8;
 				Bit#(8) startPoint = fromInteger(idxFPGA1_1);
-				Bit#(8) routeCnt = 3;
+				Bit#(8) routeCnt = 2;
 				Bit#(1) sdFlag = 1;
-				Bit#(8) numHops = 3;
+				Bit#(8) numHops = 2;
 				Bit#(32) headerPartDS = (zeroExtend(payloadByte) << 24) | (zeroExtend(startPoint) << 16) | 
 							(zeroExtend(routeCnt) << 9) | (zeroExtend(sdFlag) << 8) | 
 							(zeroExtend(numHops));
 				// Encryption
 				// Payload
-				Bit#(64) encData = data ^ fromInteger(pubKeyFPGA1);
+				Bit#(64) encData = data ^ fromInteger(pubKeyFPGA2);
 				// Actual Route
-				Bit#(8) encOutPortFPGA2_2 = outPortFPGA2_2 ^ fromInteger(pubKeyFPGA2);
 				Bit#(8) encOutPortFPGA1_2 = outPortFPGA1_2 ^ fromInteger(pubKeyFPGA1);
 				Bit#(8) encOutPortFPGA2_1 = outPortFPGA2_1 ^ fromInteger(pubKeyFPGA2);
-				Bit#(24) encActualRoute = (zeroExtend(encOutPortFPGA2_2) << 16) | 
-							  (zeroExtend(encOutPortFPGA1_2) << 8) | (zeroExtend(encOutPortFPGA2_1));
+				Bit#(16) encActualRoute = (zeroExtend(encOutPortFPGA1_2) << 8) | (zeroExtend(encOutPortFPGA2_1));
 				// Header Part
 				Bit#(32) encHeaderPartDS = headerPartDS ^ fromInteger(pubKeyFPGA2);
 
 				// Final
-				AuroraIfcType dsPacket = (zeroExtend(encData) << 56) | (zeroExtend(encActualRoute) << 32) | 
+				AuroraIfcType dsPacket = (zeroExtend(encData) << 48) | (zeroExtend(encActualRoute) << 32) | 
 							 (zeroExtend(encHeaderPartDS));
 				sendPacketByAuroraFPGA1Q.enq(dsPacket);
 			end
@@ -151,7 +145,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		sendPacketByAuroraFPGA1Q.deq;
 		let sendPacket = sendPacketByAuroraFPGA1Q.first;
 
-		auroraQuads[0].user[0].send(AuroraSend{packet:sendPacket,num:3});	
+		auroraQuads[0].user[0].send(AuroraSend{packet:sendPacket,num:2});	
 	endrule
 	rule fpga1_1Receiver;
 		Bit#(8) inPortFPGA1_1 = 0;
@@ -165,14 +159,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		Bit#(8) inPortFPGA1_2 = 1;
 		Bit#(1) qidIn = inPortFPGA1_2[2];
 		Bit#(2) pidIn = truncate(inPortFPGA1_2);
-
-		let recvPacket <- auroraQuads[qidIn].user[pidIn].receive;
-		recvPacketByAuroraFPGA1Q.enq(recvPacket);
-	endrule
-	rule fpga1_3Receiver;
-		Bit#(8) inPortFPGA1_3 = 3;
-		Bit#(1) qidIn = inPortFPGA1_3[2];
-		Bit#(2) pidIn = truncate(inPortFPGA1_3);
 
 		let recvPacket <- auroraQuads[qidIn].user[pidIn].receive;
 		recvPacketByAuroraFPGA1Q.enq(recvPacket);
@@ -201,18 +187,13 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			AuroraIfcType newPacket = (remainingPacket << 32) | encNewHeaderPart;
 
 			Bit#(8) auroraExtCntFPGA1 = 0;
-			if ( (routeCnt > 0) && (routeCnt < 3) ) begin
+			if ( routeCnt == 0 ) begin
+				Bit#(8) totalByte = 4+payloadByte;
+				Bit#(16) totalBits = zeroExtend(totalByte) * 8;
+				Bit#(16) decidedCycle = cycleDecider(totalBits);
+				auroraExtCntFPGA1 = truncate(decidedCycle);
+			end else begin
 				Bit#(8) totalByte = 4+2+payloadByte;
-				Bit#(16) totalBits = zeroExtend(totalByte) * 8;
-				Bit#(16) decidedCycle = cycleDecider(totalBits);
-				auroraExtCntFPGA1 = truncate(decidedCycle);
-			end else if ( (routeCnt > 2) && (routeCnt < 5) ) begin
-				Bit#(8) totalByte = 4+4+payloadByte;
-				Bit#(16) totalBits = zeroExtend(totalByte) * 8;
-				Bit#(16) decidedCycle = cycleDecider(totalBits);
-				auroraExtCntFPGA1 = truncate(decidedCycle);
-			end else if ( (routeCnt > 4) && (routeCnt < 9) ) begin
-				Bit#(8) totalByte = 4+8+payloadByte;
 				Bit#(16) totalBits = zeroExtend(totalByte) * 8;
 				Bit#(16) decidedCycle = cycleDecider(totalBits);
 				auroraExtCntFPGA1 = truncate(decidedCycle);
@@ -244,6 +225,20 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			end
 		end
 	endrule
+	rule validChecker;
+		Bit#(8) validCheckPort = 3;
+		Bit#(1) qidIn = validCheckPort[2];
+		Bit#(2) pidIn = truncate(validCheckPort);
+
+		let recvPacket <- auroraQuads[qidIn].user[pidIn].receive;
+		
+		if ( recvPacket == 1 ) begin
+			validCheckConnectionQ.enq(1);
+		end else if ( recvPacket == 0 ) begin
+			validCheckConnectionQ.enq(0);
+		end
+	endrule
+
 	//--------------------------------------------------------------------------------------------
 	// Send Routing Packet to Host
 	//--------------------------------------------------------------------------------------------

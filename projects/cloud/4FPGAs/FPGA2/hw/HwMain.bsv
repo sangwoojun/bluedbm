@@ -78,18 +78,13 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			AuroraIfcType newPacket = (remainingPacket << 32) | encNewHeaderPart;
 			
 			Bit#(8) auroraExtCntFPGA2 = 0;
-			if ( (routeCnt > 0) && (routeCnt < 3) ) begin
+			if ( routeCnt == 0 ) begin
+				Bit#(8) totalByte = 4+payloadByte;
+				Bit#(16) totalBits = zeroExtend(totalByte) * 8;
+				Bit#(16) decidedCycle = cycleDecider(totalBits);
+				auroraExtCntFPGA2 = truncate(decidedCycle);
+			end else begin
 				Bit#(8) totalByte = 4+2+payloadByte;
-				Bit#(16) totalBits = zeroExtend(totalByte) * 8;
-				Bit#(16) decidedCycle = cycleDecider(totalBits);
-				auroraExtCntFPGA2 = truncate(decidedCycle);
-			end else if ( (routeCnt > 2) && (routeCnt < 5) ) begin
-				Bit#(8) totalByte = 4+4+payloadByte;
-				Bit#(16) totalBits = zeroExtend(totalByte) * 8;
-				Bit#(16) decidedCycle = cycleDecider(totalBits);
-				auroraExtCntFPGA2 = truncate(decidedCycle);
-			end else if ( (routeCnt > 4) && (routeCnt < 9) ) begin
-				Bit#(8) totalByte = 4+8+payloadByte;
 				Bit#(16) totalBits = zeroExtend(totalByte) * 8;
 				Bit#(16) decidedCycle = cycleDecider(totalBits);
 				auroraExtCntFPGA2 = truncate(decidedCycle);
@@ -135,6 +130,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		Bit#(1) qidOut = validCheckPort[2];
 		Bit#(2) pidOut = truncate(validCheckPort);
 
-		auroraQuads[qidOut].user[pidOut].send(AuroraSend{packet:v,num:3});				
+		auroraQuads[qidOut].user[pidOut].send(AuroraSend{packet:v,num:2});				
 	endrule
 endmodule

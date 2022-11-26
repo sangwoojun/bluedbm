@@ -22,7 +22,6 @@ endinterface
 
 Integer pubKeyFPGA1 = 1;
 Integer pubKeyFPGA2 = 2;
-Integer pubKeyHost = 3;
 
 Integer privKeyFPGA2 = 2;
 
@@ -99,8 +98,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			auroraQuads[qidOut].user[pidOut].send(AuroraSend{packet:newPacket,num:auroraExtCntFPGA2});			
 		end else begin
 			// FPGA2 is final destination
-			AuroraIfcType bodyPart = recvPacket >> 32;
-			AuroraIfcType payload = bodyPart;
+			AuroraIfcType payload = recvPacket >> 32;
 			if ( packetHeader[0] == 0 ) begin // Source Routing
 				Bit#(32) aomNheader = payload[31:0] ^ fromInteger(privKeyFPGA2);
 				Bit#(32) address = payload[63:32] ^ fromInteger(privKeyFPGA2);

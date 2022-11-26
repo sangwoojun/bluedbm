@@ -27,7 +27,6 @@ Integer idxFPGA2_2 = 3;
 
 Integer pubKeyFPGA1 = 1;
 Integer pubKeyFPGA2 = 2;
-Integer pubKeyHost = 3;
 
 Integer privKeyFPGA1 = 1;
 
@@ -222,7 +221,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			auroraQuads[qidOut].user[pidOut].send(AuroraSend{packet:newPacket,num:auroraExtCntFPGA1});	
 		end else begin
 			// Host wants to use FPGA1's memory
-			//Bit#(8) addTrunc = payloadExtractor(routeCnt);
 			AuroraIfcType payload = recvPacket >> 32;
 			if ( packetHeader[0] == 0 ) begin // Source Routing
 				Bit#(32) aomNheader = payload[31:0] ^ fromInteger(privKeyFPGA1);

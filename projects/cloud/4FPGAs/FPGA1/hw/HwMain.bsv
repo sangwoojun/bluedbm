@@ -31,30 +31,6 @@ Integer pubKeyHost = 3;
 
 Integer privKeyFPGA1 = 1;
 
-function Bit#(8) payloadExtractor(Bit#(8) routeCnt);
-	Bit#(8) addTrunc = 0;
-	if ( (routeCnt > 0) && (routeCnt < 3) ) begin
-		if ( routeCnt == 1 ) begin
-			addTrunc = 8;
-		end else if ( routeCnt == 2 ) begin
-			addTrunc = 0;
-		end
-	end else if ( (routeCnt > 2) && (routeCnt < 5) ) begin
-		if ( routeCnt == 3 ) begin
-			addTrunc = 8;
-		end else if ( routeCnt == 4 ) begin
-			addTrunc = 0;
-		end
-	end else if ( (routeCnt > 4) && (routeCnt < 9) ) begin
-		if ( routeCnt == 8 ) begin
-			addTrunc = 0;
-		end else begin
-			addTrunc = 8*(8-routeCnt);
-		end
-	end
-	return addTrunc;
-endfunction
-
 module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) auroraQuads) (HwMainIfc);
 
 	Clock curClk <- exposeCurrentClock;

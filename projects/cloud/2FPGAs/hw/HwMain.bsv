@@ -149,7 +149,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		sendPacketByAuroraFPGA1Q.deq;
 		let sendPacket = sendPacketByAuroraFPGA1Q.first;
 
-		auroraQuads[0].user[0].send(AuroraSend{packet:sendPacket,num:2});
+		for ( Integer i = 0; i < 4; i = i + 1 )
+			auroraQuads[0].user[i].send(AuroraSend{packet:sendPacket,num:2});
 	endrule
 	rule fpga1Receiver_Port0( openConnect );
 		Bit#(8) inPortFPGA1_1 = 0;
@@ -159,7 +160,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		let recvPacket <- auroraQuads[qidIn].user[pidIn].receive;
 		recvPacketByAuroraFPGA1Q.enq(recvPacket);
 	endrule
-	rule fpga1Decrypter( openConnect && recvPacketByAuroraFPGA1Q.notEmpty );
+	rule fpga1Decrypter( openConnect );
 		Integer privKeyFPGA1 = 1;
 
 		recvPacketByAuroraFPGA1Q.deq;
@@ -196,21 +197,23 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	//--------------------------------------------------------------------------------------------
 	// FPGA2
 	//--------------------------------------------------------------------------------------------
-	FIFOF#(AuroraIfcType) recvPacketByAuroraFPGA2Q <- mkFIFOF;
+	Vector#(4, FIFOF#(AuroraIfcType)) recvPacketByAuroraFPGA2Q <- replicateM( mkFIFOF );
 	FIFOF#(AuroraIfcType) validCheckConnectionFPGA2Q <- mkFIFOF;
 	rule fpga2Receiver_Port4( !openConnect );
 		Bit#(8) inPortFPGA2_1 = 4;
 		Bit#(1) qidIn = inPortFPGA2_1[2];
 		Bit#(2) pidIn = truncate(inPortFPGA2_1);
 
-		let recvPacket <- auroraQuads[qidIn].user[pidIn].receive;
-		recvPacketByAuroraFPGA2Q.enq(recvPacket);
+		for ( Integer i = 0; i < 4; i = i + 1 ) begin
+			let recvPacket <- auroraQuads[1].user[i].receive;
+			recvPacketByAuroraFPGA2Q[i].enq(recvPacket);
+		end
 	endrule
-	rule fpga2Decrypter( !openConnect && recvPacketByAuroraFPGA2Q.notEmpty );
+	rule fpga2Decrypter( !openConnect );
 		Integer privKeyFPGA2 = 2;
 
-		recvPacketByAuroraFPGA2Q.deq;
-		let recvPacket = recvPacketByAuroraFPGA2Q.first;
+		recvPacketByAuroraFPGA2Q[0].deq;
+		let recvPacket = recvPacketByAuroraFPGA2Q[0].first;
 
 		Bit#(32) headerPart = recvPacket[31:0] ^ fromInteger(privKeyFPGA2);
 		Bit#(8) numHops = headerPart[7:0];

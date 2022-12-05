@@ -2,7 +2,8 @@ import FIFO::*;
 import FIFOF::*;
 import Clocks::*;
 import Vector::*;
-import Real::*;
+import FloatingPoint::*;
+import Float32::*;
 
 import Serializer::*;
 
@@ -11,6 +12,7 @@ import BRAMFIFO::*;
 
 import PcieCtrl::*;
 import DRAMController::*;
+import DRAMArbiterRemote::*;
 
 import AuroraCommon::*;
 import AuroraExtImportCommon::*;
@@ -42,7 +44,7 @@ function Bit#(8) cycleDeciderExt(Bit#(8) routeCnt, Bit#(8) payloadByte);
 	return auroraExtCnt;
 endfunction
 
-module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) auroraQuads) (HwMainIfc);
+module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) auroraQuads, Vector#(4, FpPairIfc#(32)) fpOperation) (HwMainIfc);
 
 	Clock curClk <- exposeCurrentClock;
 	Reset curRst <- exposeCurrentReset;
@@ -50,6 +52,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	Clock pcieclk = pcie.user_clk;
 	Reset pcierst = pcie.user_rst;	
 
+	//DRAMArbiterRemoteIfc dramArbiter <- mkDRAMArbiterRemote;
+	
 	//--------------------------------------------------------------------------------------
 	// Pcie Read and Write
 	//--------------------------------------------------------------------------------------
@@ -74,7 +78,15 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	//--------------------------------------------------------------------------------------------
 	// Get Commands from Host via PCIe
 	//--------------------------------------------------------------------------------------------
-	FIFOF#(AuroraIfcType) sendPacketByAuroraFPGA1Q <- mkFIFOF;
+	FIFOF#(Tuple2#(AuroraIfcType, Bit#(20))) sendPacketByAuroraFPGA1Q <- mkFIFOF;
+	FIFOF#(Bit#(32)) validCheckConnectionQ <- mkFIFOF;
+	Reg#(Bit#(480)) inPayload <- mkReg(0);
+	Reg#(Bit#(4)) inPayloadCnt <- mkReg(0);
+
+	Reg#(Bit#(32)) first <- mkReg(0);
+	Reg#(Bit#(32)) second <- mkReg(0);
+	Reg#(Bit#(4)) cnt <- mkReg(0);
+
 	Reg#(Bool) openConnect <- mkReg(False);
 	rule getCmd;
 		pcieWriteQ.deq;
@@ -82,56 +94,95 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 
 		let d = w.data;
 		let a = w.addr;
-		
-		if ( a == 0 ) begin
-			if ( d == 0 ) begin // Source Routing
-				// Payload
-				Bit#(32) address = 0;
-				Bit#(32) aom = 4*1024;
-				Bit#(1) header = 0; // 0: Write, 1: Read
-				Bit#(32) aomNheader = (aom << 1) | zeroExtend(header);
-				// Header Part
-				Bit#(8) payloadByte = 8;
-				Bit#(8) startPoint = fromInteger(idxFPGA1);
-				Bit#(8) routeCnt = 0;
-				Bit#(1) sdFlag = 0;
-				Bit#(8) numHops = 0;
-				Bit#(32) headerPartSR = (zeroExtend(payloadByte) << 24) | (zeroExtend(startPoint) << 16) | 
-							(zeroExtend(routeCnt) << 9) | (zeroExtend(sdFlag) << 8) | 
-							(zeroExtend(numHops));
+		let off = (a >> 2);
 
-				// Encryption
-				// Payload
-				Bit#(32) encAddress = address ^ fromInteger(pubKeyFPGA2);
-				Bit#(32) encAomNheader = aomNheader ^ fromInteger(pubKeyFPGA2);
-				// Header Part
-				Bit#(32) encHeaderPartSR = headerPartSR ^ fromInteger(pubKeyFPGA2);
+		if ( off == 0 ) begin // Mode 0: Use only FPGA1
+			// Do not need to send source routing packet
+			// Just send data sending packet without encryption
+			// Store the data to DRAM of FPGA1
+			// Writing the data to DRAM should be performed by Burst method
+			//dramArbiter.cmd(0, d); // 0: Local Access, 1: Remote Access
+			
+			// Test
+			if ( cnt == 0 ) begin
+				first <= d;
+				cnt <= cnt + 1;
+			end else if ( cnt == 1 ) begin
+				second <= d;
+				cnt <= cnt + 1;
+			end else if ( cnt == 2 ) begin
+				fpOperation[3].enq(first, second);	
+				cnt <= cnt + 1;
+			end else begin
+				fpOperation[3].deq;
+				let v = fpOperation[3].first;
+				if ( v[31] == 0 ) begin
+					validCheckConnectionQ.enq(1);
+				end else begin
+					validCheckConnectionQ.enq(0);
+				end
+			end	
+		end else if ( off == 5 ) begin // Mode 5: Generate a source routing packet
+			// Information
+			Bit#(32) address = 0;
+			Bit#(32) aom = 420000000; // 0.42GB
+			Bit#(1) header = 0; // 0: Write, 1: Read
+			Bit#(32) aomNheader = (aom << 1) | zeroExtend(header);
+			// Header Part
+			Bit#(8) payloadByte = 8;
+			Bit#(8) startPoint = fromInteger(idxFPGA1);
+			Bit#(8) routeCnt = 0;
+			Bit#(1) sdFlag = 0;
+			Bit#(8) numHops = 0;
+			Bit#(32) headerPartSR = (zeroExtend(payloadByte) << 24) | (zeroExtend(startPoint) << 16) | 
+						(zeroExtend(routeCnt) << 9) | (zeroExtend(sdFlag) << 8) | 
+						(zeroExtend(numHops));
 
-				// Final
-				AuroraIfcType srPacket = (zeroExtend(encAddress) << 64) | (zeroExtend(encAomNheader) << 32) | (zeroExtend(encHeaderPartSR));
-				sendPacketByAuroraFPGA1Q.enq(srPacket);
-				openConnect <= True;
-			end else if ( d == 1 )  begin // Data Sending 
-				// Payload 
-				Bit#(64) data = 4294967296;
-				// Header Part
-				Bit#(8) payloadByte = 8;
-				Bit#(8) startPoint = fromInteger(idxFPGA1);
-				Bit#(8) routeCnt = 0;
-				Bit#(1) sdFlag = 1;
-				Bit#(8) numHops = 0;
-				Bit#(32) headerPartDS = (zeroExtend(payloadByte) << 24) | (zeroExtend(startPoint) << 16) | 
-							(zeroExtend(routeCnt) << 9) | (zeroExtend(sdFlag) << 8) | 
-							(zeroExtend(numHops));
-				// Encryption
-				// Payload
-				Bit#(64) encData = data ^ fromInteger(pubKeyFPGA2);
-				// Header Part
-				Bit#(32) encHeaderPartDS = headerPartDS ^ fromInteger(pubKeyFPGA2);
+			// Encryption
+			// Payload
+			Bit#(32) encAddress = address ^ fromInteger(pubKeyFPGA2);
+			Bit#(32) encAomNheader = aomNheader ^ fromInteger(pubKeyFPGA2);
+			// Header Part
+			Bit#(32) encHeaderPartSR = headerPartSR ^ fromInteger(pubKeyFPGA2);
 
-				// Final
-				AuroraIfcType dsPacket = (zeroExtend(encData) << 32) | (zeroExtend(encHeaderPartDS));
-				sendPacketByAuroraFPGA1Q.enq(dsPacket);
+			// Final
+			AuroraIfcType srPacket = (zeroExtend(encAddress) << 64) | (zeroExtend(encAomNheader) << 32) | (zeroExtend(encHeaderPartSR));
+			sendPacketByAuroraFPGA1Q.enq(tuple2(srPacket, off));
+		end else begin // Mode 1~4: Use both FPGA1 and FPGA2 with up to 4 Aurora lanes
+			// Send the value of the particles
+			if ( inPayloadCnt != 0 ) begin
+				if ( inPayloadCnt == 15 ) begin
+					// Payload
+					Bit#(480) data = inPayload;
+					// Header Part
+					Bit#(8) payloadByte = 60;
+					Bit#(8) startPoint = fromInteger(idxFPGA1);
+					Bit#(8) routeCnt = 0;
+					Bit#(1) sdFlag = 1;
+					Bit#(8) numHops = 0;
+					Bit#(32) headerPartDS = (zeroExtend(payloadByte) << 24) | (zeroExtend(startPoint) << 16) | 
+								(zeroExtend(routeCnt) << 9) | (zeroExtend(sdFlag) << 8) | 
+								(zeroExtend(numHops));
+					// Encryption
+					// Payload
+					Bit#(480) encData = data ^ fromInteger(pubKeyFPGA2);
+					// Header Part
+					Bit#(32) encHeaderPartDS = headerPartDS ^ fromInteger(pubKeyFPGA2);
+
+					// Final
+					AuroraIfcType dsPacket = (zeroExtend(encData) << 32) | (zeroExtend(encHeaderPartDS));
+					sendPacketByAuroraFPGA1Q.enq(tuple2(dsPacket, off));			
+					
+					inPayload <= 0;	
+					inPayloadCnt <= 0;
+				end else begin
+					Bit#(480) inPayloadPrev = inPayload;
+					inPayload <= (zeroExtend(d) << 32) | (inPayloadPrev);
+					inPayloadCnt <= inPayloadCnt + 1;
+				end
+			end else begin
+				inPayload <= zeroExtend(d);
+				inPayloadCnt <= inPayloadCnt + 1;
 			end
 		end
 	endrule
@@ -147,7 +198,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	FIFOF#(AuroraIfcType) validCheckConnectionFPGA1Q <- mkFIFOF;
 	rule fpga1Sender_Port0( openConnect && sendPacketByAuroraFPGA1Q.notEmpty );
 		sendPacketByAuroraFPGA1Q.deq;
-		let sendPacket = sendPacketByAuroraFPGA1Q.first;
+		let sendPacket = tpl_1(sendPacketByAuroraFPGA1Q.first);
 
 		for ( Integer i = 0; i < 4; i = i + 1 )
 			auroraQuads[0].user[i].send(AuroraSend{packet:sendPacket,num:2});
@@ -246,7 +297,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	//--------------------------------------------------------------------------------------------
 	// Send the packets to the host
 	//--------------------------------------------------------------------------------------------
-	FIFOF#(Bit#(32)) validCheckConnectionQ <- mkFIFOF;
+	//FIFOF#(Bit#(32)) validCheckConnectionQ <- mkFIFOF;
 	rule validCheckerFPGA1( openConnect );
 		Bit#(8) validCheckPort = 1;
 		Bit#(1) qidIn = validCheckPort[2];

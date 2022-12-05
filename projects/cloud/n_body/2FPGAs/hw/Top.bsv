@@ -4,6 +4,8 @@ import DefaultValue::*;
 import FIFO::*;
 import Vector::*;
 import Connectable::*;
+import FloatingPoint::*;
+import Float32::*;
 
 // PCIe stuff
 import PcieImport :: *;
@@ -79,8 +81,13 @@ module mkProjectTop #(
 	auroraQuad[0] <- mkAuroraExt117(aurora_quad117_gtx_clk_p_v, aurora_quad117_gtx_clk_n_v, sys_clk_200mhz_buf, clocked_by user_clock, reset_by user_reset);
 	auroraQuad[1] <- mkAuroraExt119(aurora_quad119_gtx_clk_p_v, aurora_quad119_gtx_clk_n_v, sys_clk_200mhz_buf, clocked_by user_clock, reset_by user_reset);
 
+	Vector#(4, FpPairIfc#(32)) fpOperation;
+	fpOperation[0] <- mkFpSub32(clocked_by user_clock, reset_by user_reset);
+	fpOperation[1] <- mkFpAdd32(clocked_by user_clock, reset_by user_reset);
+	fpOperation[2] <- mkFpMult32(clocked_by user_clock, reset_by user_reset);
+	fpOperation[3] <- mkFpDiv32(clocked_by user_clock, reset_by user_reset);
 
-	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, dramController.user, auroraQuad, clocked_by user_clock, reset_by user_reset);
+	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, dramController.user, auroraQuad, fpOperation, clocked_by user_clock, reset_by user_reset);
 
 
 	//ReadOnly#(Bit#(4)) leddata <- mkNullCrossingWire(noClock, pcieCtrl.leds);
@@ -111,7 +118,13 @@ module mkProjectTop_bsim (Empty);
 	auroraQuads[0] <- mkAuroraExt117(curclk, curclk, curclk);
 	auroraQuads[1] <- mkAuroraExt119(curclk, curclk, curclk);
 	
-	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, dramController.user, auroraQuads);
+	Vector#(4, FpPairIfc#(32)) fpOperation;
+	fpOperation[0] <- mkFpSub32;
+	fpOperation[1] <- mkFpAdd32;
+	fpOperation[2] <- mkFpMult32;
+	fpOperation[3] <- mkFpDiv32;
+
+	HwMainIfc hwmain <- mkHwMain(pcieCtrl.user, dramController.user, auroraQuads, fpOperation);
 	
 	rule auroraExtAlwaysEn;
 		auroraQuads[0].aurora[0].rxn_in(1);

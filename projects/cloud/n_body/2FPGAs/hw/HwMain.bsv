@@ -116,7 +116,10 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			end else begin
 				fpOperation[3].deq;
 				let v = fpOperation[3].first;
-				if ( v[31] == 0 ) begin
+				let sign = second[31];
+				let exponent = second[30:23];
+				let fraction = second[22:0];
+				if ( exponent == 128 ) begin
 					validCheckConnectionQ.enq(1);
 				end else begin
 					validCheckConnectionQ.enq(0);

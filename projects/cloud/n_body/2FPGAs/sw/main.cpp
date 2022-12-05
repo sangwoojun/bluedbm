@@ -54,12 +54,12 @@ int main(int argc, char** argv) {
 	//------------------------------------------------------------------------
 	// Test
 	//------------------------------------------------------------------------
-	float a = 3.00;
-	float b = 3.00;
-	pcie->userWriteWord(0, a);
-	pcie->userWriteWord(0, b);
-	pcie->userWriteWord(0, 0);
-	pcie->userWriteWord(0, 0);
+	float a = 3.00f;
+	uint32_t av = *(uint32_t*)&a;
+	pcie->userWriteWord(0, av);
+	pcie->userWriteWord(0, av);
+	pcie->userWriteWord(0, av);
+	pcie->userWriteWord(0, av);
 	//------------------------------------------------------------------------
 	// Generate the values of the particles
 	//------------------------------------------------------------------------

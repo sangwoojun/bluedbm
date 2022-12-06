@@ -2,8 +2,10 @@ import FIFO::*;
 import FIFOF::*;
 import Clocks::*;
 import Vector::*;
+
 import FloatingPoint::*;
 import Float32::*;
+import Float64::*;
 
 import Serializer::*;
 
@@ -11,6 +13,7 @@ import BRAM::*;
 import BRAMFIFO::*;
 
 import PcieCtrl::*;
+
 import DRAMController::*;
 import DRAMArbiterRemote::*;
 
@@ -44,7 +47,7 @@ function Bit#(8) cycleDeciderExt(Bit#(8) routeCnt, Bit#(8) payloadByte);
 	return auroraExtCnt;
 endfunction
 
-module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) auroraQuads, Vector#(4, FpPairIfc#(32)) fpOperation) (HwMainIfc);
+module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) auroraQuads) (HwMainIfc);
 
 	Clock curClk <- exposeCurrentClock;
 	Reset curRst <- exposeCurrentReset;
@@ -52,6 +55,10 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	Clock pcieclk = pcie.user_clk;
 	Reset pcierst = pcie.user_rst;	
 
+	FpPairIfc#(32) fpSub32 <- mkFpSub32;
+	FpPairIfc#(32) fpAdd32 <- mkFpAdd32;
+	FpPairIfc#(32) fpMult32 <- mkFpMult32;
+	FpPairIfc#(32) fpDiv32 <- mkFpDiv32;
 	//DRAMArbiterRemoteIfc dramArbiter <- mkDRAMArbiterRemote;
 	
 	//--------------------------------------------------------------------------------------
@@ -111,15 +118,15 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				second <= d;
 				cnt <= cnt + 1;
 			end else if ( cnt == 2 ) begin
-				fpOperation[3].enq(first, second);	
+				fpDiv32.enq(first, second);	
 				cnt <= cnt + 1;
 			end else begin
-				fpOperation[3].deq;
-				let v = fpOperation[3].first;
+				fpDiv32.deq;
+				let v = fpDiv32.first;
 				let sign = v[31];
 				let exponent = v[30:23];
 				let fraction = v[22:0];
-				if ( exponent == 128 ) begin
+				if ( v == 32'b01000000010000000000000000000000 ) begin
 					validCheckConnectionQ.enq(1);
 				end else begin
 					validCheckConnectionQ.enq(0);

@@ -54,12 +54,14 @@ int main(int argc, char** argv) {
 	//------------------------------------------------------------------------
 	// Test
 	//------------------------------------------------------------------------
-	float a = 9.00f;
-	float b = 3.00f;
-	uint32_t av = *(uint32_t*)&a;
-	uint32_t bv = *(uint32_t*)&b;
-	pcie->userWriteWord(0, av);
-	pcie->userWriteWord(0, bv);
+	float* a = (float*)malloc(sizeof(float)*2);
+	a[0] = 9.00f;
+	a[1] = 3.00f;
+	uint32_t* av = (uint32_t*)malloc(sizeof(uint32_t)*2);
+	av[0] = *(uint32_t*)&a[0];
+	av[1] = *(uint32_t*)&a[1];
+	pcie->userWriteWord(0, av[0]);
+	pcie->userWriteWord(0, av[1]);
 	pcie->userWriteWord(0, 0);
 	pcie->userWriteWord(0, 0);
 	//------------------------------------------------------------------------

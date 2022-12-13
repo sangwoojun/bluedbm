@@ -52,22 +52,10 @@ int main(int argc, char** argv) {
 	printf( "\n" );
 	fflush( stdout );	
 	//------------------------------------------------------------------------
-	// Test
-	//------------------------------------------------------------------------
-	float* a = (float*)malloc(sizeof(float)*2);
-	a[0] = 9.00f;
-	a[1] = 3.00f;
-	uint32_t* av = (uint32_t*)malloc(sizeof(uint32_t)*2);
-	av[0] = *(uint32_t*)&a[0];
-	av[1] = *(uint32_t*)&a[1];
-	pcie->userWriteWord(0, av[0]);
-	pcie->userWriteWord(0, av[1]);
-	pcie->userWriteWord(0, 0);
-	pcie->userWriteWord(0, 0);
-	//------------------------------------------------------------------------
 	// Generate the values of the particles
 	//------------------------------------------------------------------------
-	/*float* particleLocX = (float*)malloc(sizeof(float)*NumParticles);
+	float* particleLocX = (float*)malloc(sizeof(float)*NumParticles);
+	uint32_t* particleLocXv = (uint32_t*)malloc(sizeof(uint32_t)*NumParticles);
 	for ( int i = 0; i < NumParticles; i ++ ) {
 		particleLocX[i] = (float)(rand()%10000)/10000.f;
 		for ( int j = 0; j < i; j ++ ) {
@@ -77,7 +65,11 @@ int main(int argc, char** argv) {
 			}
 		}
 	}
+	for ( int k = 0; k < NumParticles; k ++ ) {
+		particleLocXv[k] = *(uint32_t*)&particleLocX[k];
+	}
 	float* particleLocY = (float*)malloc(sizeof(float)*NumParticles);
+	uint32_t* particleLocYv = (uint32_t*)malloc(sizeof(uint32_t)*NumParticles);
 	for ( int i = 0; i < NumParticles; i ++ ) {
 		particleLocY[i] = (float)(rand()%10000)/10000.f;
 		for ( int j = 0; j < i; j ++ ) {
@@ -87,7 +79,11 @@ int main(int argc, char** argv) {
 			}
 		}
 	}
+	for ( int k = 0; k < NumParticles; k ++ ) {
+		particleLocYv[k] = *(uint32_t*)&particleLocY[k];
+	}
 	float* particleLocZ = (float*)malloc(sizeof(float)*NumParticles);
+	uint32_t* particleLocZv = (uint32_t*)malloc(sizeof(uint32_t)*NumParticles);
 	for ( int i = 0; i < NumParticles; i ++ ) {
 		particleLocZ[i] = (float)(rand()%10000)/10000.f;
 		for ( int j = 0; j < i; j ++ ) {
@@ -97,7 +93,25 @@ int main(int argc, char** argv) {
 			}
 		}
 	}
+	for ( int k = 0; k < NumParticles; k ++ ) {
+		particleLocZv[k] = *(uint32_t*)&particleLocZ[k];
+	}
+	float* particleMass = (float*)malloc(sizeof(float)*NumParticles);
+	uint32_t* particleMassv = (uint32_t*)malloc(sizeof(uint32_t)*NumParticles);	
+	for ( int i = 0; i < NumParticles; i ++ ) {
+		particleMass[i] = (float)(rand()%10000)/10000.f;
+		for ( int j = 0; j < i; j ++ ) {
+			if ( particleMass[i] == particleMass[j] ) {
+				i--;
+				break;
+			}
+		}
+	}
+	for ( int k = 0; k < NumParticles; k ++ ) {
+		particleMassv[k] = *(uint32_t*)&particleMass[k];
+	}
 	float* particleVelX = (float*)malloc(sizeof(float)*NumParticles);
+	uint32_t* particleVelXv = (uint32_t*)malloc(sizeof(uint32_t)*NumParticles);	
 	for ( int i = 0; i < NumParticles; i ++ ) {
 		particleVelX[i] = (float)(rand()%10000)/10000.f;
 		for ( int j = 0; j < i; j ++ ) {
@@ -107,7 +121,11 @@ int main(int argc, char** argv) {
 			}
 		}
 	}
+	for ( int k = 0; k < NumParticles; k ++ ) {
+		particleVelXv[k] = *(uint32_t*)&particleVelX[k];
+	}
 	float* particleVelY = (float*)malloc(sizeof(float)*NumParticles);
+	uint32_t* particleVelYv = (uint32_t*)malloc(sizeof(uint32_t)*NumParticles);	
 	for ( int i = 0; i < NumParticles; i ++ ) {
 		particleVelY[i] = (float)(rand()%10000)/10000.f;
 		for ( int j = 0; j < i; j ++ ) {
@@ -117,7 +135,11 @@ int main(int argc, char** argv) {
 			}
 		}
 	}
+	for ( int k = 0; k < NumParticles; k ++ ) {
+		particleVelYv[k] = *(uint32_t*)&particleVelY[k];
+	}
 	float* particleVelZ = (float*)malloc(sizeof(float)*NumParticles);
+	uint32_t* particleVelZv = (uint32_t*)malloc(sizeof(uint32_t)*NumParticles);	
 	for ( int i = 0; i < NumParticles; i ++ ) {
 		particleVelZ[i] = (float)(rand()%10000)/10000.f;
 		for ( int j = 0; j < i; j ++ ) {
@@ -127,20 +149,13 @@ int main(int argc, char** argv) {
 			}
 		}
 	}
-	float* particleMass = (float*)malloc(sizeof(float)*NumParticles);
-	for ( int i = 0; i < NumParticles; i ++ ) {
-		particleMass[i] = (float)(rand()%10000)/10000.f;
-		for ( int j = 0; j < i; j ++ ) {
-			if ( particleMass[i] == particleMass[j] ) {
-				i--;
-				break;
-			}
-		}
-	}*/
+	for ( int k = 0; k < NumParticles; k ++ ) {
+		particleVelZv[k] = *(uint32_t*)&particleVelZ[k];
+	}
 	//------------------------------------------------------------------------	
 	// Take the value of system mode & Send the source routing packets
 	//------------------------------------------------------------------------
-	/*int mode = 0;
+	int mode = 0;
 	int srPacketMode = 5;
 	printf( "The system mode\n" );
 	printf( "0: Use only FPGA1\n" );
@@ -159,20 +174,22 @@ int main(int argc, char** argv) {
 		printf( "Sending source routing packets from FPGA1 to FPGA2\n" );
 		fflush( stdout );
 		pcie->userWriteWord(srPacketMode*4, 0);
-	}*/
+	}
 	//------------------------------------------------------------------------	
 	// Send the values of the particles through PCIe
 	//------------------------------------------------------------------------
-	/*for ( int k = 0; k < NumParticles; k ++ ) {
-		pcie->userwriteword(mode*4, particleLocX[k]);
-		pcie->userwriteword(mode*4, particleLocY[k]);
-		pcie->userwriteword(mode*4, particleLocZ[k]);
-		pcie->userwriteword(mode*4, particleVelX[k]);
-		pcie->userwriteword(mode*4, particleVelY[k]);
-		pcie->userwriteword(mode*4, particleVelZ[k]);
-		pcie->userwriteword(mode*4, particleMass[k]);
+	for ( int k = 0; k < NumParticles; k ++ ) {
+		pcie->userWriteWord(mode*4, particleLocXv[k]);
+		pcie->userWriteWord(mode*4, particleLocYv[k]);
+		pcie->userWriteWord(mode*4, particleLocZv[k]);
+		pcie->userWriteWord(mode*4, particleMassv[k]);
 	}
-	*/
+	for ( int l = 0; l < NumParticles; l ++ ) {
+		pcie->userWriteWord(mode*4, particleVelXv[l]);
+		pcie->userWriteWord(mode*4, particleVelYv[l]);
+		pcie->userWriteWord(mode*4, particleVelZv[l]);
+	}
+	
 	unsigned int d_0 = 0;
 	while ( 1 ) {
 		d_0 = pcie->userReadWord(0);

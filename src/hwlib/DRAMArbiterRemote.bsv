@@ -6,16 +6,16 @@ import Vector::*;
 import MergeN::*;
 import DRAMController::*;
 
-interface DRAMArbiterUserIfc;
-	method Action cmd(Bit#(64) addr, Bit#(32) words, Bool write);
+interface DRAMArbiterRemoteUserIfc;
+	method Action cmd(Bit#(64) addr, Bit#(32) words, Bool write, Bool remote);
 	method ActionValue#(Bit#(512)) read;
 	method Action write(Bit#(512) data);
 endinterface
-interface DRAMArbiterIfc #(numeric type ways);
-	interface Vector#(ways, DRAMArbiterUserIfc) users;
+interface DRAMArbiterRemoteIfc#(numeric type ways);
+	interface Vector#(ways, DRAMArbiterRemoteUserIfc) users;
 endinterface
 
-module mkDRAMArbiter#(DRAMUserIfc dram) (DRAMArbiterIfc#(ways));
+module mkDRAMArbiterRemote#(DRAMUserIfc dram) (DRAMArbiterRemoteIfc#(ways));
 
 	MergeNIfc#(ways, Tuple4#(Bit#(8), Bit#(64), Bit#(32), Bool)) mreq <- mkMergeN;
 	Vector#(ways, FIFO#(Bit#(512))) resQv <- replicateM(mkSizedFIFO(8));
@@ -43,7 +43,7 @@ module mkDRAMArbiter#(DRAMUserIfc dram) (DRAMArbiterIfc#(ways));
 			curSrc <= src;
 		end
 
-		if ( write) begin
+		if ( write ) begin
 			dram.write(addr, writeQv[src].first, 7'b1000000);
 			writeQv[src].deq;
 			//dram.write(addr, 0,7'b1000000);
@@ -82,11 +82,11 @@ module mkDRAMArbiter#(DRAMUserIfc dram) (DRAMArbiterIfc#(ways));
 		resQv[src].enq(d);
 	endrule
 
-	Vector#(ways, DRAMArbiterUserIfc) users_;
+	Vector#(ways, DRAMArbiterRemoteUserIfc) users_;
 
 	for (Integer i = 0; i < valueOf(ways); i=i+1 ) begin
-		users_[i] = interface DRAMArbiterUserIfc;
-		method Action cmd(Bit#(64) addr, Bit#(32) words, Bool write);
+		users_[i] = interface DRAMArbiterRemoteUserIfc;
+		method Action cmd(Bit#(64) addr, Bit#(32) words, Bool write, Bool remote);
 			mreq.enq[i].enq(tuple4(fromInteger(i), addr, words, write));
 		endmethod
 		method ActionValue#(Bit#(512)) read;
@@ -96,7 +96,7 @@ module mkDRAMArbiter#(DRAMUserIfc dram) (DRAMArbiterIfc#(ways));
 		method Action write(Bit#(512) data);
 			writeQv[i].enq(data);
 		endmethod
-		endinterface: DRAMArbiterUserIfc;
+		endinterface: DRAMArbiterRemoteUserIfc;
 	end
 	interface users = users_;
 endmodule

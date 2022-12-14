@@ -22,6 +22,8 @@ import AuroraExtImportCommon::*;
 import AuroraExtImport117::*;
 import AuroraExtImport119::*;
 
+import Nbody::*;
+
 interface HwMainIfc;
 endinterface
 
@@ -31,7 +33,6 @@ Integer idxFPGA2 = 1;
 Integer pubKeyFPGA1 = 1;
 Integer pubKeyFPGA2 = 2;
 
-Integer totalParticles = 16*1024*1024;
 Integer totalMemWorRWords = 7*1024*1024;
 Integer read = 0;
 Integer write = 1;
@@ -69,7 +70,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	FpPairIfc#(32) fpSqrt32 <- mkFpSqrt32;
 
 	DRAMArbiterRemoteIfc#(4) dramArbiterRemote <- mkDRAMArbiterRemote;
-	
+	NbodyIfc nbody <- mkNbody;
 	//--------------------------------------------------------------------------------------
 	// Pcie Read and Write
 	//--------------------------------------------------------------------------------------
@@ -333,11 +334,14 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	//--------------------------------------------------------------------------------------------
 	Reg#(Bool) relayPayloadPM <- mkReg(True);
 	Reg#(Bool) relayPayloadV <- mkReg(False);
+	Reg#(Bit#(24)) relayPayloadCnt <- mkReg(0);
 	rule fpga1Nbody;
 		if ( relayPayloadPM ) begin
 			originDataPMQ.deq;
 			let p = originDataPMQ.first;
-			...
+	
+			nbody.dataPMIn(p, relayPayloadCnt);	
+
 			if ( relayPayloadCnt == (fromInteger(totalParticles) - 1) ) begin
 				relayPayloadPM <= False;
 				relayPayloadV <= True;
@@ -348,7 +352,9 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		end else if (relayPayloadV) begin
 			originDataVQ.deq;
 			let p = originDataVQ.first;
-			...
+
+			nbody.dataVIn(p, relayPayloadCnt);
+			
 			if ( relayPayloadCnt == (fromInteger(totalParticles) - 1) ) begin
 				relayPayloadPM <= True;
 				relayPayloadV <= False;

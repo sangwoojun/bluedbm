@@ -11,7 +11,7 @@ import Float32::*;
 typedef 5 PeWaysLog;
 typedef TExp#(PeWaysLog) PeWays;
 
-
+Integer totalParticles = 16*1024*1024;
 
 interface CalPositIfc;
 endinterface
@@ -130,9 +130,9 @@ module mkCalAccelPe#(Bit#(PeWaysLog) peIdx) (CalAccelPeIfc);
 	endmethod
 endmodule
 interface CalAccelIfc;
-	method Action i(Vector#(4, Bit#(32)) dataI);
-	method Action j(Vector#(4, Bit#(32)) dataJ);
-	method ActionValue#(Vector#(4, Bit#(32))) a;
+	method Action iIn(Vector#(4, Bit#(32)) dataI);
+	method Action jIn(Vector#(4, Bit#(32)) dataJ);
+	method ActionValue#(Vector#(4, Bit#(32))) aOut;
 endinterface
 module mkCalAccel(CalAccelIfc);
 	Vector#(PeWays, PeIfc) pes;
@@ -197,39 +197,72 @@ module mkCalAccel(CalAccelIfc);
 		end
 	endrule
 	
-	method Action i(Vector#(4, Bit#(32)) dataI);
+	method Action iIn(Vector#(4, Bit#(32)) dataI);
 		iInQs[0].enq(dataI);
 	endmethod
-	method Action j(Vector#(4, Bit#(32)) dataJ);
+	method Action jIn(Vector#(4, Bit#(32)) dataJ);
 		jInQs[0].enq(dataJ);
 	endmethod
-	method ActionValue#(Vector#(4, Bit#(32))) a;
+	method ActionValue#(Vector#(4, Bit#(32))) aOut;
 		aOutQ.deq;
 		return aOutQ.first;
 	endmethod
 endmodule
 
 interface NbodyIfc;
-	method Action dataPMIn(Vector#(4, Bit#(32)) originDataPM);
-	method Action dataVIn(Vector#(3, Bit#(32)) originDataV);
+	method Action dataPMIn(Vector#(4, Bit#(32)) originDataPM, Bit#(24) inputPMIdx);
+	method Action dataVIn(Vector#(3, Bit#(32)) originDataV, Bit#(24) inputVIdx);
 	method ActionValue#(Vector#(4, Bit#(32))) dataOutPM;
 	method ActionValue#(Vector#(3, Bit#(32))) dataOutV;
 endinterface
 
 module mkNbody(NbodyIfc);
-	FIFO#(Vector#(4, Bit#(32))) dataPMQ <- mkFIFO;
-	FIFO#(Vector#(3, Bit#(32))) dataVQ <- mkFIFO;
+	FIFO#(Tuple2#(Vector#(4, Bit#(32)), Bit#(24))) dataPMQ <- mkFIFO;
+	FIFO#(Tuple2#(Vector#(3, Bit#(32)), Bit#(24))) dataVQ <- mkFIFO;
 	FIFO#(Vector#(4, Bit#(32))) resultOutPMQ <- mkFIFO;
 	FIFO#(Vector#(3, Bit#(32))) resultOutVQ <- mkFIFO;
 
 	CalAccelIfc calAcc <- mkCalAccel;
 	CalVelocIfc calVel <- mkCalVeloc;
 
-	method Action dataPMIn(Vector#(4, Bit#(32)) originDataPM);
-		dataPMQ.enq(originDataPM);
+	FIFOF#(Vector#(4, Bit#(32))) relayDataPMIQ <- mkSizedFIFOF(64);
+	Reg#(Bit#(24)) relayDataPMCnt <- mkReg(0);
+	Reg#(Bool) relayDataPMI <- mkReg(True);
+	rule relayDataPMJ;
+		dataPMQ.deq;
+		Vector#(4, Bit#(32)) p = tpl_1(dataPMQ.first);
+		Bit#(24) idx = tpl_2(dataPMQ.first);
+
+		if ( relayDataPMI ) begin
+			if ( relayDataPMIQ.notFull ) begin
+				if ( relayDataPMCnt == idx ) begin
+					if ( relayDataPMCnt == (fromInteger(totalParticles) - 1) ) begin
+						relayDataPMCnt <= 0;
+						relayDataPMI <= False;
+					end else begin
+						relayDataPMCnt <= relayDataPMCnt + 1;
+					end
+					relayDataPMIQ.enq(p);
+				end
+			end
+		end
+		calAcc.jIn(p);
+	endrule
+	rule relayDataPMJ(relayDataPMIQ.notEmpty);
+		relayDataPMIQ.deq;
+		Vector#(4, Bit#(32)) p = relayDataPMIQ.first;
+
+		calAcc.iIn(p);
+	endrule
+	FIFOF#(Tuple2#(Vector#(4, Bit#(32)), Bit#(24))) recvAccelValuesQ <- mkSizedFIFOF(64);
+	rule recvAccelValues;
+		let d <- calAcc.aOut;
+	endrule
+	method Action dataPMIn(Vector#(4, Bit#(32)) originDataPM, Bit#(24) inputPMIdx);
+		dataPMQ.enq(tuple2(originDataPM, inputPMIdx));
 	endmethod
-	method Action dataVIn(Vector#(3, Bit#(32)) originDataV);
-		dataVQ.enq(originDataV);
+	method Action dataVIn(Vector#(3, Bit#(32)) originDataV, Bit#(24) inputVIdx);
+		dataVQ.enq(tuple2(originDataV, inputVIdx));
 	endmethod
 	method ActionValue#(Vector#(4, Bit#(32))) dataOutPM;
 		resultOutPMQ.deq;

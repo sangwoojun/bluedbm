@@ -210,63 +210,87 @@ module mkCalAccel(CalAccelIfc);
 endmodule
 
 interface NbodyIfc;
-	method Action dataPMIn(Vector#(4, Bit#(32)) originDataPM, Bit#(24) inputPMIdx);
+	method Action dataPmIn(Vector#(4, Bit#(32)) originDataPm, Bit#(24) inputPmIdx);
 	method Action dataVIn(Vector#(3, Bit#(32)) originDataV, Bit#(24) inputVIdx);
-	method ActionValue#(Vector#(4, Bit#(32))) dataOutPM;
+	method ActionValue#(Vector#(4, Bit#(32))) dataOutPm;
 	method ActionValue#(Vector#(3, Bit#(32))) dataOutV;
 endinterface
 
 module mkNbody(NbodyIfc);
-	FIFO#(Tuple2#(Vector#(4, Bit#(32)), Bit#(24))) dataPMQ <- mkFIFO;
+	FIFO#(Tuple2#(Vector#(4, Bit#(32)), Bit#(24))) dataPmQ <- mkFIFO;
 	FIFO#(Tuple2#(Vector#(3, Bit#(32)), Bit#(24))) dataVQ <- mkFIFO;
-	FIFO#(Vector#(4, Bit#(32))) resultOutPMQ <- mkFIFO;
+	FIFO#(Vector#(4, Bit#(32))) resultOutPmQ <- mkFIFO;
 	FIFO#(Vector#(3, Bit#(32))) resultOutVQ <- mkFIFO;
 
 	CalAccelIfc calAcc <- mkCalAccel;
-	CalVelocIfc calVel <- mkCalVeloc;
+	CalPmvIfc calPmv <- mkCalPmv;
 
-	FIFOF#(Vector#(4, Bit#(32))) relayDataPMIQ <- mkSizedFIFOF(64);
-	Reg#(Bit#(24)) relayDataPMCnt <- mkReg(0);
-	Reg#(Bool) relayDataPMI <- mkReg(True);
-	rule relayDataPMJ;
-		dataPMQ.deq;
-		Vector#(4, Bit#(32)) p = tpl_1(dataPMQ.first);
-		Bit#(24) idx = tpl_2(dataPMQ.first);
+	FIFOF#(Vector#(4, Bit#(32))) relayDataPmIQ <- mkSizedFIFOF(256);
+	Reg#(Bit#(24)) relayDataPmCnt <- mkReg(0);
+	Reg#(Bool) relayDataPmI <- mkReg(True);
+	rule relayDataPmJ;
+		dataPmQ.deq;
+		Vector#(4, Bit#(32)) p = tpl_1(dataPmQ.first);
+		Bit#(24) idx = tpl_2(dataPmQ.first);
 
-		if ( relayDataPMI ) begin
-			if ( relayDataPMIQ.notFull ) begin
-				if ( relayDataPMCnt == idx ) begin
-					if ( relayDataPMCnt == (fromInteger(totalParticles) - 1) ) begin
-						relayDataPMCnt <= 0;
-						relayDataPMI <= False;
+		if ( relayDataPmI ) begin
+			if ( relayDataPmIQ.notFull ) begin
+				if ( relayDataPmCnt == idx ) begin
+					if ( relayDataPmCnt == (fromInteger(totalParticles) - 1) ) begin
+						relayDataPmCnt <= 0;
+						relayDataPmI <= False;
 					end else begin
-						relayDataPMCnt <= relayDataPMCnt + 1;
+						relayDataPmCnt <= relayDataPmCnt + 1;
 					end
-					relayDataPMIQ.enq(p);
+					relayDataPmIQ.enq(p);
 				end
 			end
 		end
 		calAcc.jIn(p);
 	endrule
-	rule relayDataPMJ(relayDataPMIQ.notEmpty);
-		relayDataPMIQ.deq;
-		Vector#(4, Bit#(32)) p = relayDataPMIQ.first;
-
-		calAcc.iIn(p);
+	Vector#(4, Reg#(Bit#(32))) relayDataPmIBuffer <- replicateM(mkReg(0));
+	rule relayDataPmI(relayDataPmIQ.notEmpty);
+		if ( relayDataPmICnt != 0 ) begin
+			let p = relayDataPmIBuffer;
+			calAcc.iIn(p);
+			if ( relayDataPmICnt == 524287 ) begin
+				relayDataPmICnt <= 0;
+			end else begin
+				relayDataPmICnt <= relayDataPmICnt + 1;
+			end
+		end else begin
+			relayDataPmIQ.deq;
+			Vector#(4, Bit#(32)) p = relayDataPmIQ.first;
+			relayDataPmIBuffer <= p;
+			calAcc.iIn(p);
+		end
 	endrule
-	FIFOF#(Tuple2#(Vector#(4, Bit#(32)), Bit#(24))) recvAccelValuesQ <- mkSizedFIFOF(64);
-	rule recvAccelValues;
+	rule relayDataA;
 		let d <- calAcc.aOut;
+		calPmv.aIn(d);
 	endrule
-	method Action dataPMIn(Vector#(4, Bit#(32)) originDataPM, Bit#(24) inputPMIdx);
-		dataPMQ.enq(tuple2(originDataPM, inputPMIdx));
+	rule relayDataV;
+		dataVQ.deq;
+		let d = dataVQ.first;
+		calPmv.vIn(d);
+	endrule
+	rule recvResultPm;
+		let res <- calPmv.pmOut;
+		resultOutPmQ.enq(res);
+	endrule
+	rule recvResultV;
+		let res <- calPmv.vOut;
+		resultOutVQ.enq(res);
+	endrule
+	method Action dataPmIn(Vector#(4, Bit#(32)) originDataPm, Bit#(24) inputPmIdx);
+		dataPmQ.enq(tuple2(originDataPm, inputPmIdx));
 	endmethod
 	method Action dataVIn(Vector#(3, Bit#(32)) originDataV, Bit#(24) inputVIdx);
 		dataVQ.enq(tuple2(originDataV, inputVIdx));
 	endmethod
-	method ActionValue#(Vector#(4, Bit#(32))) dataOutPM;
-		resultOutPMQ.deq;
-		return resultOutPMQ.first;
+	method ActionValue#(Vector#(4, Bit#(32))) dataOutPm;
+		resultOutPmQ.deq;
+		return resultOutPmQ.first;
 	endmethod
 	method ActionValue#(Vector#(3, Bit#(32))) dataOutV;
 		resultOutVQ.deq;
@@ -274,16 +298,3 @@ module mkNbody(NbodyIfc);
 	endmethod
 endmodule
 
-
-interface ComPos;
-endinterface
-
-module mkComPos#() ();
-endmodule
-
-
-interface ComVel;
-endinterface
-
-module mkComVel#() ();
-endmodule

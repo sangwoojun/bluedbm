@@ -240,6 +240,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 						memWriteCntPm <= 0;
 						pmPart <= False;
 						vPart <= True;
+						toNbodyPm <= True;
+						fromNbodyPm <= False;
 					end else begin
 						memWriteCntPm <= memWriteCntPm + 1;
 					end
@@ -257,6 +259,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 						memWriteCntV <= 0;
 						pmPart <= True;
 						vPart <= False;
+						toNbodyV <= True;
+						fromNbodyV <= False;
 					end else begin
 						memWriteCntV <= memWriteCntV + 1;
 					end
@@ -364,7 +368,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			if ( updatedDataPmLeft == 4 ) begin
 				let prevP = toMemDataBufferPm;
 				Bit#(512) finalP = (currP << (128*updatedDataPmCnt) | (prevP);
-				updatedDataPmQ.enq(finalP);
+				toMemDataPmQ.enq(finalP);
 				updatedDataPmLeft <= 16; 
 				updatedDataPmStacked <= 0;
 			end else begin
@@ -430,7 +434,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			if ( updatedDataVStacked > 12 ) begin
 				let prevP = toMemDataBufferV;
 				Bit#(576) totalP = (currP << (32*updatedDataVStacked)) | (prevP);
-				updatedDataVQ.enq(truncate(totalP));
+				toMemDataVQ.enq(truncate(totalP));
 				updatedDataVStacked <= (3 - (16-updatedDataVStacked)); 
 				toMemDataBufferV <= (totalP >> 512);
 			end else begin
@@ -494,13 +498,43 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 			end
 		end
 	endrule
-	Reg#(Bool) recvDataPm <- mkReg(0);
-	Reg#(Bool) recvDataV <- mkReg(0);
+	Reg#(Bit#(8)) recvDataPmCnt <- mkReg(0);
+	Reg#(Bit#(8)) recvDataVCnt <- mkReg(0);
+	Reg#(Bool) recvDataPm <- mkReg(True);
+	Reg#(Bool) recvDataV <- mkReg(False);
 	rule fpga1RecvResult;
 		if ( recvDataPm ) begin
 			let d <- nbody.dataOutPm;
-
+			updatedDataPmQ.enq(d);
+			if ( recvDataPmCnt != 0 ) begin
+				if ( recvDataPmCnt == 255 ) begin
+					recvDataPmCnt <= 0;
+					recvDataPm <= False;
+					recvDataV <= True;
+				end else begin
+					recvDataPmCnt <= recvDataPmCnt + 1;
+				end
+			end else begin
+				recvDataPmCnt <= recvDataPmCnt + 1;
+				toNbodyPm <= False;
+				fromNbodyPm <= True;
+			end
 		end else if ( recvDataV ) begin
+			let d <- nbody.dataOuV;
+			updatedDataVQ.enq(d);
+			if ( recvDataVCnt != 0 ) begin
+				if ( recvDataVCnt == 255 ) begin
+					recvDataVCnt <= 0;
+					recvDataPm <= True;
+					recvDataV <= False;
+				end else begin
+					recvDataVCnt <= recvDataVCnt + 1;
+				end
+			end else begin
+				recvDataVCnt <= recvDataVCnt + 1;
+				toNbodyV <= False;
+				fromNbodyV <= True;
+			end
 		end
 	endrule
 	//--------------------------------------------------------------------------------------------

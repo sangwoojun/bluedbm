@@ -3,10 +3,6 @@ import FIFOF::*;
 import Clocks::*;
 import Vector::*;
 
-import FloatingPoint::*;
-import Float32::*;
-import Float64::*;
-
 import Serializer::*;
 
 import BRAM::*;
@@ -34,6 +30,9 @@ Integer pubKeyFPGA1 = 1;
 Integer pubKeyFPGA2 = 2;
 
 Integer totalMemWorRWords = 7*1024*1024;
+Integer pmMemWorRWords = 4*1024*1024;
+Integer vMemWorRWords = 3*1024*1024;
+
 Integer read = 0;
 Integer write = 1;
 Integer local = 0;
@@ -62,12 +61,6 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 
 	Clock pcieclk = pcie.user_clk;
 	Reset pcierst = pcie.user_rst;	
-
-	FpPairIfc#(32) fpSub32 <- mkFpSub32;
-	FpPairIfc#(32) fpAdd32 <- mkFpAdd32;
-	FpPairIfc#(32) fpMult32 <- mkFpMult32;
-	FpPairIfc#(32) fpDiv32 <- mkFpDiv32;
-	FpPairIfc#(32) fpSqrt32 <- mkFpSqrt32;
 
 	DRAMArbiterRemoteIfc#(4) dramArbiterRemote <- mkDRAMArbiterRemote;
 	NbodyIfc nbody <- mkNbody;
@@ -98,8 +91,8 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	// Mode 0
 	FIFO#(Bit#(512)) toMemPayloadQ <- mkSizedBRAMFIFO(32);	
 	Reg#(Bit#(512)) toMemPayloadBuffer <- mkReg(0);
-	Reg#(Bit#(12)) toMemPayloadQCnt <- mkReg(0);
-	Reg#(Bit#(5)) toMemPayloadCnt <- mkReg(0);
+	Reg#(Bit#(16)) toMemPayloadQCnt <- mkReg(0);
+	Reg#(Bit#(8)) toMemPayloadCnt <- mkReg(0);
 	
 	Reg#(Bool) startMemWrite <- mkReg(False);
 	Reg#(Bool) openConnect <- mkReg(False);
@@ -209,159 +202,305 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	//--------------------------------------------------------------------------------------------
 	// DRAM of FPGA1
 	//--------------------------------------------------------------------------------------------
-	Reg#(Bit#(24)) memWriteCnt <- mkReg(0);
+	FIFO#(Bit#(512)) toMemDataPmQ <- mkSizedBRAMFIFO(64);
+	FIFO#(Bit#(512)) toMemDataVQ <- mkSizedBRAMFIFO(48);
+	Reg#(Bit#(64)) memWriteResPmAdd <- mkReg(469762048);
+	Reg#(Bit#(64)) memWriteResVAdd <- mkReg(738197504);
+	Reg#(Bit#(32)) memWriteCntIni <- mkReg(0);
+	Reg#(Bit#(8)) memWriteCntPm <- mkReg(0);
+	Reg#(Bit#(8)) memWriteCntV <- mkReg(0);
+	Reg#(Bool) initialSet <- mkReg(True);
+	Reg#(Bool) writeResult <- mkReg(False);
+	Reg#(Bool) pmPart <- mkReg(True);
+	Reg#(Bool) vPart <- mkReg(False);
 	rule fpga1MemWriter( startMemWrite );
-		if ( memWriteCnt != 0 ) begin
-			toMemPayloadQ.deq;
-			let payload = toMemPayloadQ.first;
-			dramArbiterRemote.users[0].write(payload);
-			if ( memWriteCnt == fromInteger(totalMemWorRWords) ) begin
-				memWriteCnt <= 0;
-			end else begin
-				memWriteCnt <= memWriteCnt + 1;
-			end
-		end else begin
-			dramArbiterRemote.users[0].cmd(0, fromInteger(totalMemWorRWords), fromInteger(write), fromInteger(local));
-			memWriteCnt <= memWriteCnt + 1;
-		end
-	endrule
-	FIFO#(Bit#(512)) fromMemPayloadQ <- mkSizedBRAMFIFO(64);
-	Reg#(Bit#(24)) memReadCnt <- mkReg(0);
-	Reg#(Bool) stopMemRead <- mkReg(True);
-	rule fpga1MemReader( stopMemRead );
-		if ( memReadCnt != 0 ) begin
-			let payload <- dramArbiterRemote.users[0].read;
-			fromMemPayloadQ.enq(payload);
-			if ( memReadCnt == fromInteger(totalMemWorRWords) ) begin
-				memReadCnt <= 0;
-			end else begin
-				memReadCnt <= memReadCnt + 1;
-			end
-		end else begin
-			dramArbiterRemote.users[0].cmd(0, fromInteger(totalMemWorRWords), fromInteger(read), fromInteger(local));
-			memReadCnt <= memReadCnt + 1;
-		end
-	endrule
-	FIFO#(Vector#(4, Bit#(32))) originDataPMQ <- mkSizedBRAMFIFO(512);
-	FIFO#(Vector#(3, Bit#(32))) originDataVQ <- mkSizedBRAMFIFO(512);
-	Reg#(Maybe#(Bit#(512))) fromMemPayloadBufferV <- mkReg(tagged Invalid);
-	Reg#(Bit#(512)) fromMemPayloadBufferPM <- mkReg(0);
-	Reg#(Bit#(24)) dataPMCnt <- mkReg(0);
-	Reg#(Bit#(24)) dataVCnt <- mkReg(0);
-	Reg#(Bit#(4)) originDataPMLeft <- mkReg(0);
-	Reg#(Bit#(4)) originDataVLeft <- mkReg(0);
-	Reg#(Bool) dataPM <- mkReg(True);
-	Reg#(Bool) dataV <- mkReg(False);
-	rule fpga1DataOrganizer;
-		Vector#(4, Bit#(32)) pm = replicateM(0);
-		Vector#(3, Bit#(32)) v = replicateM(0);
-		if ( dataPM ) begin
-			if ( originDataPMLeft < 4 ) begin
-				fromMemPayloadQ.deq;
-				let d = fromMemPayloadQ.first;
-				pm[0] = d[31:0]; // Position X 
-				pm[1] = d[63:32]; // Position Y
-				pm[2] = d[95:64]; // Position Z
-				pm[3] = d[127:96]; // Mass
-				originDataPMQ.enq(pm);
-				fromMemPayloadBufferPM <= zeroExtend(d >> 128);
-				originDataPMLeft <= (16 - 4);
-				dataPMCnt <= dataPMCnt + 1;
-			end else begin
-				let d = fromMemPayloadBuffer;
-				pm[0] = d[31:0]; // Position X 
-				pm[1] = d[63:32]; // Position Y
-				pm[2] = d[95:64]; // Position Z
-				pm[3] = d[127:96]; // Mass
-				originDataPMQ.enq(pm);
-				fromMemPayloadBufferPM <= zeroExtend(d >> 128);
-				originDataPMLeft <= originDataPMLeft - 4;
-				if ( dataPMCnt == (fromInteger(totalParticles) - 1) ) begin
-					dataPMCnt <= 0;
-					dataPM <= False;
-					dataV <= True;
+		if ( initialSet ) begin
+			if ( memWriteCntIni != 0 ) begin
+				toMemPayloadQ.deq;
+				let payload = toMemPayloadQ.first;
+				dramArbiterRemote.users[0].write(payload);
+				if ( memWriteCntIni == fromInteger(totalMemWorRWords) ) begin
+					memWriteCntIni <= 0;
+					initialSet <= False;
 				end else begin
-					dataPMCnt <= dataPMCnt + 1;
+					memWriteCntIni <= memWriteCntIni + 1;
 				end
+			end else begin
+				dramArbiterRemote.users[0].cmd(0, fromInteger(totalMemWorRWords), fromInteger(write), fromInteger(local));
+				memWriteCntIni <= memWriteCntIni + 1;
 			end
-		end else if ( dataV ) begin
-			if ( isValid(fromMemPayloadBufferV) ) begin
-				if ( originDataVLeft < 3 ) begin
-					fromMemPayloadQ.deq;
-					let currD = fromMemPayloadQ.first;
-					let prevD = fromMaybe(?, fromMemPayloadBufferV);
-					Bit#(640) d = (zeroExtend(currD) << (originDataVLeft * 32)) | (prevD);
-					v[0] = d[31:0]; // Velocity X
-					v[1] = d[63:32]; // Velocity Y
-					v[2] = d[95:64]; // Velocity Z
-					originDataVQ.enq(v);
-					fromMemPayloadBufferV <= tagged valid (d >> 96);
-					originDataVLeft <= originDataVLeft + 16 - 3;
-					dataVCnt <= dataVCnt + 1;
-				end else begin
-					let d = fromMaybe(?, fromMemPayloadBufferV);
-					v[0] = d[31:0]; // Velocity X
-					v[1] = d[63:32]; // Velocity Y
-					v[2] = d[95:64]; // Velocity Z
-					originDataVQ.enq(v);
-					fromMemPayloadBufferV <= tagged valid (d >> 96);
-					originDataVLeft <= originDataVLeft - 3;
-					if ( dataVCnt == (fromInteger(totalParticles) - 1) ) begin
-						dataVCnt <= 0;
-						dataPM <= True;
-						dataV <= False;
+		end else if ( writeResult ) begin
+			if ( pmPart ) begin
+				if ( memWriteCntPm != 0 ) begin
+					toMemDataPmQ.deq;
+					let payload = toMemDataPmQ.first;
+					dramArbiterRemote.users[0].write(payload);
+					if ( memWriteCntPm == 64 ) begin
+						memWriteResPmAdd <= memWriteResPmAdd + (256*4*4);
+						memWriteCntPm <= 0;
+						pmPart <= False;
+						vPart <= True;
 					end else begin
-						dataVCnt <= dataVCnt + 1;
+						memWriteCntPm <= memWriteCntPm + 1;
 					end
+				end else begin
+					dramArbiterRemote.users[0].cmd(memWriteResPmAdd, 64, fromInteger(write), fromInteger(local));
+					memWriteCntPm <= memWriteCntPm + 1;
 				end
-				let d = fromMaybe(?, fromMemPayloadBufferV);
-
+			end else if ( vPart ) begin
+				if ( memWriteCntV != 0 ) begin
+					toMemDataVQ.deq;
+					let payload = toMemDataVQ.first;
+					dramArbiterRemote.users[0].write(payload);
+					if ( memWriteCntV == 48 ) begin
+						memWriteResVAdd <= memWriteResVAdd + (256*3*4);
+						memWriteCntV <= 0;
+						pmPart <= True;
+						vPart <= False;
+					end else begin
+						memWriteCntV <= memWriteCntV + 1;
+					end
+				end else begin
+					dramArbiterRemote.users[0].cmd(memWriteResVAdd, 48, fromInteger(write), fromInteger(local));
+					memWriteCntV <= memWriteCntV + 1;
+				end
+			end
+		end
+	endrule
+	FIFO#(Bit#(512)) fromMemDataPmQ <- mkSizedBRAMFIFO(64);
+	FIFO#(Bit#(512)) fromMemDataVQ <- mkSizedBRAMFIFO(48);
+	Reg#(Bit#(64)) memReadPmAddress <- mkReg(0);
+	Reg#(Bit#(64)) memReadVAddress <- mkReg(268435456);
+	Reg#(Bit#(32)) memReadPmCnt1 <- mkReg(0);
+	Reg#(Bit#(16)) memReadPmCnt2 <- mkReg(0);
+	Reg#(Bit#(32)) memReadVCnt1 <- mkReg(0);
+	Reg#(Bit#(8)) memReadVCnt2 <- mkReg(0);
+	Reg#(Bool) memReadPm <- mkReg(True);
+	Reg#(Bool) memReadV <- mkReg(False);
+	rule fpga1MemReader;
+		if ( memReadPm ) begin
+			if ( memReadPmCnt1 != 0 ) begin
+				let payload <- dramArbiterRemote.users[0].read;
+				fromMemDataPmQ.enq(payload);
+				if ( memReadPmCnt1 == fromInteger(pmMemWorRWords) ) begin
+					if ( memReadPmCnt2 == 255 ) begin
+						memReadPmCnt2 <= 0;
+						memReadPm <= False;
+						memReadV <= True;
+					end else begin
+						memReadPmCnt2 <= memReadPmCnt2 + 1;
+					end
+					memReadPmCnt1 <= 0;
+				end else begin
+					memReadPmCnt1 <= memReadPmCnt1 + 1;
+				end
 			end else begin
-				fromMemPayloadQ.deq;
-				let d = fromMemPayloadQ.first;
+				dramArbiterRemote.users[0].cmd(memReadPmAddress, fromInteger(pmMemWorRWords), fromInteger(read), fromInteger(local));
+				memReadPmCnt1 <= memReadPmCnt1 + 1;
+			end
+		end else if ( memReadV ) begin
+			if ( memReadVCnt2 != 0 ) begin
+				let payload <- dramArbiterRemote.users[0].read;
+				fromMemDataVQ.enq(payload);
+				if ( memReadVCnt2 == 48 ) begin
+					if ( memReadVCnt1 == (fromInteger(vMemWorRWords) - 1)) begin
+						memReadVAddress <= 268435456;
+						memReadVCnt1 <= 0;
+						memReadPm <= False;
+					end else begin
+						memReadVAddress <= memReadVAddress + (256*3*4);
+						memReadVCnt1 <= memReadVCnt1 + 1;
+						memReadPm <= True;
+					end
+					memReadVCnt2 <= 0;
+					memReadV <= False;
+				end else begin
+					memReadVCnt1 <= memReadVCnt1 + 1;
+					memReadVCnt2 <= memReadVCnt2 + 1;
+				end
+			end else begin
+				dramArbiterRemote.users[0].cmd(memReadVAddress, 48, fromInteger(read), fromInteger(local));
+				memReadVCnt2 <= memReadVCnt2 + 1;
+			end
+		end
+	endrule
+	FIFO#(Vector#(4, Bit#(32))) originDataPmQ <- mkSizedBRAMFIFO(64);
+	FIFO#(Vector#(4, Bit#(32))) updatedDataPmQ <- mkSizedBRAMFIFO(256);
+	Reg#(Bit#(512)) fromMemDataBufferPm <- mkReg(0);
+	Reg#(Bit#(512)) tomemDataBufferPm <- mkReg(0);
+	Reg#(Bit#(8)) originDataPmLeft <- mkReg(0);
+	Reg#(Bit#(8)) updatedDataPmLeft <- mkReg(16);
+	Reg#(Bit#(8)) updatedDataPmCnt <- mkReg(0);
+	Reg#(Bool) toNbodyPm <- mkReg(True);
+	Reg#(Bool) fromNbodyPm <- mkReg(False);
+	rule fpga1DataOrganizerPm;
+		if ( toNbodyPm ) begin
+			Vector#(4, Bit#(32)) pm = replicateM(0);
+			if ( originDataPmLeft < 4 ) begin
+				fromMemDataPmQ.deq;
+				let d = fromMemDataPmQ.first;
+				pm[0] = d[31:0]; // Position X 
+				pm[1] = d[63:32]; // Position Y
+				pm[2] = d[95:64]; // Position Z
+				pm[3] = d[127:96]; // Mass
+				originDataPmQ.enq(pm);
+				fromMemDataBufferPm <= zeroExtend(d >> 128);
+				originDataPmLeft <= (16 - 4);
+			end else begin
+				let d = fromMemDataBufferPm;
+				pm[0] = d[31:0]; // Position X 
+				pm[1] = d[63:32]; // Position Y
+				pm[2] = d[95:64]; // Position Z
+				pm[3] = d[127:96]; // Mass
+				originDataPmQ.enq(pm);
+				fromMemDataBufferPm <= zeroExtend(d >> 128);
+				originDataPmLeft <= originDataPmLeft - 4;
+			end
+		end else if ( fromNbodyPm ) begin
+			updatedDataPmQ.deq;
+			Vector#(4, Bit#(32)) d = updatedDataPmQ.first;
+			Bit#(512) currP = (zeroExtend(d[3])) | (zeroExtend(d[2])) | (zeroExtend(d[1])) | (zeroExtend(d[0]));
+
+			if ( updatedDataPmLeft == 4 ) begin
+				let prevP = toMemDataBufferPm;
+				Bit#(512) finalP = (currP << (128*updatedDataPmCnt) | (prevP);
+				updatedDataPmQ.enq(finalP);
+				updatedDataPmLeft <= 16; 
+				updatedDataPmStacked <= 0;
+			end else begin
+				if ( updatedDataPmLeft == 16 ) begin
+					toMemDataBufferPm <= currP;
+				end else begin
+					let prevP = toMemDataBufferPm;
+					Bit#(512) p = (currP << (128*updatedDataPmCnt)) | (prevP);
+					toMemDataBufferPm <= p;
+				end
+				updatedDataPmLeft <= updatedDataPmLeft - 4;
+				updatedDataPmCnt <= updatedDataPmCnt + 1;
+			end
+		end
+	endrule
+	FIFO#(Vector#(3, Bit#(32))) originDataVQ <- mkSizedBRAMFIFO(256);
+	FIFO#(Vector#(3, Bit#(32))) updatedDataVQ <- mkSizedBRAMFIFO(256);
+	Reg#(Maybe#(Bit#(512))) fromMemDataBufferV <- mkReg(tagged Invalid);
+	Reg#(Bit#(512)) toMemDataBufferV <- mkReg(0);
+	Reg#(Bit#(8)) originDataVLeft <- mkReg(0);
+	Reg#(Bit#(8)) updatedDataVStacked <- mkReg(0);
+	Reg#(Bool) toNbodyV <- mkReg(True);
+	Reg#(Bool) fromNbodyV <- mkReg(False);
+	rule fpga1DataOrganizerV;
+		if ( toNbodyV ) begin
+			Vector#(3, Bit#(32)) v = replicateM(0);
+			if ( isValid(fromMemDataBufferV) ) begin
+				if ( originDataVLeft < 3 ) begin
+					fromMemDataVQ.deq;
+					let currD = fromMemDataVQ.first;
+					let prevD = fromMaybe(?, fromMemDataBufferV);
+					Bit#(576) d = (zeroExtend(currD) << (originDataVLeft * 32)) | (prevD);
+					v[0] = d[31:0]; // Velocity X
+					v[1] = d[63:32]; // Velocity Y
+					v[2] = d[95:64]; // Velocity Z
+					originDataVQ.enq(v);
+					fromMemDataBufferV <= tagged valid truncate(d >> 96);
+					originDataVLeft <= originDataVLeft + 16 - 3;
+				end else begin
+					let d = fromMaybe(?, fromMemDataBufferV);
+					v[0] = d[31:0]; // Velocity X
+					v[1] = d[63:32]; // Velocity Y
+					v[2] = d[95:64]; // Velocity Z
+					originDataVQ.enq(v);
+					fromMemDataBufferV <= tagged valid (d >> 96);
+					originDataVLeft <= originDataVLeft - 3;
+				end
+			end else begin
+				fromMemDataVQ.deq;
+				let d = fromMemDataVQ.first;
 				v[0] = d[31:0]; // Velocity X
 				v[1] = d[63:32]; // Velocity Y
 				v[2] = d[95:64]; //  Velocity Z
 				originDataVQ.enq(v);
-				fromMemPayloadBufferV <= tagged valid zeroExtend(d >> 96);
+				fromMemDataBufferV <= tagged valid zeroExtend(d >> 96);
 				originDataVLeft <= originDataVLeft - 3;
-				dataVCnt <= dataVCnt + 1;
+			end
+		end else if ( fromNbodyV ) begin
+			updatedDataVQ.deq;
+			Vector#(3, Bit#(32)) d = updatedDataVQ.first;
+			Bit#(576) currP = (zeroExtend(d[2])) | (zeroExtend(d[1])) | (zeroExtend(d[0]));
+
+			if ( updatedDataVStacked > 12 ) begin
+				let prevP = toMemDataBufferV;
+				Bit#(576) totalP = (currP << (32*updatedDataVStacked)) | (prevP);
+				updatedDataVQ.enq(truncate(totalP));
+				updatedDataVStacked <= (3 - (16-updatedDataVStacked)); 
+				toMemDataBufferV <= (totalP >> 512);
+			end else begin
+				if ( updatedDataVStacked == 0 ) begin
+					toMemDataBufferV <= currP;
+				end else begin
+					let prevP = toMemDataBufferV;
+					Bit#(576) p = (currP << (32*updatedDataVStacked)) | (prevP);
+					toMemDataBufferV <= p;
+				end
+				updatedDataVStacked <= updatedDataVStacked + 3;
 			end
 		end
 	endrule
 	//--------------------------------------------------------------------------------------------
 	// Calculation of N-body problem
 	//--------------------------------------------------------------------------------------------
-	Reg#(Bool) relayPayloadPM <- mkReg(True);
-	Reg#(Bool) relayPayloadV <- mkReg(False);
-	Reg#(Bit#(24)) relayPayloadCnt <- mkReg(0);
-	rule fpga1Nbody;
-		if ( relayPayloadPM ) begin
+	Reg#(Bit#(32)) relayDataPMCnt1 <- mkReg(0);
+	Reg#(Bit#(16)) relayDataPMCnt2 <- mkReg(0);
+	Reg#(Bit#(32)) relayDataVCnt1 <- mkReg(0);
+	Reg#(Bit#(16)) relayDataVCnt2 <- mkReg(0);
+	Reg#(Bool) relayDataPM <- mkReg(True);
+	Reg#(Bool) relayDataV <- mkReg(False);
+	rule fpga1RelayDataToNbody;
+		if ( relayDataPM ) begin
 			originDataPMQ.deq;
 			let p = originDataPMQ.first;
 	
-			nbody.dataPMIn(p, relayPayloadCnt);	
+			nbody.dataPMIn(p, relayDataPMCnt1);	
 
-			if ( relayPayloadCnt == (fromInteger(totalParticles) - 1) ) begin
-				relayPayloadPM <= False;
-				relayPayloadV <= True;
-				relayPayloadCnt <= 0;
+			if ( relayDataPMCnt1 == (fromInteger(totalParticles) - 1) ) begin
+				if ( relayDataPMCnt2 == 255 ) begin
+					relayDataPMCnt2 <= 0;
+					relayDataPM <= False;
+					relayDataV <= True;
+				end else begin
+					relayDataPMCnt2 <= relayDataPMCnt2 + 1;
+				end
+				relayDataPMCnt1 <= 0;
 			end else begin
-				relayPayloadCnt <= relayPayloadCnt + 1;
+				relayDataPMCnt1 <= relayDataPMCnt1 + 1;
 			end
-		end else if (relayPayloadV) begin
+		end else if ( relayDataV ) begin
 			originDataVQ.deq;
 			let p = originDataVQ.first;
 
-			nbody.dataVIn(p, relayPayloadCnt);
+			nbody.dataVIn(p, relayDataCnt1);
 			
-			if ( relayPayloadCnt == (fromInteger(totalParticles) - 1) ) begin
-				relayPayloadPM <= True;
-				relayPayloadV <= False;
-				relayPayloadCnt <= 0;
+			if ( relayDataVCnt2 == 255 ) begin
+				if ( relayDataVCnt1 == (fromInteger(totalParticles) - 1) ) begin
+					relayDataVCnt1 <= 0;
+				end else begin
+					relayDataVCnt1 <= relayDataVCnt1 + 1;
+				end
+				relayDataPM <= True;
+				relayDataV <= False;
+				relayDataCnt2 <= 0;
 			end else begin
-				relayPayloadCnt <= relayPayloadCnt + 1;
+				relayDataCnt1 <= relayDataCnt1 + 1;
+				relayDataCnt2 <= relayDataCnt2 + 1;
 			end
+		end
+	endrule
+	Reg#(Bool) recvDataPm <- mkReg(0);
+	Reg#(Bool) recvDataV <- mkReg(0);
+	rule fpga1RecvResult;
+		if ( recvDataPm ) begin
+			let d <- nbody.dataOutPm;
+
+		end else if ( recvDataV ) begin
 		end
 	endrule
 	//--------------------------------------------------------------------------------------------

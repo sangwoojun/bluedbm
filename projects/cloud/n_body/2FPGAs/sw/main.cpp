@@ -152,32 +152,12 @@ int main(int argc, char** argv) {
 	for ( int k = 0; k < NumParticles; k ++ ) {
 		particleVelZv[k] = *(uint32_t*)&particleVelZ[k];
 	}
-	//------------------------------------------------------------------------	
-	// Take the value of system mode & Send the source routing packets
 	//------------------------------------------------------------------------
-	int mode = 0;
-	int srPacketMode = 5;
-	printf( "The system mode\n" );
-	printf( "0: Use only FPGA1\n" );
-	printf( "1: Use both FPGA1 and FPGA2 with 1 Aurora lane\n" );
-	printf( "2: Use both FPGA1 and FPGA2 with 2 Aurora lanes\n" );
-	printf( "3: Use both FPGA1 and FPGA2 with 3 Aurora lanes\n" );
-	printf( "4: Use both FPGA1 and FPGA2 with 4 Aurora lanes\n" );
-	scanf( "%d", &mode );
+	// Send the values of the particles through PCIe first
+	//------------------------------------------------------------------------
+	int dataSendMode = 0;
+	printf( "Started to send the values of the particles\n" );
 	fflush( stdout );
-
-	if ( mode == 0 ) {
-		printf( "No need to send source routing packets from FPGA1 to FPGA2\n" );
-		printf( "Starting to store the data directly to DRAM of FPGA1\n" );
-		fflush( stdout );	
-	} else {
-		printf( "Sending source routing packets from FPGA1 to FPGA2\n" );
-		fflush( stdout );
-		pcie->userWriteWord(srPacketMode*4, 0);
-	}
-	//------------------------------------------------------------------------	
-	// Send the values of the particles through PCIe
-	//------------------------------------------------------------------------
 	for ( int k = 0; k < NumParticles; k ++ ) {
 		pcie->userWriteWord(mode*4, particleLocXv[k]);
 		pcie->userWriteWord(mode*4, particleLocYv[k]);
@@ -189,7 +169,32 @@ int main(int argc, char** argv) {
 		pcie->userWriteWord(mode*4, particleVelYv[l]);
 		pcie->userWriteWord(mode*4, particleVelZv[l]);
 	}
-	
+	printf( "Finished sending the values of the particels\n\n" );
+	fflush( stdout );
+	//------------------------------------------------------------------------	
+	// Take the value of system mode & Send the source routing packets
+	//------------------------------------------------------------------------
+	int mode = 0;
+	printf( "The system mode\n" );
+	printf( "1: Use only FPGA1\n" );
+	printf( "2: Use both FPGA1 and FPGA2 with 1 Aurora lane\n" );
+	printf( "3: Use both FPGA1 and FPGA2 with 2 Aurora lanes\n" );
+	printf( "4: Use both FPGA1 and FPGA2 with 3 Aurora lanes\n" );
+	printf( "5: Use both FPGA1 and FPGA2 with 4 Aurora lanes\n" );
+	scanf( "Mode: %d", &mode );
+	fflush( stdout );
+	pcie->userWriteWord(mode*4, 0);
+	if ( mode == 1 ) {
+		printf( "No need to send the data from FPGA1 to FPGA2\n" );
+		printf( "Started to compute N-body App\n" );
+		fflush( stdout );	
+	} else {
+		printf( "Started to send the data from FPGA1 to FPGA2\n" );
+		fflush( stdout );
+	}
+	//------------------------------------------------------------------------	
+	// Send the values of the particles through PCIe
+	//------------------------------------------------------------------------	
 	unsigned int d_0 = 0;
 	while ( 1 ) {
 		d_0 = pcie->userReadWord(0);

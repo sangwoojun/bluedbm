@@ -13,15 +13,83 @@ typedef TExp#(PeWaysLog) PeWays;
 
 Integer totalParticles = 16*1024*1024;
 
-interface CalPositIfc;
+interface CalPmvPeIfc;
 endinterface
-module mkCalPosit(CalPositIfc);
+module mkCalPmvPe(CalPmvPeIfc);
 endmodule
-
-
-interface CalVelocIfc;
+interface CalPmvIfc;
+	method Action aIn(Vector#(4, Bit#(32)) a);
+	method Action vIn(Vector#(3, Bit#(32)) v);
+	method ActionValue#(Vector#(4, Bit#(32))) pmOut;
+	method ActionValue#(Vector#(3, Bit#(32))) vOut;
 endinterface
-module mkCalVeloc(CalVelocIfc);
+module mkCalPmv(CalPmvIfc);
+	Vector#(PeWays, CalPmvPeIfc) pes;
+	Vector#(PeWays, FIFO#(Vector#(4, Bit#(32)))) aInQs <- replicateM(mkFIFO);
+	Vector#(PeWays, FIFO#(Vector#(3, Bit#(32)))) vInQs <- replicateM(mkFIFO);
+	Vector#(PeWays, FIFO#(Vector#(4, Bit#(32)))) pmOutQs <- replicateM(mkFIFO);
+	Vector#(PeWays, FIFO#(Vector#(3, Bit#(32)))) vOutQs <- replicateM(mkFIFO);
+
+	for ( Integer i = 0; i < valueOf(PeWays); i = i + 1 ) begin
+		pes[i] <- mkCalPmvPe(fromInteger(i));
+
+		Reg#(Bit#(16)) aInIdx <- mkReg(0);
+		rule forwardAccel;
+			aInQs[i].deq;
+			let d = aInQs[i].first;
+			if ( i < (valueOf(PeWays) - 1) ) begin
+				aInQs[i+1].enq(d);
+			end
+			Bit#(PeWaysLog) target_a = truncate(aInIdx);
+			if ( target_a == fromInteger(i) ) begin
+				pes[i].putA(d);
+			end
+		endrule
+		Reg#(Bit#(16)) vInIdx <- mkReg(0);
+		rule forwardVeloc;
+			vInQs[i].deq;
+			let d = vInQs[i].first;
+			if ( i < (valueOf(PeWays) - 1) ) begin
+				vInQs[i+1].enq(d);
+			end
+			Bit#(PeWaysLog) target_v = truncate(vInIdx);
+			if ( target_v == fromInteger(i) ) begin
+				pes[i].putV(d);
+			end
+		endrule
+		rule forwardResultPm;
+			if ( pes[i].resultExistPm ) begin
+				let d <- pes[i].resultGetPm;
+				pmOutQs[i].enq(d);
+			end else if ( i < (valueOf(PeWays) - 1) ) begin
+				pmOutQs[i+1].deq;
+				pmOutQs[i].enq(pmOutQs[i+1].first);
+			end
+		endrule
+		rule forwardResultV;
+			if ( pes[i].resultExistV ) begin
+				let d <- pes[i].resultGetV;
+				vOutQs[i].enq(d);
+			end else if ( i < (valueOf(PeWays) - 1) ) begin
+				vOutQs[i+1].deq;
+				vOutQs[i].enq(vOutQs[i+1].first);
+			end
+		endrule
+	end
+	method Action aIn(Vector#(4, Bit#(32)) a);
+		aInQs[0].enq(a);
+	endmethod
+	method Action vIn(Vector#(3, Bit#(32)) v);
+		vInQs[0].enq(v);
+	endmethod
+	method ActionValue#(Vector#(4, Bit#(32))) pmOut;
+		pmOutQs[0].deq;
+		return pmOutQs[0].first;
+	endmethod
+	method ActionValue#(Vector#(3, Bit#(32))) vOut;
+		vOutQs[0].deq;
+		return vOutQs[0].first;
+	endmethod
 endmodule
 
 
@@ -135,7 +203,7 @@ interface CalAccelIfc;
 	method ActionValue#(Vector#(4, Bit#(32))) aOut;
 endinterface
 module mkCalAccel(CalAccelIfc);
-	Vector#(PeWays, PeIfc) pes;
+	Vector#(PeWays, CalAccelPeIfc) pes;
 	Vector#(PeWays, FIFO#(Vector#(4, Bit#(32)))) iInQs <- replicateM(mkFIFO);
 	Vector#(PeWays, FIFO#(Vector#(4, Bit#(32)))) jInQs <- replicateM(mkFIFO);
 	Vector#(PeWays, FIFO#(Vector#(4, Bit#(32)))) aOutQs <- replicateM(mkFIFO);

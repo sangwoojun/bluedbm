@@ -181,6 +181,8 @@ int main(int argc, char** argv) {
 	//------------------------------------------------------------------------------	
 	// Take the value of system mode & Send a command to HW & Start running N-body
 	//------------------------------------------------------------------------------
+	timespec start;
+	timespec now;
 	int statCheckMemMng = 1;
 	int mode = 0;
 	status = 0;
@@ -211,6 +213,7 @@ int main(int argc, char** argv) {
 			}
 		}
 	}
+	clock_gettime(CLOCK_REALTIME, & start);
 	//-------------------------------------------------------------------------------	
 	// Status check for finishing N-body App
 	//-------------------------------------------------------------------------------
@@ -219,11 +222,20 @@ int main(int argc, char** argv) {
 	while ( 1 ) {
 		status = pcie->userReadWord(statCheckNbody*4);
 		if ( status == 1 ) {
+			clock_gettime(CLOCK_REALTIME, & now);
 			printf( "Computing N-body app & writing the updated data to memory done!\n" );
 			fflush( stdout );
 			break;
 		}
 	}
+	double diff = timespec_diff_sec(start, now);
+
+	int getNumOfCycles = 3;
+	status = 0;
+	status = pcie->userReadWord(getNumOfCycles*4);
+	double ff = (double)status/diff;
+	printf( "FF: %f\n", ff );
+	fflush( stdout );
 
 	return 0;
 }

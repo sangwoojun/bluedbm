@@ -33,11 +33,6 @@ Integer totalMemWorRWords = 7*1024*1024;
 Integer pmMemWorRWords = 4*1024*1024;
 Integer vMemWorRWords = 3*1024*1024;
 
-Integer read = 0;
-Integer write = 1;
-Integer local = 0;
-Integer remote = 1;
-
 function Bit#(8) cycleDeciderExt(Bit#(8) routeCnt, Bit#(8) payloadByte);
 	Bit#(8) auroraExtCnt = 0;
 	if ( routeCnt == 0 ) begin
@@ -88,14 +83,17 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	// Get Commands from Host via PCIe
 	//--------------------------------------------------------------------------------------------
 	FIFOF#(Tuple2#(AuroraIfcType, Bit#(20))) sendPacketByAuroraFPGA1Q <- mkFIFOF;
-	// Mode 0
+
 	FIFO#(Bit#(512)) toMemPayloadQ <- mkSizedBRAMFIFO(32);	
 	Reg#(Bit#(512)) toMemPayloadBuffer <- mkReg(0);
 	Reg#(Bit#(16)) toMemPayloadQCnt <- mkReg(0);
 	Reg#(Bit#(8)) toMemPayloadCnt <- mkReg(0);
-	
-	Reg#(Bool) startMemWrite <- mkReg(False);
-	Reg#(Bool) openConnect <- mkReg(False);
+	Reg#(Bool) fpga1MemWriteInitOn <- mkReg(False);
+	Reg#(Bool) fpga1MemReadMode1On <- mkReg(False);
+	Reg#(Bool) fpga1MemReadMode2to5On <- mkRe(False);
+	Reg#(Bool) useFpga2ModeInitOn <- mkReg(False);
+	Reg#(Bool) useFpga2ModeCompOn <- mkReg(False);
+	Reg#(Bool) fpga1 <- mkReg(False);
 	rule getCmd;
 		pcieWriteQ.deq;
 		let w = pcieWriteQ.first;
@@ -103,6 +101,77 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		let d = w.data;
 		let a = w.addr;
 		let off = (a >> 2);
+
+		if ( off == 0 ) begin // Initial Set
+			if ( toMemPayloadCnt != 0 ) begin
+				if ( toMemPayloadCnt == 15 ) begin
+					Bit#(512) toMemPayloadPrev = toMemPayloadBuffer;
+					Bit#(512) toMemPayload = (zeroExtend(d) << 32) | (toMemPayloadPrev);
+					toMemPayloadQ.enq(toMemPayload);
+
+					toMemPayloadBuffer <= 0;	
+					toMemPayloadCnt <= 0;
+
+					if ( toMemPayloadQCnt == 15 ) begin // toMemPayloadQ.enq : toMemPayloadQ.deq = 1 : 16
+						fpga1MemWriteInitOn <= True;
+						toMemPayloadQCnt <= 0;
+					end else begin
+						toMemPayloadQCnt <= toMemPayloadQCnt + 1;
+					end
+				end else begin
+					Bit#(512) toMemPayloadPrev = toMemPayloadBuffer;
+					toMemPayloadBuffer <= (zeroExtend(d) << 32) | (toMemPayloadPrev);
+					toMemPayloadCnt <= toMemPayloadCnt + 1;
+				end
+			end else begin
+				toMemPayloadBuffer <= zeroExtend(d);
+				toMemPayloadCnt <= toMemPayloadCnt + 1;
+				fpga1 <= True;
+			end
+		end else if begin // Mode 1 ~ 5
+			if ( off == 1 ) begin // Mode 1
+				fpga1MemReadMode1On <= True;
+			end else begin // Mode 2 ~ 5
+				if ( useFpga2ModeInitOn ) begin
+					useFpga2ModeCompOn <= True;
+				end else begin
+					// Send a source routing packet
+					// Information for DataPm
+					Bit#(32) address = 0;
+					Bit#(32) aom = 420000000; // 0.42GB
+					Bit#(1) header = 0; // 0: Write, 1: Read
+					Bit#(32) aomNheader = (aom << 1) | zeroExtend(header);
+					// Information for DataV
+					Bit#(32) address = 0;
+					Bit#(32) aom = 420000000; // 0.42GB
+					Bit#(1) header = 0; // 0: Write, 1: Read
+					Bit#(32) aomNheader = (aom << 1) | zeroExtend(header);
+					// Header Part
+					Bit#(8) payloadByte = 8;
+					Bit#(8) startPoint = fromInteger(idxFPGA1);
+					Bit#(8) routeCnt = 0;
+					Bit#(1) sdFlag = 0;
+					Bit#(8) numHops = 0;
+					Bit#(32) headerPartSR = (zeroExtend(payloadByte) << 24) | (zeroExtend(startPoint) << 16) | 
+								(zeroExtend(routeCnt) << 9) | (zeroExtend(sdFlag) << 8) | 
+								(zeroExtend(numHops));
+
+					// Encryption
+					// Payload
+					Bit#(32) encAddress = address ^ fromInteger(pubKeyFPGA2);
+					Bit#(32) encAomNheader = aomNheader ^ fromInteger(pubKeyFPGA2);
+					// Header Part
+					Bit#(32) encHeaderPartSR = headerPartSR ^ fromInteger(pubKeyFPGA2);
+
+					// Final
+					AuroraIfcType srPacket = (zeroExtend(encAddress) << 64) | (zeroExtend(encAomNheader) << 32) | (zeroExtend(encHeaderPartSR));
+					sendPacketByAuroraFPGA1Q.enq(tuple2(srPacket, off));
+
+					useFpga2ModeInitOn <= True;
+					fpga1MemReadMode2to5On <= True;
+				end
+			end
+		end
 
 		if ( off == 5 ) begin // Mode 5: Generate a source routing packet
 			/*// Information
@@ -193,17 +262,31 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 		end
 	endrule
 	//--------------------------------------------------------------------------------------------
-	// FPGA1(0) <-> (4)FPGA2
-	// FPGA1(1) <-> (5)FPGA2
-	// FPGA1(2) <-> (6)FPGA2
-	// FPGA1(3) <-> (7)FPGA2
+	// Connection
+	//  FPGA1(0) <-> (4)FPGA2
+	//  FPGA1(1) <-> (5)FPGA2
+	//  FPGA1(2) <-> (6)FPGA2
+	//  FPGA1(3) <-> (7)FPGA2
+	//--------------------------------------------------------------------------------------------
+	// Usage of the entire memory
+	//  Initial Set
+	//   OriginPmAdd => 0 ~ 268,435,455                  OriginVAdd => 268,435,456 ~ 469,762,047
+	//  For Mode 1
+	//   OriginPmAdd => 0 ~ 268,435,455                  OriginVAdd => 268,435,456 ~ 469,762,047
+	//   UpdatedPmAdd => 469,762,048 ~ 738,197,503       UpdatedVAdd => 738,197,504 ~ 939,524,095
+	//  For Mode 2 ~ 5
+	//   FPGA1
+	//   OriginPmAdd => 0 ~ 134,217,727                  OriginVAdd => 268,435,456 ~ 369,098,751
+	//   UpdatedPmAdd => 134,217,728 ~ 268,435,455       UpdatedVAdd => 369,098,752 ~ 467,762,047
+	//   FPGA2
+	//   OriginPmAdd => 0 ~ 134,217,727                  OriginVAdd => 268,435,456 ~ 369,098,751
+	//   UpdatedPmAdd => 134,217,728 ~ 268,435,455       UpdatedVAdd => 369,098,752 ~ 467,762,047
 	//--------------------------------------------------------------------------------------------
 	// FPGA1
 	//--------------------------------------------------------------------------------------------
-	// DRAM of FPGA1
-	//--------------------------------------------------------------------------------------------
 	FIFO#(Bit#(512)) toMemDataPmQ <- mkSizedBRAMFIFO(64);
 	FIFO#(Bit#(512)) toMemDataVQ <- mkSizedBRAMFIFO(48);
+	FIFOF#(Bit#(32)) validCheckerQ <- mkFIFOF;
 	Reg#(Bit#(64)) memWriteResPmAdd <- mkReg(469762048);
 	Reg#(Bit#(64)) memWriteResVAdd <- mkReg(738197504);
 	Reg#(Bit#(32)) memWriteCntIni <- mkReg(0);
@@ -213,7 +296,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	Reg#(Bool) writeResult <- mkReg(False);
 	Reg#(Bool) pmPart <- mkReg(True);
 	Reg#(Bool) vPart <- mkReg(False);
-	rule fpga1MemWriter( startMemWrite );
+	rule fpga1MemWriter( fpga1MemWriteInitOn );
 		if ( initialSet ) begin
 			if ( memWriteCntIni != 0 ) begin
 				toMemPayloadQ.deq;
@@ -222,11 +305,12 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				if ( memWriteCntIni == fromInteger(totalMemWorRWords) ) begin
 					memWriteCntIni <= 0;
 					initialSet <= False;
+					validCheckerQ.enq(1);
 				end else begin
 					memWriteCntIni <= memWriteCntIni + 1;
 				end
 			end else begin
-				dramArbiterRemote.users[0].cmd(0, fromInteger(totalMemWorRWords), fromInteger(write), fromInteger(local));
+				dramArbiterRemote.users[0].cmd(0, fromInteger(totalMemWorRWords), 1, 0);
 				memWriteCntIni <= memWriteCntIni + 1;
 			end
 		end else if ( writeResult ) begin
@@ -246,7 +330,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 						memWriteCntPm <= memWriteCntPm + 1;
 					end
 				end else begin
-					dramArbiterRemote.users[0].cmd(memWriteResPmAdd, 64, fromInteger(write), fromInteger(local));
+					dramArbiterRemote.users[0].cmd(memWriteResPmAdd, 64, 1, 0);
 					memWriteCntPm <= memWriteCntPm + 1;
 				end
 			end else if ( vPart ) begin
@@ -265,7 +349,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 						memWriteCntV <= memWriteCntV + 1;
 					end
 				end else begin
-					dramArbiterRemote.users[0].cmd(memWriteResVAdd, 48, fromInteger(write), fromInteger(local));
+					dramArbiterRemote.users[0].cmd(memWriteResVAdd, 48, 1, 0);
 					memWriteCntV <= memWriteCntV + 1;
 				end
 			end
@@ -281,7 +365,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 	Reg#(Bit#(8)) memReadVCnt2 <- mkReg(0);
 	Reg#(Bool) memReadPm <- mkReg(True);
 	Reg#(Bool) memReadV <- mkReg(False);
-	rule fpga1MemReader;
+	rule fpga1MemReaderMode1(fpga1MemReaderMode1On);
 		if ( memReadPm ) begin
 			if ( memReadPmCnt1 != 0 ) begin
 				let payload <- dramArbiterRemote.users[0].read;
@@ -299,7 +383,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 					memReadPmCnt1 <= memReadPmCnt1 + 1;
 				end
 			end else begin
-				dramArbiterRemote.users[0].cmd(memReadPmAddress, fromInteger(pmMemWorRWords), fromInteger(read), fromInteger(local));
+				dramArbiterRemote.users[0].cmd(memReadPmAddress, fromInteger(pmMemWorRWords), 0, 0);
 				memReadPmCnt1 <= memReadPmCnt1 + 1;
 			end
 		end else if ( memReadV ) begin
@@ -323,10 +407,12 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 					memReadVCnt2 <= memReadVCnt2 + 1;
 				end
 			end else begin
-				dramArbiterRemote.users[0].cmd(memReadVAddress, 48, fromInteger(read), fromInteger(local));
+				dramArbiterRemote.users[0].cmd(memReadVAddress, 48, 0, 0);
 				memReadVCnt2 <= memReadVCnt2 + 1;
 			end
 		end
+	endrule
+	rule fpga1MemReaderMode2to5;
 	endrule
 	FIFO#(Vector#(4, Bit#(32))) originDataPmQ <- mkSizedBRAMFIFO(64);
 	FIFO#(Vector#(4, Bit#(32))) updatedDataPmQ <- mkSizedBRAMFIFO(256);
@@ -367,7 +453,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 
 			if ( updatedDataPmLeft == 4 ) begin
 				let prevP = toMemDataBufferPm;
-				Bit#(512) finalP = (currP << (128*updatedDataPmCnt) | (prevP);
+				Bit#(512) finalP = (currP << (128*updatedDataPmCnt)) | (prevP);
 				toMemDataPmQ.enq(finalP);
 				updatedDataPmLeft <= 16; 
 				updatedDataPmStacked <= 0;
@@ -405,7 +491,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 					v[1] = d[63:32]; // Velocity Y
 					v[2] = d[95:64]; // Velocity Z
 					originDataVQ.enq(v);
-					fromMemDataBufferV <= tagged valid truncate(d >> 96);
+					fromMemDataBufferV <= tagged Valid truncate(d >> 96);
 					originDataVLeft <= originDataVLeft + 16 - 3;
 				end else begin
 					let d = fromMaybe(?, fromMemDataBufferV);
@@ -413,7 +499,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 					v[1] = d[63:32]; // Velocity Y
 					v[2] = d[95:64]; // Velocity Z
 					originDataVQ.enq(v);
-					fromMemDataBufferV <= tagged valid (d >> 96);
+					fromMemDataBufferV <= tagged Valid (d >> 96);
 					originDataVLeft <= originDataVLeft - 3;
 				end
 			end else begin
@@ -423,7 +509,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 				v[1] = d[63:32]; // Velocity Y
 				v[2] = d[95:64]; //  Velocity Z
 				originDataVQ.enq(v);
-				fromMemDataBufferV <= tagged valid zeroExtend(d >> 96);
+				fromMemDataBufferV <= tagged Valid zeroExtend(d >> 96);
 				originDataVLeft <= originDataVLeft - 3;
 			end
 		end else if ( fromNbodyV ) begin
@@ -665,14 +751,14 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram, Vector#(2, AuroraExtIfc) au
 
 		auroraQuads[qidOut].user[pidOut].send(AuroraSend{packet:sendPacket,num:2});
 	endrule
-	rule getAuroraStatus;
+	rule getStatus;
 		pcieReadReqQ.deq;
 		let r = pcieReadReqQ.first;
 		Bit#(4) a = truncate(r.addr>>2);
-		if ( a < 8 ) begin
-			if ( validCheckConnectionQ.notEmpty ) begin
-				pcieRespQ.enq(tuple2(r, validCheckConnectionQ.first));
-				validCheckConnectionQ.deq;
+		if ( a == 0 ) begin
+			if ( validCheckerQ.notEmpty ) begin
+				pcieRespQ.enq(tuple2(r, validCheckerQ.first));
+				validCheckerQ.deq;
 			end else begin 
 				pcieRespQ.enq(tuple2(r, 32'hffffffff));
 			end

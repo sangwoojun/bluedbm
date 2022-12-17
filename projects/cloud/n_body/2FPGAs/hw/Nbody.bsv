@@ -14,12 +14,112 @@ typedef TExp#(PeWaysLog) PeWays;
 Integer totalParticles = 16*1024*1024;
 
 interface CalPmvPeIfc;
+	method Action putA(Vector#(4, Bit#(32)) a);
+	method Action putV(Vector#(3, Bit#(32)) v);
+	method Actonn putP(Vector#(4, Bit#(32)) p);
+	method ActionValue#(Vector#(4, Bit#(32))) resultGetPm;
+	method ActionValue#(Vector#(3, Bit#(32))) resultGetV;
+	method Bool resultExistPm;
+	method Bool resultExistV;
 endinterface
 module mkCalPmvPe(CalPmvPeIfc);
+	FIFO#(Vector#(4, Bit#(32))) inputAQ <- mkFIFO;
+	FIFO#(Vector#(3, Bit#(32))) inputVQ <- mkFIFO;
+	FIFO#(Vector#(4, Bit#(32))) inputPQ <- mkFIFO;
+	FIFOF#(Vector#(4, Bit#(32))) outputPmQ <- mkFIFOF;
+	FIFOF#(Vector#(3, Bit#(32))) outputVQ <- mkFIFOF;
+
+	FpPairIfc#(32) fpSub32 <- mkFpSub32;
+	FpPairIfc#(32) fpAdd32 <- mkFpAdd32;
+	FpPairIfc#(32) fpMult32 <- mkFpMult32;
+	FpPairIfc#(32) fpDiv32 <- mkFpDiv32;
+	FpPairIfc#(32) fpSqrt32 <- mkFpSqrt32;
+	
+	FIFO#(Vector#(4, Bit#(32))) inputPosAQ <- mkFIFO;
+	FIFO#(Vector#(4, Bit#(32))) inputVelAQ <- mkFIFO;
+	rule replicateA;
+		inputAQ.deq;
+		let d = inputAQ.first;
+		inputPosAQ.enq(d);
+		inputVelAQ.enq(d);
+	endrule
+	FIFO#(Vector#(3, Bit#(32))) inputPosVQ <- mkFIFO;
+	FIFO#(Vector#(3, Bit#(32))) inputVelVQ <- mkFIFO;
+	rule replicateV;
+		inputVQ.deq;
+		let d = inputVQ.first;
+		inputPosVQ.enq(d);
+		inputVelVQ.enq(d);
+	endrule
+	rule calPos;
+		inputPosAQ.deq;
+		inputPosVQ.deq;
+		inputPQ.deq;
+		let a = inputPosAQ.first;
+		let v = inputPosVQ.first;
+		let p = inputPQ.first;
+		Vector#(3, Bit#(32)) tmpResult1 = replicateM(0);
+		Vector#(3, Bit#(32)) tmpResult2 = replicateM(0);
+		Vector#(4, Bit#(32)) finalResult = replicateM(0);
+
+		Bit#(32) scale = 32b'00111111000000000000000000000000;
+		tmpResult1[0] = fpMult32(scale, a[0]);
+		tmpResult1[1] = fpMult32(scale, a[1]);
+		tmpResult1[2] = fpMult32(scale, a[2]);
+
+		tmpResult2[0] = fpAdd32(tmpResult[0], v[0]);
+		tmpResult2[1] = fpAdd32(tmpResult[1], v[1]);
+		tmpResult2[2] = fpAdd32(tmpResult[2], v[2]);
+
+		finalResult[0] = fpAdd32(tmpResult2[0], p[0]);
+		finalResult[1] = fpAdd32(tmpResult2[1], p[1]);
+		finalResult[2] = fpAdd32(tmpResult2[2], p[2]);
+		finalResult[3] = a[3];
+
+		outputPmQ.enq(finalResult);
+	endrule
+	rule calVel;
+		inputVelAQ.deq;
+		inputVelVQ.deq;
+		let a = inputVelAQ.first;
+		let v = inputVelVQ.first;
+
+		Vector#(3, Bit#(32)) finalResult = replicateM(0);
+		finalResult[0] = fpAdd32(v[0], a[0]);
+		finalResult[1] = fpAdd32(v[1], a[1]);
+		finalResult[2] = fpAdd32(v[2], a[2]);
+
+		outputVQ.enq(finalResult);
+	endrule
+	method Action putA(Vector#(4, Bit#(32)) a);
+		inputAQ.enq(a);
+	endmethod
+	method Action putP(Vector#(4, Bit#(32)) p);
+		inputPQ.enq(p);
+	endmethod 
+	method Action putV(Vector#(3, Bit#(32)) v);
+		inputVQ.enq(v);
+	endmethod
+	method ActionValue#(Vector#(4, Bit#(32))) resultGetPm;
+		outputPmQ.deq;
+		return outputPmQ.first;
+	endmethod
+	method ActionValue#(Vector#(3, Bit#(32))) resultGetV;
+		outputVQ.deq;
+		return outputVQ.first;
+	endmethod
+	method Bool resultExistPm;
+		return outputPmQ.notEmpty;
+	endmethod
+	method Bool resultExistV;
+		return outputVQ.notEmpty;
+	endmethod
 endmodule
+
 interface CalPmvIfc;
 	method Action aIn(Vector#(4, Bit#(32)) a);
 	method Action vIn(Vector#(3, Bit#(32)) v);
+	method Action pIn(Vector#(4, Bit#(32)) p);
 	method ActionValue#(Vector#(4, Bit#(32))) pmOut;
 	method ActionValue#(Vector#(3, Bit#(32))) vOut;
 endinterface
@@ -27,6 +127,7 @@ module mkCalPmv(CalPmvIfc);
 	Vector#(PeWays, CalPmvPeIfc) pes;
 	Vector#(PeWays, FIFO#(Vector#(4, Bit#(32)))) aInQs <- replicateM(mkFIFO);
 	Vector#(PeWays, FIFO#(Vector#(3, Bit#(32)))) vInQs <- replicateM(mkFIFO);
+	Vector#(PeWays, FIFO#(Vector#(4, Bit#(32)))) pInQs <- replicateM(mkFIFO);
 	Vector#(PeWays, FIFO#(Vector#(4, Bit#(32)))) pmOutQs <- replicateM(mkFIFO);
 	Vector#(PeWays, FIFO#(Vector#(3, Bit#(32)))) vOutQs <- replicateM(mkFIFO);
 
@@ -43,6 +144,18 @@ module mkCalPmv(CalPmvIfc);
 			Bit#(PeWaysLog) target_a = truncate(aInIdx);
 			if ( target_a == fromInteger(i) ) begin
 				pes[i].putA(d);
+			end
+		endrule
+		Reg#(Bit#(16)) pInIdx <- mkReg(0);
+		rule forwardAccel;
+			pInQs[i].deq;
+			let d = pInQs[i].first;
+			if ( i < (valueOf(PeWays) - 1) ) begin
+				pInQs[i+1].enq(d);
+			end
+			Bit#(PeWaysLog) target_p = truncate(pInIdx);
+			if ( target_p == fromInteger(i) ) begin
+				pes[i].putP(d);
 			end
 		endrule
 		Reg#(Bit#(16)) vInIdx <- mkReg(0);
@@ -81,6 +194,9 @@ module mkCalPmv(CalPmvIfc);
 	endmethod
 	method Action vIn(Vector#(3, Bit#(32)) v);
 		vInQs[0].enq(v);
+	endmethod
+	method Action pIn(Vector#(4, Bit#(32)) p);
+		pInQs[0].enq(p);
 	endmethod
 	method ActionValue#(Vector#(4, Bit#(32))) pmOut;
 		pmOutQs[0].deq;
@@ -243,7 +359,7 @@ module mkCalAccel(CalAccelIfc);
 	end
 
 	Vector#(4, Reg#(Bit#(32))) accBuffer <- replicateM(mkReg(0));
-	FIFO#(Vector#(4, Bit#(32))) aOutQ <- mkSizedBRAMFIFO(64);
+	FIFO#(Vector#(4, Bit#(32))) aOutQ <- mkSizedBRAMFIFO(256);
 	Reg#(Bit#(PeWaysLog)) accCnt <- mkReg(0);
 	rule accResultA;
 		Vector#(4, Bit#(32)) p = replicateM(0);
@@ -277,13 +393,13 @@ module mkCalAccel(CalAccelIfc);
 	endmethod
 endmodule
 
+
 interface NbodyIfc;
 	method Action dataPmIn(Vector#(4, Bit#(32)) originDataPm, Bit#(24) inputPmIdx);
 	method Action dataVIn(Vector#(3, Bit#(32)) originDataV, Bit#(24) inputVIdx);
 	method ActionValue#(Vector#(4, Bit#(32))) dataOutPm;
 	method ActionValue#(Vector#(3, Bit#(32))) dataOutV;
 endinterface
-
 module mkNbody(NbodyIfc);
 	FIFO#(Tuple2#(Vector#(4, Bit#(32)), Bit#(24))) dataPmQ <- mkFIFO;
 	FIFO#(Tuple2#(Vector#(3, Bit#(32)), Bit#(24))) dataVQ <- mkFIFO;
@@ -294,6 +410,7 @@ module mkNbody(NbodyIfc);
 	CalPmvIfc calPmv <- mkCalPmv;
 
 	FIFOF#(Vector#(4, Bit#(32))) relayDataPmIQ <- mkSizedFIFOF(256);
+	FIFO#(Vector#(4, Bit#(32))) pInQ <- mkSizedBRAMFIFO(256);
 	Reg#(Bit#(24)) relayDataPmCnt <- mkReg(0);
 	Reg#(Bool) relayDataPmI <- mkReg(True);
 	rule relayDataPmJ;
@@ -311,6 +428,7 @@ module mkNbody(NbodyIfc);
 						relayDataPmCnt <= relayDataPmCnt + 1;
 					end
 					relayDataPmIQ.enq(p);
+					pInQ.enq(p);
 				end
 			end
 		end
@@ -341,6 +459,11 @@ module mkNbody(NbodyIfc);
 		dataVQ.deq;
 		let d = dataVQ.first;
 		calPmv.vIn(d);
+	endrule
+	rule relayDataP;
+		pInQ.deq;
+		let p = pInQ.first;
+		calPmv.pIn(p);
 	endrule
 	rule recvResultPm;
 		let res <- calPmv.pmOut;

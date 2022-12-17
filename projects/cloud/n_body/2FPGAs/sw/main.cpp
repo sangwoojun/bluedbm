@@ -34,12 +34,11 @@ double timespec_diff_sec( timespec start, timespec end ) {
 	return t;
 }
 
-// Main
 int main(int argc, char** argv) {
 	//srand(time(NULL)); // Do not need to refresh
-	//------------------------------------------------------------------------
+	//-------------------------------------------------------------------------------
 	// Initial
-	//------------------------------------------------------------------------
+	//-------------------------------------------------------------------------------
 	printf( "Software startec\n" ); fflush(stdout);
 	BdbmPcie* pcie = BdbmPcie::getInstance();
 	unsigned int d = pcie->readWord(0);
@@ -51,9 +50,9 @@ int main(int argc, char** argv) {
 	}
 	printf( "\n" );
 	fflush( stdout );	
-	//------------------------------------------------------------------------
+	//-------------------------------------------------------------------------------
 	// Generate the values of the particles
-	//------------------------------------------------------------------------
+	//-------------------------------------------------------------------------------
 	float* particleLocX = (float*)malloc(sizeof(float)*NumParticles);
 	uint32_t* particleLocXv = (uint32_t*)malloc(sizeof(uint32_t)*NumParticles);
 	for ( int i = 0; i < NumParticles; i ++ ) {
@@ -152,29 +151,39 @@ int main(int argc, char** argv) {
 	for ( int k = 0; k < NumParticles; k ++ ) {
 		particleVelZv[k] = *(uint32_t*)&particleVelZ[k];
 	}
-	//------------------------------------------------------------------------
+	//-------------------------------------------------------------------------------
 	// Send the values of the particles through PCIe first
-	//------------------------------------------------------------------------
+	//-------------------------------------------------------------------------------
+	int statCheckInit = 0;
 	int dataSendMode = 0;
+	unsigned int status = 0;
 	printf( "Started to send the values of the particles\n" );
 	fflush( stdout );
 	for ( int k = 0; k < NumParticles; k ++ ) {
-		pcie->userWriteWord(mode*4, particleLocXv[k]);
-		pcie->userWriteWord(mode*4, particleLocYv[k]);
-		pcie->userWriteWord(mode*4, particleLocZv[k]);
-		pcie->userWriteWord(mode*4, particleMassv[k]);
+		pcie->userWriteWord(dataSendMode*4, particleLocXv[k]);
+		pcie->userWriteWord(dataSendMode*4, particleLocYv[k]);
+		pcie->userWriteWord(dataSendMode*4, particleLocZv[k]);
+		pcie->userWriteWord(dataSendMode*4, particleMassv[k]);
 	}
 	for ( int l = 0; l < NumParticles; l ++ ) {
-		pcie->userWriteWord(mode*4, particleVelXv[l]);
-		pcie->userWriteWord(mode*4, particleVelYv[l]);
-		pcie->userWriteWord(mode*4, particleVelZv[l]);
+		pcie->userWriteWord(dataSendMode*4, particleVelXv[l]);
+		pcie->userWriteWord(dataSendMode*4, particleVelYv[l]);
+		pcie->userWriteWord(dataSendMode*4, particleVelZv[l]);
 	}
-	printf( "Finished sending the values of the particels\n\n" );
-	fflush( stdout );
-	//------------------------------------------------------------------------	
-	// Take the value of system mode & Send the source routing packets
-	//------------------------------------------------------------------------
+	while ( 1 ) {
+		status = pcie->userReadWord(statCheckInit*4);
+		if ( status == 1 ) {
+			printf( "Sending the values of the particels done!\n\n" );
+			fflush( stdout );
+			break;
+		}
+	}
+	//------------------------------------------------------------------------------	
+	// Take the value of system mode & Send a command to HW & Start running N-body
+	//------------------------------------------------------------------------------
+	int statCheckMemMng = 1;
 	int mode = 0;
+	status = 0;
 	printf( "The system mode\n" );
 	printf( "1: Use only FPGA1\n" );
 	printf( "2: Use both FPGA1 and FPGA2 with 1 Aurora lane\n" );
@@ -186,24 +195,31 @@ int main(int argc, char** argv) {
 	pcie->userWriteWord(mode*4, 0);
 	if ( mode == 1 ) {
 		printf( "No need to send the data from FPGA1 to FPGA2\n" );
-		printf( "Started to compute N-body App\n" );
+		printf( "Started to compute N-body App\n\n" );
 		fflush( stdout );	
 	} else {
 		printf( "Started to send the data from FPGA1 to FPGA2\n" );
 		fflush( stdout );
+		while ( 1 ) {
+			status = pcie->userReadWord(statCheckMemMng*4);
+			if ( status == 1 )  {
+				printf( "Sending some of the values of the particles to FPGA2 done!\n" );
+				printf( "Started to compute N-body App\n\n" );
+				fflush( stdout );
+				pcie->userWriteWord(mode*4, 0);
+				break;
+			}
+		}
 	}
-	//------------------------------------------------------------------------	
-	// Send the values of the particles through PCIe
-	//------------------------------------------------------------------------	
-	unsigned int d_0 = 0;
+	//-------------------------------------------------------------------------------	
+	// Status check for finishing N-body App
+	//-------------------------------------------------------------------------------
+	int statCheckNbody = 2;
+	status = 0;
 	while ( 1 ) {
-		d_0 = pcie->userReadWord(0);
-		if ( d_0 == 1 ) {
-			printf( "Sending source routing packet succedded!\n" );
-			fflush( stdout );
-			break;
-		} else if ( d_0 == 0 ) {
-			printf( "Sending source routing packet is in failure...\n" );
+		status = pcie->userReadWord(statCheckNbody*4);
+		if ( status == 1 ) {
+			printf( "Computing N-body app & writing the updated data to memory done!\n" );
 			fflush( stdout );
 			break;
 		}

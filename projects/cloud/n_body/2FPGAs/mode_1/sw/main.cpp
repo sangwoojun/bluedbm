@@ -36,9 +36,9 @@ double timespec_diff_sec( timespec start, timespec end ) {
 
 int main(int argc, char** argv) {
 	//srand(time(NULL)); // Do not need to refresh
-	//-------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------
 	// Initial
-	//-------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------
 	printf( "Software startec\n" ); fflush(stdout);
 	BdbmPcie* pcie = BdbmPcie::getInstance();
 	unsigned int d = pcie->readWord(0);
@@ -50,9 +50,9 @@ int main(int argc, char** argv) {
 	}
 	printf( "\n" );
 	fflush( stdout );	
-	//-------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------
 	// Generate the values of the particles
-	//-------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------
 	float* particleLocX = (float*)malloc(sizeof(float)*NumParticles);
 	uint32_t* particleLocXv = (uint32_t*)malloc(sizeof(uint32_t)*NumParticles);
 	for ( int i = 0; i < NumParticles; i ++ ) {
@@ -151,9 +151,9 @@ int main(int argc, char** argv) {
 	for ( int k = 0; k < NumParticles; k ++ ) {
 		particleVelZv[k] = *(uint32_t*)&particleVelZ[k];
 	}
-	//-------------------------------------------------------------------------------
-	// Send the values of the particles through PCIe first
-	//-------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------
+	// Send the values of the particles through PCIe first & Check all data are stored well
+	//------------------------------------------------------------------------------------
 	int statCheckInit = 0;
 	int dataSendMode = 0;
 	unsigned int status = 0;
@@ -173,18 +173,18 @@ int main(int argc, char** argv) {
 	while ( 1 ) {
 		status = pcie->userReadWord(statCheckInit*4);
 		if ( status == 1 ) {
-			printf( "Sending the values of the particels done!\n\n" );
+			printf( "Sending the values of the particels done!\n" );
+			printf( "Storing the values of the particles to DRAM done!\n\n" );
 			fflush( stdout );
 			break;
 		}
 	}
 	//------------------------------------------------------------------------------	
-	// Take the value of system mode & Send a command to HW & Start running N-body
+	// Send a command to HW to start running N-body
 	//------------------------------------------------------------------------------
 	timespec start;
 	timespec now;
-	int statCheckMemMng = 1;
-	int mode = 0;
+	int mode = 1;
 	status = 0;
 	printf( "The system mode\n" );
 	printf( "1: Use only FPGA1\n" );
@@ -192,32 +192,19 @@ int main(int argc, char** argv) {
 	printf( "3: Use both FPGA1 and FPGA2 with 2 Aurora lanes\n" );
 	printf( "4: Use both FPGA1 and FPGA2 with 3 Aurora lanes\n" );
 	printf( "5: Use both FPGA1 and FPGA2 with 4 Aurora lanes\n" );
-	scanf( "Mode: %d", &mode );
+	printf( "Mode: %d\n", mode);
 	fflush( stdout );
 	pcie->userWriteWord(mode*4, 0);
-	if ( mode == 1 ) {
-		printf( "No need to send the data from FPGA1 to FPGA2\n" );
-		printf( "Started to compute N-body App\n\n" );
-		fflush( stdout );	
-	} else {
-		printf( "Started to send the data from FPGA1 to FPGA2\n" );
-		fflush( stdout );
-		while ( 1 ) {
-			status = pcie->userReadWord(statCheckMemMng*4);
-			if ( status == 1 )  {
-				printf( "Sending some of the values of the particles to FPGA2 done!\n" );
-				printf( "Started to compute N-body App\n\n" );
-				fflush( stdout );
-				pcie->userWriteWord(mode*4, 0);
-				break;
-			}
-		}
-	}
+
+	printf( "No need to send the data from FPGA1 to FPGA2\n" );
+	printf( "Started to compute N-body App\n\n" );
+	fflush( stdout );	
+
 	clock_gettime(CLOCK_REALTIME, & start);
 	//-------------------------------------------------------------------------------	
 	// Status check for finishing N-body App
 	//-------------------------------------------------------------------------------
-	int statCheckNbody = 2;
+	int statCheckNbody = 1;
 	status = 0;
 	while ( 1 ) {
 		status = pcie->userReadWord(statCheckNbody*4);

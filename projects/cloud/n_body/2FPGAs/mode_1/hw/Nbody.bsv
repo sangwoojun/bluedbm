@@ -16,7 +16,7 @@ Integer totalParticles = 16*1024*1024;
 interface CalPmvPeIfc;
 	method Action putA(Vector#(4, Bit#(32)) a);
 	method Action putV(Vector#(3, Bit#(32)) v);
-	method Actonn putP(Vector#(4, Bit#(32)) p);
+	method Action putP(Vector#(4, Bit#(32)) p);
 	method ActionValue#(Vector#(4, Bit#(32))) resultGetPm;
 	method ActionValue#(Vector#(3, Bit#(32))) resultGetV;
 	method Bool resultExistPm;
@@ -33,7 +33,7 @@ module mkCalPmvPe(CalPmvPeIfc);
 	FpPairIfc#(32) fpAdd32 <- mkFpAdd32;
 	FpPairIfc#(32) fpMult32 <- mkFpMult32;
 	FpPairIfc#(32) fpDiv32 <- mkFpDiv32;
-	FpPairIfc#(32) fpSqrt32 <- mkFpSqrt32;
+	FpFilterIfc#(32) fpSqrt32 <- mkFpSqrt32;
 	
 	FIFO#(Vector#(4, Bit#(32))) inputPosAQ <- mkFIFO;
 	FIFO#(Vector#(4, Bit#(32))) inputVelAQ <- mkFIFO;
@@ -58,11 +58,11 @@ module mkCalPmvPe(CalPmvPeIfc);
 		let a = inputPosAQ.first;
 		let v = inputPosVQ.first;
 		let p = inputPQ.first;
-		Vector#(3, Bit#(32)) tmpResult1 = replicateM(0);
-		Vector#(3, Bit#(32)) tmpResult2 = replicateM(0);
-		Vector#(4, Bit#(32)) finalResult = replicateM(0);
+		Vector#(3, Bit#(32)) tmpResult1 = replicate(0);
+		Vector#(3, Bit#(32)) tmpResult2 = replicate(0);
+		Vector#(4, Bit#(32)) finalResult = replicate(0);
 
-		Bit#(32) scale = 32b'00111111000000000000000000000000;
+		Bit#(32) scale = 32'b00111111000000000000000000000000;
 		tmpResult1[0] = fpMult32(scale, a[0]);
 		tmpResult1[1] = fpMult32(scale, a[1]);
 		tmpResult1[2] = fpMult32(scale, a[2]);
@@ -147,7 +147,7 @@ module mkCalPmv(CalPmvIfc);
 			end
 		endrule
 		Reg#(Bit#(16)) pInIdx <- mkReg(0);
-		rule forwardAccel;
+		rule forwardPosit;
 			pInQs[i].deq;
 			let d = pInQs[i].first;
 			if ( i < (valueOf(PeWays) - 1) ) begin
@@ -223,7 +223,7 @@ module mkCalAccelPe#(Bit#(PeWaysLog) peIdx) (CalAccelPeIfc);
 	FpPairIfc#(32) fpAdd32 <- mkFpAdd32;
 	FpPairIfc#(32) fpMult32 <- mkFpMult32;
 	FpPairIfc#(32) fpDiv32 <- mkFpDiv32;
-	FpPairIfc#(32) fpSqrt32 <- mkFpSqrt32;
+	FpFilterIfc#(32) fpSqrt32 <- mkFpSqrt32;
 
 	FIFO#(Vector#(4, Bit#(32))) tmpResult1Q <- mkFIFO;
 	FIFO#(Vector#(4, Bit#(32))) subResultQ <- mkFIFO;
@@ -241,7 +241,7 @@ module mkCalAccelPe#(Bit#(PeWaysLog) peIdx) (CalAccelPeIfc);
 		out2[0] = out1[0];
 		out2[1] = out1[1];
 		out2[2] = out1[2];
-		out3[3] = i[3]; // Mass I
+		out2[3] = i[3]; // Mass I
 		
 		tmpResult1Q.enq(out1);
 		subResultQ.enq(out2);
@@ -279,7 +279,7 @@ module mkCalAccelPe#(Bit#(PeWaysLog) peIdx) (CalAccelPeIfc);
 		tmpResult3Q.deq;
 		Vector#(2, Bit#(32)) p = tmpResult3Q.first;
 		
-		Bit#(32) g = 32b'00111100100000000000000000000000;
+		Bit#(32) g = 32'b00111100100000000000000000000000;
 		Bit#(32) gm = fpMult32(g, p[1]);
 		Bit#(32) d = fpDiv32(gm, p[0]);
 	
@@ -412,13 +412,13 @@ module mkNbody(NbodyIfc);
 	FIFOF#(Vector#(4, Bit#(32))) relayDataPmIQ <- mkSizedFIFOF(256);
 	FIFO#(Vector#(4, Bit#(32))) pInQ <- mkSizedBRAMFIFO(256);
 	Reg#(Bit#(24)) relayDataPmCnt <- mkReg(0);
-	Reg#(Bool) relayDataPmI <- mkReg(True);
+	Reg#(Bool) relayDataPmIOn <- mkReg(True);
 	rule relayDataPmJ;
 		dataPmQ.deq;
 		Vector#(4, Bit#(32)) p = tpl_1(dataPmQ.first);
 		Bit#(24) idx = tpl_2(dataPmQ.first);
 
-		if ( relayDataPmI ) begin
+		if ( relayDataPmIOn ) begin
 			if ( relayDataPmIQ.notFull ) begin
 				if ( relayDataPmCnt == idx ) begin
 					if ( relayDataPmCnt == (fromInteger(totalParticles) - 1) ) begin
@@ -435,7 +435,7 @@ module mkNbody(NbodyIfc);
 		calAcc.jIn(p);
 	endrule
 	Vector#(4, Reg#(Bit#(32))) relayDataPmIBuffer <- replicateM(mkReg(0));
-	rule relayDataPmI(relayDataPmIQ.notEmpty);
+	rule relayDataPmI( relayDataPmIQ.notEmpty );
 		if ( relayDataPmICnt != 0 ) begin
 			let p = relayDataPmIBuffer;
 			calAcc.iIn(p);

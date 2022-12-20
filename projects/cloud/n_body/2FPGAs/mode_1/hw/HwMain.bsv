@@ -39,9 +39,7 @@ module mkHwMain#(PcieUserIfc pcie, DRAMUserIfc dram) (HwMainIfc);
 	Reset pcierst = pcie.user_rst;	
 
 	DRAMArbiterRemoteIfc#(4) dramArbiterRemote <- mkDRAMArbiterRemote;
-	NbodyIfc nbody <- mkNbody(FpPairIfc#(32) fpSub32, FpPairIfc#(32) fpAdd32, 
-				  FpPairIfc#(32) fpMult32, FpPairIfc#(32) fpDiv32, 
-				  FpFilter#(32) fpSqrt32);
+	NbodyIfc nbody <- mkNbody;
 	//--------------------------------------------------------------------------------------
 	// Pcie Read and Write
 	//--------------------------------------------------------------------------------------

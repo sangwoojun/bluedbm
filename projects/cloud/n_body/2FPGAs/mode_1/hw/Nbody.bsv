@@ -13,6 +13,9 @@ typedef TExp#(PeWaysLog) PeWays;
 
 Integer totalParticles = 16*1024*1024;
 
+//-----------------------------------------------------------------------------------------------------
+// Update Position and Velocity (PE)
+//-----------------------------------------------------------------------------------------------------
 interface CalPmvPeIfc;
 	method Action putA(Vector#(4, Bit#(32)) a);
 	method Action putV(Vector#(3, Bit#(32)) v);
@@ -22,7 +25,8 @@ interface CalPmvPeIfc;
 	method Bool resultExistPm;
 	method Bool resultExistV;
 endinterface
-module mkCalPmvPe(CalPmvPeIfc);
+
+module mkCalPmvPe#(Bit#(PeWaysLog) peIdx)(CalPmvPeIfc);
 	FIFO#(Vector#(4, Bit#(32))) inputAQ <- mkFIFO;
 	FIFO#(Vector#(3, Bit#(32))) inputVQ <- mkFIFO;
 	FIFO#(Vector#(4, Bit#(32))) inputPQ <- mkFIFO;
@@ -34,7 +38,7 @@ module mkCalPmvPe(CalPmvPeIfc);
 	FpPairIfc#(32) fpMult32 <- mkFpMult32;
 	FpPairIfc#(32) fpDiv32 <- mkFpDiv32;
 	FpFilterIfc#(32) fpSqrt32 <- mkFpSqrt32;
-	
+
 	FIFO#(Vector#(4, Bit#(32))) inputPosAQ <- mkFIFO;
 	FIFO#(Vector#(4, Bit#(32))) inputVelAQ <- mkFIFO;
 	rule replicateA;
@@ -63,7 +67,8 @@ module mkCalPmvPe(CalPmvPeIfc);
 		Vector#(4, Bit#(32)) finalResult = replicate(0);
 
 		Bit#(32) scale = 32'b00111111000000000000000000000000;
-		tmpResult1[0] = fpMult32(scale, a[0]);
+		for ( Integer i = 0; i < 3; i = i + 1 ) fpMult32.enq(scale, a[i]); 
+		tmpResult1[0] <- fpMult32(scale, a[0]);
 		tmpResult1[1] = fpMult32(scale, a[1]);
 		tmpResult1[2] = fpMult32(scale, a[2]);
 
@@ -84,7 +89,7 @@ module mkCalPmvPe(CalPmvPeIfc);
 		let a = inputVelAQ.first;
 		let v = inputVelVQ.first;
 
-		Vector#(3, Bit#(32)) finalResult = replicateM(0);
+		Vector#(3, Bit#(32)) finalResult = replicate(0);
 		finalResult[0] = fpAdd32(v[0], a[0]);
 		finalResult[1] = fpAdd32(v[1], a[1]);
 		finalResult[2] = fpAdd32(v[2], a[2]);
@@ -115,7 +120,9 @@ module mkCalPmvPe(CalPmvPeIfc);
 		return outputVQ.notEmpty;
 	endmethod
 endmodule
-
+//-----------------------------------------------------------------------------------------------------
+// Update Position and Velocity (Main)
+//-----------------------------------------------------------------------------------------------------
 interface CalPmvIfc;
 	method Action aIn(Vector#(4, Bit#(32)) a);
 	method Action vIn(Vector#(3, Bit#(32)) v);
@@ -123,6 +130,7 @@ interface CalPmvIfc;
 	method ActionValue#(Vector#(4, Bit#(32))) pmOut;
 	method ActionValue#(Vector#(3, Bit#(32))) vOut;
 endinterface
+
 module mkCalPmv(CalPmvIfc);
 	Vector#(PeWays, CalPmvPeIfc) pes;
 	Vector#(PeWays, FIFO#(Vector#(4, Bit#(32)))) aInQs <- replicateM(mkFIFO);
@@ -207,18 +215,20 @@ module mkCalPmv(CalPmvIfc);
 		return vOutQs[0].first;
 	endmethod
 endmodule
-
-
+//-----------------------------------------------------------------------------------------------------
+// Compute Acceleration Part (PE)
+//-----------------------------------------------------------------------------------------------------
 interface CalAccelPeIfc;
 	method Action putOperandI(Vector#(4, Bit#(32)) i);
 	method Action putOperandJ(Vector#(4, Bit#(32)) j);
 	method ActionValue#(Vector#(4, Bit#(32))) resultGet;
 	method Bool resultExist;
 endinterface
+
 module mkCalAccelPe#(Bit#(PeWaysLog) peIdx) (CalAccelPeIfc);
 	FIFO#(Vector#(4, Bit#(32))) inputIQ <- mkFIFO;
 	FIFO#(Vector#(4, Bit#(32))) inputJQ <- mkFIFO;
-	
+
 	FpPairIfc#(32) fpSub32 <- mkFpSub32;
 	FpPairIfc#(32) fpAdd32 <- mkFpAdd32;
 	FpPairIfc#(32) fpMult32 <- mkFpMult32;
@@ -230,8 +240,8 @@ module mkCalAccelPe#(Bit#(PeWaysLog) peIdx) (CalAccelPeIfc);
 	rule commonSub;
 		inputIQ.deq;
 		inputJQ.deq;
-		Vector#(4, Bit#(32)) out1 = replicateM(0);
-		Vector#(4, Bit#(32)) out2 = replicateM(0);
+		Vector#(4, Bit#(32)) out1 = replicate(0);
+		Vector#(4, Bit#(32)) out2 = replicate(0);
 		Vector#(4, Bit#(32)) i = inputIQ.first;
 		Vector#(4, Bit#(32)) j = inputJQ.first;
 		// tmpResult1Q
@@ -249,8 +259,8 @@ module mkCalAccelPe#(Bit#(PeWaysLog) peIdx) (CalAccelPeIfc);
 	FIFO#(Vector#(2, Bit#(32))) tmpResult2Q <- mkFIFO;
 	rule denominatorMod;
 		tmpResult1Q.deq;
-		Vector#(2, Bit#(32)) out = replicateM(0);
-		Vector#(3, Bit#(32)) m = replicateM(0);
+		Vector#(2, Bit#(32)) out = replicate(0);
+		Vector#(3, Bit#(32)) m = replicate(0);
 		Vector#(4, Bit#(32)) s = tmpResult1Q.first;
 
 		for ( Integer x = 0; x < 3; x = x + 1 ) m[x] = fpMult32(s[x], s[x]);
@@ -264,7 +274,7 @@ module mkCalAccelPe#(Bit#(PeWaysLog) peIdx) (CalAccelPeIfc);
 	FIFO#(Vector#(2, Bit#(32))) tmpResult3Q <- mkFIFO;
 	rule denominatorPow;
 		tmpResult2Q.deq;
-		Vector#(2, Bit#(32)) p = replicateM(0);
+		Vector#(2, Bit#(32)) p = replicate(0);
 		Vector#(2, Bit#(32)) m = tmpResult2Q.first;
 		
 		Bit#(32) p2 = fpMult32(m[0], m[0]);
@@ -289,7 +299,7 @@ module mkCalAccelPe#(Bit#(PeWaysLog) peIdx) (CalAccelPeIfc);
 	rule calAccelResult;
 		subResultQ.deq;
 		tmpResult4Q.deq;
-		Vector#(4, Bit#(32)) finalResult = replicateM(0);
+		Vector#(4, Bit#(32)) finalResult = replicate(0);
 		Vector#(4, Bit#(32)) s = subResultQ.first;
 		Bit#(32) d = tmpResult4Q.first;
 
@@ -313,11 +323,15 @@ module mkCalAccelPe#(Bit#(PeWaysLog) peIdx) (CalAccelPeIfc);
 		return outputAQ.notEmpty;
 	endmethod
 endmodule
+//-----------------------------------------------------------------------------------------------------
+// Compute Acceleration Part (Main)
+//-----------------------------------------------------------------------------------------------------
 interface CalAccelIfc;
 	method Action iIn(Vector#(4, Bit#(32)) dataI);
 	method Action jIn(Vector#(4, Bit#(32)) dataJ);
 	method ActionValue#(Vector#(4, Bit#(32))) aOut;
 endinterface
+
 module mkCalAccel(CalAccelIfc);
 	Vector#(PeWays, CalAccelPeIfc) pes;
 	Vector#(PeWays, FIFO#(Vector#(4, Bit#(32)))) iInQs <- replicateM(mkFIFO);
@@ -344,7 +358,7 @@ module mkCalAccel(CalAccelIfc);
 			end
 			Bit#(PeWaysLog) target_j = truncate(jInIdx);
 			if ( target_j == fromInteger(x) ) begin
-				pes[x].putOperandB(d);
+				pes[x].putOperandJ(d);
 			end
 		endrule
 		rule forwardResultA;
@@ -362,8 +376,8 @@ module mkCalAccel(CalAccelIfc);
 	FIFO#(Vector#(4, Bit#(32))) aOutQ <- mkSizedBRAMFIFO(256);
 	Reg#(Bit#(PeWaysLog)) accCnt <- mkReg(0);
 	rule accResultA;
-		Vector#(4, Bit#(32)) p = replicateM(0);
-		if ( accCnt == valueOf(PeWays) ) begin
+		Vector#(4, Bit#(32)) p = replicate(0);
+		if ( accCnt == fromInteger(valueOf(PeWays)) ) begin
 			aOutQ.enq(accBuffer);
 			accCnt <= 0;
 		end else begin
@@ -392,14 +406,16 @@ module mkCalAccel(CalAccelIfc);
 		return aOutQ.first;
 	endmethod
 endmodule
-
-
+//-----------------------------------------------------------------------------------------------------
+// N-body Main
+//-----------------------------------------------------------------------------------------------------
 interface NbodyIfc;
 	method Action dataPmIn(Vector#(4, Bit#(32)) originDataPm, Bit#(24) inputPmIdx);
 	method Action dataVIn(Vector#(3, Bit#(32)) originDataV, Bit#(24) inputVIdx);
 	method ActionValue#(Vector#(4, Bit#(32))) dataOutPm;
 	method ActionValue#(Vector#(3, Bit#(32))) dataOutV;
 endinterface
+
 module mkNbody(NbodyIfc);
 	FIFO#(Tuple2#(Vector#(4, Bit#(32)), Bit#(24))) dataPmQ <- mkFIFO;
 	FIFO#(Tuple2#(Vector#(3, Bit#(32)), Bit#(24))) dataVQ <- mkFIFO;
@@ -411,7 +427,7 @@ module mkNbody(NbodyIfc);
 
 	FIFOF#(Vector#(4, Bit#(32))) relayDataPmIQ <- mkSizedFIFOF(256);
 	FIFO#(Vector#(4, Bit#(32))) pInQ <- mkSizedBRAMFIFO(256);
-	Reg#(Bit#(24)) relayDataPmCnt <- mkReg(0);
+	Reg#(Bit#(32)) relayDataPmJCnt <- mkReg(0);
 	Reg#(Bool) relayDataPmIOn <- mkReg(True);
 	rule relayDataPmJ;
 		dataPmQ.deq;
@@ -420,12 +436,12 @@ module mkNbody(NbodyIfc);
 
 		if ( relayDataPmIOn ) begin
 			if ( relayDataPmIQ.notFull ) begin
-				if ( relayDataPmCnt == idx ) begin
+				if ( relayDataPmJCnt == idx ) begin
 					if ( relayDataPmCnt == (fromInteger(totalParticles) - 1) ) begin
-						relayDataPmCnt <= 0;
-						relayDataPmI <= False;
+						relayDataPmJCnt <= 0;
+						relayDataPmIOn <= False;
 					end else begin
-						relayDataPmCnt <= relayDataPmCnt + 1;
+						relayDataPmJCnt <= relayDataPmJCnt + 1;
 					end
 					relayDataPmIQ.enq(p);
 					pInQ.enq(p);
@@ -435,6 +451,7 @@ module mkNbody(NbodyIfc);
 		calAcc.jIn(p);
 	endrule
 	Vector#(4, Reg#(Bit#(32))) relayDataPmIBuffer <- replicateM(mkReg(0));
+	Reg#(Bit#(32)) relayDataPmICnt <- mkReg(0);
 	rule relayDataPmI( relayDataPmIQ.notEmpty );
 		if ( relayDataPmICnt != 0 ) begin
 			let p = relayDataPmIBuffer;
@@ -449,6 +466,7 @@ module mkNbody(NbodyIfc);
 			Vector#(4, Bit#(32)) p = relayDataPmIQ.first;
 			relayDataPmIBuffer <= p;
 			calAcc.iIn(p);
+			relayDataPmICnt <= relayDataPmICnt + 1;
 		end
 	endrule
 	rule relayDataA;

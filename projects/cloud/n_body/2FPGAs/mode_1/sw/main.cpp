@@ -170,10 +170,12 @@ int main(int argc, char** argv) {
 		pcie->userWriteWord(dataSendMode*4, particleVelYv[l]);
 		pcie->userWriteWord(dataSendMode*4, particleVelZv[l]);
 	}
+	printf( "Sending the values of the particles done!\n" );
+	fflush( stdout );
+
 	while ( 1 ) {
 		status = pcie->userReadWord(statCheckInit*4);
 		if ( status == 1 ) {
-			printf( "Sending the values of the particels done!\n" );
 			printf( "Storing the values of the particles to DRAM done!\n\n" );
 			fflush( stdout );
 			break;

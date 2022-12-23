@@ -24,8 +24,8 @@ module mkDRAMArbiterRemote#(DRAMUserIfc dram) (DRAMArbiterRemoteIfc#(ways))
 	provisos(Mul#(ways, 2, rWays));
 	
 	MergeNIfc#(rWays, Tuple4#(Bit#(8), Bit#(64), Bit#(32), Bool)) cmdQ <- mkMergeN;
-	Vector#(rWays, FIFO#(Bit#(512))) rDataQ <- replicateM(mkSizedBRAMFIFO(1024));
-	Vector#(rWays, FIFO#(Bit#(512))) wDataQ <- replicateM(mkSizedBRAMFIFO(1024));
+	Vector#(rWays, FIFO#(Bit#(512))) rDataQ <- replicateM(mkSizedBRAMFIFO(512));
+	Vector#(rWays, FIFO#(Bit#(512))) wDataQ <- replicateM(mkSizedBRAMFIFO(512));
 
 	FIFO#(Bit#(8)) reqQ <- mkSizedBRAMFIFO(256);
 
@@ -88,14 +88,14 @@ module mkDRAMArbiterRemote#(DRAMUserIfc dram) (DRAMArbiterRemoteIfc#(ways))
 			for (Integer j = 0; j < valueOf(ways); j = j + 1 ) begin
 				users_[j] = interface DRAMArbiterUserIfc;
 				method Action cmd(Bit#(64) addr, Bit#(32) words, Bool write);
-					cmdQ.enq[i+j].enq(tuple4(fromInteger(i+j), addr, words, write));
+					cmdQ.enq[(i*valueOf(ways))+j].enq(tuple4(fromInteger((i*valueOf(ways))+j), addr, words, write));
 				endmethod
 				method ActionValue#(Bit#(512)) read;
-					rDataQ[i+j].deq;
-					return rDataQ[i+j].first;
+					rDataQ[(i*valueOf(ways))+j].deq;
+					return rDataQ[(i*valueOf(ways))+j].first;
 				endmethod
 				method Action write(Bit#(512) data);
-					wDataQ[i+j].enq(data);
+					wDataQ[(i*valueOf(ways))+j].enq(data);
 				endmethod
 				endinterface: DRAMArbiterUserIfc;
 			end

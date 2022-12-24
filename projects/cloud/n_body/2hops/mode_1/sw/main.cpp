@@ -215,28 +215,29 @@ int main(int argc, char** argv) {
 	//------------------------------------------------------------------------------------
 	int statCheckInit = 0;
 	int dataSendMode = 0;
-	int i = 0, j = 0;
 	unsigned int status = 0;
 	printf( "Started to send the values of the particles\n" );
 	fflush( stdout );
-	for ( i = 0; i < NumParticles/2048; i ++ ) {
-		for ( j = 0; j < 2048; j ++ ) {
+	for ( int i = 0; i < NumParticles/2048; i ++ ) {
+		for ( int j = 0; j < 2048; j ++ ) {
 			pcie->userWriteWord(dataSendMode*4, particleLocXv[(i*2048)+j]);
 			pcie->userWriteWord(dataSendMode*4, particleLocYv[(i*2048)+j]);
 			pcie->userWriteWord(dataSendMode*4, particleLocZv[(i*2048)+j]);
 			pcie->userWriteWord(dataSendMode*4, particleMassv[(i*2048)+j]);
 		}
-		printf( "Iteration: %d\n", ((i*2048) + j) );
+		printf( "Sent %dth position and mass values\n", ((i*2048) + 2048) );
+		fflush( stdout );
 		sleep(1);
 	}
-	i = 0, j = 0;
-	for ( i = 0; i < NumParticles/2048; i ++ ) {
-		for ( j = 0; j < 2048; j ++ ) {
+
+	for ( int i = 0; i < NumParticles/2048; i ++ ) {
+		for ( int j = 0; j < 2048; j ++ ) {
 			pcie->userWriteWord(dataSendMode*4, particleVelXv[(i*2048)+j]);
 			pcie->userWriteWord(dataSendMode*4, particleVelYv[(i*2048)+j]);
 			pcie->userWriteWord(dataSendMode*4, particleVelZv[(i*2048)+j]);
 		}
-		printf( "Iteration: %d\n", ((i*2048) + j) );
+		printf( "Sent %dth velocity values\n", ((i*2048) + 2048) );
+		fflush( stdout );
 		sleep(1);
 	}
 	printf( "Sending the values of the particles done!\n" );
@@ -259,11 +260,12 @@ int main(int argc, char** argv) {
 	status = 0;
 	printf( "The system mode\n" );
 	printf( "1: Use only FPGA1\n" );
-	printf( "2: Use both FPGA1 and FPGA2 with 1 Aurora lane\n" );
-	printf( "3: Use both FPGA1 and FPGA2 with 2 Aurora lanes\n" );
-	printf( "4: Use both FPGA1 and FPGA2 with 3 Aurora lanes\n" );
-	printf( "5: Use both FPGA1 and FPGA2 with 4 Aurora lanes\n" );
-	printf( "Mode: %d\n", mode);
+	printf( "2: Use both FPGA1 and FPGA2 with 1 Aurora lane (2hops)\n" );
+	printf( "3: Use both FPGA1 and FPGA2 with 2 Aurora lanes (2hops)\n" );
+	printf( "4: Use both FPGA1 and FPGA2 with 3 Aurora lanes (2hops)\n" );
+	printf( "5: Use both FPGA1 and FPGA2 with 4 Aurora lanes (2hops)\n" );
+	printf( "6: Use both FPGA1 and FPGA2 with 1 Aurora lane (4hops)\n" );
+	printf( "Mode: %d\n\n", mode);
 	fflush( stdout );
 	pcie->userWriteWord(mode*4, 0);
 
@@ -273,28 +275,34 @@ int main(int argc, char** argv) {
 
 	clock_gettime(CLOCK_REALTIME, & start);
 	//-------------------------------------------------------------------------------	
-	// Status check for finishing N-body App
+	// Status check over running N-body
 	//-------------------------------------------------------------------------------
 	int statCheckNbody = 1;
 	status = 0;
-	while ( 1 ) {
-		status = pcie->userReadWord(statCheckNbody*4);
-		if ( status == 1 ) {
-			clock_gettime(CLOCK_REALTIME, & now);
-			printf( "Computing N-body app & writing the updated data to memory done!\n" );
-			fflush( stdout );
-			break;
+	for ( int k = 0; k < NumParticles/256; k ++ ) {
+		while ( 1 ) {
+			status = pcie->userReadWord(statCheckNbody*4);
+			if ( status == 1 ) {
+				printf( "Computing N-body app & writing the 256 updated data to memory done!\n" );
+				fflush( stdout );
+				break;
+			}
 		}
 	}
-	return 0;
+	clock_gettime(CLOCK_REALTIME, & now);
+	printf( "\n" );
+	fflush( stdout );
+	//-------------------------------------------------------------------------------	
+	// Status check for finishing N-body App
+	//-------------------------------------------------------------------------------
 	double diff = timespec_diff_sec(start, now);
 
 	int getNumOfCycles = 2;
 	status = 0;
 	status = pcie->userReadWord(getNumOfCycles*4);
 	double ff = (double)status/diff;
-	printf( "FF: %f\n", ff );
+	printf( "FLOPs: %f\n", ff );
 	fflush( stdout );
 
-	//return 0;
+	return 0;
 }
